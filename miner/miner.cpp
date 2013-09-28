@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #if UCFG_WIN32
@@ -333,8 +341,16 @@ void BitcoinWorkData::put_MerkleRoot(const HashValue& v) {
 		*(UInt32*)(Data.constData() + 36 + i*4) = betoh(p[i]);
 }
 
+UInt32 BitcoinWorkData::get_Nonce() const {
+	return *(const UInt32*)(Data.constData() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 64+12));
+}
+
+void BitcoinWorkData::put_Nonce(UInt32 v) {
+	*(UInt32*)(Data.data() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 64+12)) = v;
+}
+
 bool BitcoinWorkData::TestNonceGivesZeroH(UInt32 nonce) {
-	Nonce = betoh(nonce);
+	Nonce = nonce;
 	Blob hash(0, 32);
 	switch (HashAlgo) {
 	case Coin::HashAlgo::Sha256:
@@ -361,7 +377,6 @@ void CpuDevice::Start(BitcoinMiner& miner, CThreadRef *tr) {
 
 BitcoinMiner::BitcoinMiner()
 	:	HashCount(0)
-	,	MaxHeight(0)
 	,	SubmittedCount(0)
 	,	AcceptedCount(0)
 	,	NPAR(UCFG_BITCOIN_NPAR)
@@ -381,8 +396,6 @@ BitcoinMiner::BitcoinMiner()
 	,	m_msWait(NORMAL_WAIT)
 	,	m_minGetworkQueue(MIN_GETWORK_QUEUE)
 	,	Speed(0)
-	,	CPD(0)
-	,	ChainsExpectedCount(0)
 	,	EntireHashCount(0)
 //!!!R	,	m_lastBlockCache(20)
 #if UCFG_BITCOIN_TRACE
@@ -891,7 +904,7 @@ bool BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 		if (it == m_lastBlockCache.end())
 			return false;
 		Coin::MinerBlock& mblock = it->second.first; */
-		mblock.Nonce = wd.Nonce;
+		mblock.Nonce = _byteswap_ulong(wd.Nonce);
 		sdata << EXT_BIN(mblock);
 		String s = String(sdata.str());
 		arg = "{\"method\":\"submitblock\",\"params\":[\"" + s + "\"";
@@ -947,20 +960,13 @@ Blob BitcoinMiner::CalcHash(const BitcoinWorkData& wd) {
 		break;
 #endif
 	default:
-		{
-			UInt32 ar[20];
-			memcpy(ar, wd.Data.constData(), sizeof ar);
-			for (int i=0; i<_countof(ar); ++i)
-				ar[i] = swap32(ar[i]);
-			SHA256 sha;
-			hash = sha.ComputeHash(sha.ComputeHash(ConstBuf(ar, sizeof ar)));
-		}
+		Throw(E_FAIL);
 	}
 	return hash;
 }
 
 bool BitcoinMiner::TestAndSubmit(WorkerThreadBase& wt, BitcoinWorkData *wd, UInt32 nonce) {
-	wd->Nonce = betoh(nonce);
+	wd->Nonce = nonce;	
 	Blob hash = CalcHash(*wd);
 	std::reverse(hash.data(), hash.data()+32);
 
@@ -1025,16 +1031,15 @@ String BitcoinMiner::GetCudaCode() {
 }
 
 void BitcoinMiner::Print(const BitcoinWorkData& wd, bool bSuccess, RCString message) {
-	if (bSuccess)
-		Interlocked::Increment(AcceptedCount);
 	Blob hash = CalcHash(wd);
 	std::reverse(hash.data(), hash.data()+32);
+
 	ostringstream os;
 	os << hash;
 	String shash = os.str();
 	if (!Verbosity)
 		shash = shash.Substring(56, 8);
-	*m_pTraceStream  << (isatty(fileno(stdout)) ? "\r" : "") << DateTime::Now() << " Result: " << shash << (bSuccess ? " accepted" : " rejected") << "   " << (!message.IsEmpty() ? message : String()) << "              " << endl;
+	*m_pTraceStream  << (isatty(fileno(stdout)) ? "\r" : "") << DateTime::Now() << " Result: " << shash << (bSuccess ? " accepted" : (" rejected "+(!message.IsEmpty() ? message : String()))) << "                " << endl;
 }
 
 class GetWorkThread : public Thread {
@@ -1068,12 +1073,6 @@ protected:
 		Miner.m_evGetWork.Set();
 	}
 
-	struct DtHashesChains {
-		DateTime Timestamp;
-		Int64 Hashes;
-		double Chains;
-	};
-
 	void Execute() override {
 		Name = "GetWorkThread";
 
@@ -1083,7 +1082,7 @@ protected:
 		DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_TIMEOUT);
 		DBG_LOCAL_IGNORE_WIN32(ERROR_HTTP_INVALID_SERVER_RESPONSE);
 				
-		deque<DtHashesChains> deq;
+		deque<pair<DateTime, Int64>> deq;
 		for (DateTime dt=Miner.DtStart; !m_bStop; ) {
 			if (Miner.ConnectionClient) {
 				bool bWait = !Miner.ConnectionClient->HasWorkData();
@@ -1116,9 +1115,11 @@ LAB_WAIT:
 				}
 				try {
 					if (Miner.ConnectionClient) {
-						Miner.ConnectionClient->Submit(wd);
+						Miner.ConnectionClient->Submit(*wd);
 					} else {
 						bool r = Miner.SubmitResult(CurrentWebClient, *wd);
+						if (r)
+							Interlocked::Increment(Miner.AcceptedCount);
 						Miner.Print(*wd, r, CurrentWebClient ? CurrentWebClient->get_ResponseHeaders().Get("X-Reject-Reason") : String(nullptr));
 					}
 				} catch (RCExc ex) {
@@ -1126,22 +1127,17 @@ LAB_WAIT:
 				}
 			}
 
-			Int64 nProcessed = Interlocked::Exchange(Miner.HashCount, 0);
+			Int64 nProcessed = Int64(Interlocked::Exchange(Miner.HashCount, 0));
 			if (Miner.HashAlgo != HashAlgo::Prime)
 				nProcessed *= UCFG_BITCOIN_NPAR;
 			Miner.EntireHashCount += nProcessed;
-			DtHashesChains dhc = { dt, nProcessed, exchange(Miner.ChainsExpectedCount, 0.0f) };
-			deq.push_back(dhc);
-			double sec = ((dt = DateTime::UtcNow())-deq.front().Timestamp).TotalSeconds;
+			deq.push_back(make_pair(dt, nProcessed));
+			double sec = ((dt = DateTime::UtcNow())-deq.front().first).TotalSeconds;
 			if (sec > 1) {
 				Int64 sum = 0;
-				double chains = 0;
-				for (auto i=deq.begin(); i!=deq.end(); ++i) {
-					sum += i->Hashes;
-					chains += i->Chains;
-				}
+				for (auto i=deq.begin(); i!=deq.end(); ++i)
+					sum += i->second;
 				Miner.Speed = float(sum/sec);
-				Miner.CPD = float(chains/sec * (60*60*24));
 			}
 			if (deq.size() > 20)
 				deq.pop_front();
@@ -1375,6 +1371,12 @@ void WorkerThread::Execute() {
 
 		if (!wd)
 			return;
+#ifdef X_DEBUG
+		if ((wd.FirstNonce % BitcoinMiner::NONCE_STEP) != 0 ||
+			((wd.LastNonce+1) % BitcoinMiner::NONCE_STEP) != 0
+			|| wd.FirstNonce >= wd.LastNonce)
+			cerr << "Invalid nonce numbers" << endl;
+#endif
 
 		StartRound();
 		switch (wd->HashAlgo) {

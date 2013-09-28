@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #pragma once
 
 #include EXT_HEADER_CONDITION_VARIABLE
@@ -127,9 +135,13 @@ public:
 	void put_Bits(UInt32 v) { *(UInt32*)(Data.data()+72) = betoh(v); }
 	DEFPROP(UInt32, Bits);
 
-	UInt32 get_Nonce() const { return htobe(*(UInt32*)(Data.constData() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76))); }
-	void put_Nonce(UInt32 v) { *(UInt32*)(Data.data() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76)) = betoh(v); }
+	UInt32 get_Nonce() const;
+	void put_Nonce(UInt32 v);
 	DEFPROP(UInt32, Nonce);
+
+	UInt32 get_HostNonce() const { return htobe(*(UInt32*)(Data.constData()+76)); }
+	void put_HostNonce(UInt32 v) { *(UInt32*)(Data.data()+76) = betoh(v); }
+	DEFPROP(UInt32, HostNonce);
 
 	bool TestNonceGivesZeroH(UInt32 nonce);
 
@@ -324,7 +336,7 @@ void ThrowRejectionError(RCString reason);
 class StratumTask : public JsonRpcRequest {
 public:
 	int State;
-	ptr<BitcoinWorkData> m_wd;
+	BitcoinWorkData m_wd;
 
 	StratumTask(int state)
 		:	State(0)
@@ -340,7 +352,7 @@ public:
 	{}
 
 	virtual ~ConnectionClient() {}
-	virtual void Submit(BitcoinWorkData *wd) =0;
+	virtual void Submit(const BitcoinWorkData& wd) =0;
 	virtual void SetEpServer(const IPEndPoint& epServer) =0;
 	virtual bool HasWorkData() =0;
 	virtual ptr<BitcoinWorkData> GetWork() =0;
@@ -360,7 +372,7 @@ public:
 
 	StratumClient(Coin::BitcoinMiner& miner);
 	void Call(RCString method, const vector<VarValue>& params, ptr<StratumTask> task = nullptr);
-	void Submit(BitcoinWorkData *wd) override;
+	void Submit(const BitcoinWorkData& wd) override;
 protected:
 	void SetEpServer(const IPEndPoint& epServer) override { EpServer = epServer; }
 
@@ -376,12 +388,12 @@ protected:
 
 class MINER_CLASS BitcoinMiner : public IMiner {
 public:
+//	static const Int32 NONCE_STEP = 128*1024*1024; //!!! was 8
+	
 	int GetworkPeriod;
-	float Speed;		// float to be atomic
+	float Speed;		// float to be atomary
 	Int64 EntireHashCount;
-	float CPD; //!!! should be atomic
 	DateTime DtStart;
-	volatile UInt32 MaxHeight;
 
 	mutex m_csGetWork;
 	ManualResetEvent m_evDataReady;
@@ -402,9 +414,8 @@ public:
 
 	int m_msWait;
 	int NPAR;
-	
 	volatile Int32 HashCount;
-	volatile float ChainsExpectedCount;
+
 	volatile Int32 SubmittedCount, AcceptedCount;
 
 	CInt<int> Intensity;

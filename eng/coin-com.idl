@@ -1,0 +1,102 @@
+import "oaidl.idl";
+import "ocidl.idl";
+
+[uuid(55534654-3F35-46d9-0003-54BAFC250401), version(0.1), helpstring("CoinEng 0.1 Type Library")]
+library CointEng {
+	importlib("stdole32.tlb");
+	importlib("stdole2.tlb");
+
+	[uuid(55534654-3F35-46d9-0001-54BAFC250404), dual, oleautomation]
+	interface IAddress : IDispatch {
+	    [id(1), propget] HRESULT Value([out,retval] BSTR *r);
+	    [id(2), propget] HRESULT Comment([out,retval] BSTR *r);
+	    [id(2), propput] HRESULT Comment([in] BSTR s);
+	};
+
+	[uuid(55534654-3F35-46d9-0001-54BAFC250403), dual, oleautomation]
+	interface ITransaction : IDispatch {
+	    [id(1), propget] HRESULT Amount([out,retval] DECIMAL *r);
+	    [id(2), propget] HRESULT Timestamp([out,retval] DATE *r);
+	    [id(3), propget] HRESULT Address([out,retval] IAddress **r);
+	    [id(4), propget] HRESULT Confirmations([out,retval] int *r);
+	    [id(5), propget] HRESULT Comment([out,retval] BSTR *r);
+	    [id(5), propput] HRESULT Comment([in] BSTR s);
+	    [id(6), propget] HRESULT Hash([out,retval] BSTR *r);
+	    [id(7), propget] HRESULT Fee([out,retval] DECIMAL *r);
+	};
+
+	[uuid(55534654-3F35-46d9-0001-54BAFC250405), dual, oleautomation]
+	interface IAlert : IDispatch {
+	    [id(2), propget] HRESULT UntilTimestamp([out,retval] DATE *r);
+	    [id(5), propget] HRESULT Comment([out,retval] BSTR *r);
+	}
+
+	[uuid(55534654-3F35-46d9-0001-54BAFC250402), dual, oleautomation]
+	interface IWallet : IDispatch {
+	    [id(1), propget] HRESULT CurrencyName([out,retval] BSTR *r);
+	    [id(2), propget] HRESULT CurrencySymbol([out,retval] BSTR *r);
+	    [id(3), propget] HRESULT Balance([out,retval] DECIMAL *r);
+	    [id(4), propget] HRESULT Transactions([out,retval] SAFEARRAY(ITransaction) *r);
+	    [id(5), propget] HRESULT MyAddresses([out,retval] SAFEARRAY(IAddress) *r);
+	    [id(7)] HRESULT GenerateNewAddress([in] BSTR comment, [out,retval] IAddress **r);
+	    [id(8)] HRESULT Rescan();
+	    [id(9)] HRESULT GetAndResetStateChangedFlag([out,retval] VARIANT_BOOL *r);
+	    [id(10)] HRESULT CalcFee([in] DECIMAL amount, [out,retval] DECIMAL *r);
+	    [id(11)] HRESULT SendTo(DECIMAL amount, BSTR addr, BSTR comment);
+		[id(12), propget] HRESULT LastBlock([out,retval] int *r);
+		[id(13), propget] HRESULT Enabled([out,retval] VARIANT_BOOL *r);
+		[id(13), propput] HRESULT Enabled([in] VARIANT_BOOL v);
+		[id(14), propget] HRESULT MiningAllowed([out,retval] VARIANT_BOOL *r);
+		[id(15), propget] HRESULT MiningEnabled([out,retval] VARIANT_BOOL *r);
+		[id(15), propput] HRESULT MiningEnabled([in] VARIANT_BOOL v);
+		[id(16), propget] HRESULT Progress([out, retval] float *r);
+		[id(17), propget] HRESULT State([out, retval] BSTR *r);
+		[id(18), propget] HRESULT Peers([out, retval] int *r);
+	    [id(19), propget] HRESULT Alerts([out,retval] SAFEARRAY(IAlert) *r);
+
+	    [id(20), propget] HRESULT Recipients([out,retval] SAFEARRAY(IAddress) *r);
+		[id(21)] HRESULT AddRecipient([in] BSTR addr, [in] BSTR comment, [out,retval] IAddress **r);
+		[id(22)] HRESULT RemoveRecipient([in] IAddress *addr);
+		[id(23)] HRESULT CompactDatabase();
+		[id(24)] HRESULT ExportWalletToBdb([in] BSTR filepath);
+		[id(25)] HRESULT CancelPendingTxes();
+	};
+
+	[uuid(55534654-3F35-46d9-0004-54BAFC250402)]
+	dispinterface _IWalletEvents {
+		properties:
+		methods:
+		[id(1)] HRESULT OnStateChangedEvent();
+	};		
+
+	[uuid(55534654-3F35-46d9-0002-54BAFC250402)]
+	coclass Wallet {
+		[default] interface IWallet;
+		[default, source] dispinterface _IWalletEvents;
+	};
+
+	[uuid(55534654-3F35-46d9-0001-54BAFC250401), dual, oleautomation]
+	interface ICoinEng : IDispatch {
+		[id(1)] HRESULT Start();
+		[id(2)] HRESULT Stop();
+		[id(3), propget] HRESULT Wallets([out,retval] SAFEARRAY(IWallet) *r);
+		[id(4), propget] HRESULT WalletDatabaseExists([out,retval] VARIANT_BOOL *r);
+		[id(5), propget] HRESULT NeedPassword([out,retval] VARIANT_BOOL *r);
+		[id(6), propput] HRESULT Password([in] BSTR password);
+		[id(7)] HRESULT ChangePassword([in] BSTR oldPassword, [in] BSTR newPassword);
+		[id(8)] HRESULT ImportWallet([in] BSTR filepath, [in] BSTR password);
+		[id(9)] HRESULT ExportWalletToXml([in] BSTR filepath);
+		[id(10), propget] HRESULT LocalPort([out, retval] int *r);
+		[id(10), propput] HRESULT LocalPort([in] int port);
+		[id(11), propput] HRESULT LiteMode([in] VARIANT_BOOL b);
+		[id(12), propget] HRESULT AppDataDirectory([out, retval] BSTR *dir);
+	};
+
+	[uuid(55534654-3F35-46d9-0002-54BAFC250401)]
+	coclass CoinEng {
+		[default] interface ICoinEng;
+	};
+
+};
+
+

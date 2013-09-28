@@ -1,0 +1,15 @@
+LIBRARY
+
+EXPORTS
+
+CoinMiner_CreateObject
+CoinMiner_Release
+CoinMiner_SetMainUrl
+CoinMiner_SetLogin
+CoinMiner_SetPassword
+CoinMiner_SetThreadCount
+CoinMiner_SetIntensity
+CoinMiner_SetHashAlgo
+CoinMiner_Start
+CoinMiner_Stop 
+CoinMiner_GetSpeed
