@@ -1,0 +1,291 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{23655587-09CA-411F-E805-69147DFD3BF4}</ProjectGuid>
+    <RootNamespace>coineng</RootNamespace>
+    <Keyword>MFCDLLProj</Keyword>
+    <VCTargetsPath Condition="'$(VCTargetsPath11)' != '' and '$(VSVersion)' == '' and $(VisualStudioVersion) == ''">$(VCTargetsPath11)</VCTargetsPath>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Static</UseOfMfc>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Static</UseOfMfc>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="cfg\vs\mc.props" />
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(OUT)\$(Configuration)\</OutDir>
+    <IntDir>$(OUT)/obj/$(ProjectName)/$(PlatformName)_$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(OUT)\$(Configuration)\</OutDir>
+    <IntDir>$(OUT)/obj/$(ProjectName)/$(PlatformName)_$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions);UCFG_CUSTOM=1</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeaderFile>el/ext.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>.;coin/eng;coin/inc;$(OutDir)\inc</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>coin\eng\coineng.def</ModuleDefinitionFile>
+      <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
+      <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>libxml.lib</AdditionalDependencies>
+      <MinimumRequiredVersion>6.0</MinimumRequiredVersion>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <TypeLibraryName>$(OutDir)inc\$(TargetName).tlb</TypeLibraryName>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0409</Culture>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <PostBuildEvent>
+      <Command>"C:\P\Microsoft SDKs\Windows\v6.0A\bin\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
+    </PostBuildEvent>
+    <MASM>
+      <IncludePaths>el/comp</IncludePaths>
+    </MASM>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <Optimization>MinSpace</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions);UCFG_CUSTOM=1</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeaderFile>el/ext.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>.;coin/eng;coin/inc;$(OutDir)\inc</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ModuleDefinitionFile>coin\eng\coineng.def</ModuleDefinitionFile>
+      <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
+      <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>libxml.lib</AdditionalDependencies>
+      <MinimumRequiredVersion>6.0</MinimumRequiredVersion>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <TypeLibraryName>$(OutDir)inc\$(TargetName).tlb</TypeLibraryName>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0409</Culture>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <PostBuildEvent>
+      <Command>"C:\P\Microsoft SDKs\Windows\v6.0A\bin\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
+    </PostBuildEvent>
+    <MASM>
+      <IncludePaths>el/comp</IncludePaths>
+    </MASM>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="el\crypto\blake.cpp" />
+    <ClCompile Include="el\crypto\ext-openssl.cpp" />
+    <ClCompile Include="el\crypto\salsa20.cpp" />
+    <ClCompile Include="el\crypto\scrypt.cpp" />
+    <ClCompile Include="el\crypto\bloom-filter.cpp" />
+    <ClCompile Include="el\crypto\merkle-tree.cpp" />
+    <ClCompile Include="el\db\ext-sqlite.cpp" />
+    <ClCompile Include="el\db\sqlite-mmap.cpp" />
+    <ClCompile Include="el\elwin\dllmodul.cpp" />
+    <ClCompile Include="el\inet\irc-client.cpp" />
+    <ClCompile Include="el\comp\stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">el/ext.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">el/ext.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <ClCompile Include="el\libext\bignum.cpp" />
+    <ClCompile Include="el\libext\sockets.cpp" />
+    <ClCompile Include="el\libext\win32\com-module.cpp" />
+    <ClCompile Include="el\libext\win32\excom.cpp" />
+    <ClCompile Include="el\libext\win32\win-thread.cpp" />
+    <ClCompile Include="el\xml\xml-reader.cpp" />
+    <ClCompile Include="el\xml\xml-dom.cpp" />
+    <ClCompile Include="el\xml\xml-node-reader.cpp" />
+    <ClCompile Include="el\xml\xml-writer.cpp" />
+    <ClCompile Include="el\xml\xml.cpp" />
+    <ClCompile Include="el\crypto\aes.cpp" />
+    <ClCompile Include="el\crypto\ecdsa.cpp" />
+    <ClCompile Include="el\crypto\sha256.cpp" />
+    <ClCompile Include="el\crypto\ripemd.cpp" />
+    <ClCompile Include="el\db\bdb-reader.cpp" />
+    <ClCompile Include="el\libext\binary-reader-writer.cpp" />
+    <ClCompile Include="el\libext\datetime.cpp" />
+    <ClCompile Include="el\libext\ext-app.cpp" />
+    <ClCompile Include="el\libext\ext-base.cpp" />
+    <ClCompile Include="el\libext\ext-blob.cpp" />
+    <ClCompile Include="el\libext\ext-core.cpp" />
+    <ClCompile Include="el\libext\ext-encoding.cpp" />
+    <ClCompile Include="el\libext\ext-file.cpp" />
+    <ClCompile Include="el\libext\ext-fw.cpp" />
+    <ClCompile Include="el\libext\ext-handlers.cpp" />
+    <ClCompile Include="el\libext\ext-ip-address.cpp" />
+    <ClCompile Include="el\libext\ext-net.cpp" />
+    <ClCompile Include="el\libext\ext-os.cpp" />
+    <ClCompile Include="el\libext\ext-stream.cpp" />
+    <ClCompile Include="el\libext\ext-string.cpp" />
+    <ClCompile Include="el\libext\http.cpp" />
+    <ClCompile Include="el\libext\internet.cpp" />
+    <ClCompile Include="el\libext\stack-trace.cpp" />
+    <ClCompile Include="el\libext\threader.cpp" />
+    <ClCompile Include="el\libext\win32\ext-com.cpp" />
+    <ClCompile Include="el\libext\win32\ext-registry.cpp" />
+    <ClCompile Include="el\libext\win32\ext-win-nt.cpp" />
+    <ClCompile Include="el\libext\win32\ext-win.cpp" />
+    <ClCompile Include="el\libext\win32\ext2.cpp" />
+    <ClCompile Include="el\libext\win32\getopt.cpp" />
+    <ClCompile Include="el\num\mod.cpp" />
+    <ClCompile Include="el\num\num.cpp" />
+    <ClCompile Include="p2p\net\detect-global-ip.cpp" />
+    <ClCompile Include="p2p\net\p2p-net.cpp" />
+    <ClCompile Include="p2p\net\p2p-peers.cpp" />
+    <ClCompile Include="coin\eng\block.cpp" />
+    <ClCompile Include="coin\eng\coin-com.cpp" />
+    <ClCompile Include="coin\eng\coin-model.cpp" />
+    <ClCompile Include="coin\eng\coin-protocol.cpp" />
+    <ClCompile Include="coin\eng\coindb.cpp" />
+    <ClCompile Include="coin\eng\pool.cpp" />
+    <ClCompile Include="coin\eng\coineng.cpp" />
+    <ClCompile Include="coin\eng\crypter.cpp" />
+    <ClCompile Include="coin\eng\generate.cpp" />
+    <ClCompile Include="coin\eng\import-export.cpp" />
+    <ClCompile Include="coin\eng\import-export-bdb.cpp" />
+    <ClCompile Include="coin\eng\irc.cpp" />
+    <ClCompile Include="coin\eng\bitcoin.cpp" />
+    <ClCompile Include="coin\eng\namecoin.cpp" />
+    <ClCompile Include="coin\eng\ppcoin.cpp" />
+    <ClCompile Include="coin\eng\novacoin.cpp" />
+    <ClCompile Include="coin\eng\devcoin.cpp" />
+    <ClCompile Include="coin\eng\terracoin.cpp" />
+    <ClCompile Include="coin\eng\feathercoin.cpp" />
+    <ClCompile Include="coin\eng\script.cpp" />
+    <ClCompile Include="coin\eng\tx.cpp" />
+    <ClCompile Include="coin\eng\util.cpp" />
+    <ClCompile Include="coin\eng\wallet.cpp" />
+    <ClCompile Include="coin\eng\backend-dblite.cpp" />
+    <ClCompile Include="coin\eng\backend-sqlite.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="el\db\ext-sqlite.h" />
+    <ClInclude Include="el\inet\irc-client.h" />
+    <ClInclude Include="el\crypto\ecdsa.h" />
+    <ClInclude Include="el\libext.h" />
+    <ClInclude Include="el\num\mod.h" />
+    <ClInclude Include="el\num\num.h" />
+    <ClInclude Include="p2p\net\p2p-net.h" />
+    <ClInclude Include="p2p\net\p2p-peers.h" />
+    <ClInclude Include="coin\eng\coin-model.h" />
+    <ClInclude Include="coin\eng\coin-protocol.h" />
+    <ClInclude Include="coin\eng\crypter.h" />
+    <ClInclude Include="coin\eng\eng.h" />
+    <ClInclude Include="coin\eng\irc.h" />
+    <ClInclude Include="coin\eng\namecoin.h" />
+    <ClInclude Include="coin\eng\param.h" />
+    <ClInclude Include="coin\eng\resource.h" />
+    <ClInclude Include="coin\eng\script.h" />
+    <ClInclude Include="coin\inc\util.h" />
+    <ClInclude Include="coin\eng\wallet.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="coineng.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="el\bignum\x86x64\bignum-x86x64.asm" />
+    <MASM Include="el\crypto\x86x64\sha256_x86x64.asm" />
+    <Msg_Compiler Include="coin\util\coin-msg.mc">
+      <FileType>Document</FileType>
+      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)\inc</HeaderPath>
+      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)\inc</ResourcePath>
+      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)\inc</HeaderPath>
+      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)\inc</ResourcePath>
+    </Msg_Compiler>
+    <MASM Include="el\crypto\x86x64\blake_x86x64.asm" />
+    <MASM Include="el\crypto\x86x64\scrypt_x86x64.asm">
+      <FileType>Document</FileType>
+    </MASM>
+    <None Include="coin\eng\coineng.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="coin\eng\coin-com.idl" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="cfg\vs\mc.targets" />
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+</Project>

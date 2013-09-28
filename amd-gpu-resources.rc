@@ -1,0 +1,22 @@
+#include "resource.h"
+
+//ID_CAL_TARGET_R7XX     	RCDATA                  "btc-r7xx.image"
+//ID_CAL_TARGET_RV770    	RCDATA                  "btc-rv770.image"
+//ID_CAL_TARGET_RV710    	RCDATA                  "btc-rv710.image"
+//ID_CAL_TARGET_RV730    	RCDATA                  "btc-rv730.image"
+//ID_CAL_TARGET_CYPRESS  	RCDATA                  "btc-cypress.image"
+//ID_CAL_TARGET_JUNIPER  	RCDATA                  "btc-juniper.image"
+//ID_CAL_TARGET_REDWOOD  	RCDATA                  "btc-redwood.image"
+//ID_CAL_TARGET_CEDAR  	RCDATA                  "btc-cedar.image"
+//ID_CAL_TARGET_WRESTLER  RCDATA                  "btc-wrestler.image"
+//ID_CAL_TARGET_CAYMAN  	RCDATA                  "btc-cayman.image"
+//ID_CAL_TARGET_BARTS  	RCDATA                  "btc-barts.image"
+
+btc.il 					RCDATA 					"obj/btc.il"
+btc-evergreen.il		RCDATA					"obj/btc-evergreen.il"
+phatk.cl				RCDATA					"phatk.cl"
+scrypt.cl				RCDATA					"scrypt.cl"
+#if UCFG_BITCOIN_USE_CUDA
+	phatk.ptx				RCDATA					"obj/phatk.ptx"
+#endif
+

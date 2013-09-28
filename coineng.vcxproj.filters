@@ -1,0 +1,400 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="comp">
+      <UniqueIdentifier>{ebfa1da2-1203-4121-a20c-40a976b3bf3a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\p2p">
+      <UniqueIdentifier>{70d04523-1420-4a39-8298-96baa6739ce6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\h">
+      <UniqueIdentifier>{cd20eeff-2a07-43c4-a0cb-f17b3c72d610}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\p2p">
+      <UniqueIdentifier>{309d769e-0d6b-41a6-a90f-80edce3c5316}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\crypto">
+      <UniqueIdentifier>{02931251-a8c0-4d06-bd1b-8bd69ba95d11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\SubSystems">
+      <UniqueIdentifier>{985db27c-9a5f-4e52-a867-322305289df2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\num">
+      <UniqueIdentifier>{7cbbe4d5-0a78-4bdc-97a0-00fef5947fe1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libext">
+      <UniqueIdentifier>{ecd5005c-f46f-4fdb-a358-e9e83e14057b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libext\H">
+      <UniqueIdentifier>{e17a4512-926e-48fc-856f-65f67b12f611}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libext\stl">
+      <UniqueIdentifier>{9ac56d99-846c-4904-97a5-41f5abb54a5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libext\win32">
+      <UniqueIdentifier>{5d3fce47-29c3-4ecd-9668-e4999221628b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libext\asm">
+      <UniqueIdentifier>{d9c8ddc2-fe3b-4d0c-ab7f-58e16473098d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="coin\eng\coineng.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="p2p\net\p2p-net.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="p2p\net\detect-global-ip.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\coin-model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\script.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\wallet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\backend-dblite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\backend-sqlite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\proof-of-stake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\coin-com.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\coin-protocol.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="p2p\net\p2p-peers.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\generate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\irc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\block.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\tx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\pool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\coindb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\crypter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="el\db\bdb-reader.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\import-export.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\import-export-bdb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\sha256.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\ripemd.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\ecdsa.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\aes.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\bitcoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\namecoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\ppcoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\novacoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\devcoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\terracoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="coin\eng\feathercoin.cpp">
+      <Filter>Source Files\SubSystems</Filter>
+    </ClCompile>
+    <ClCompile Include="el\num\mod.cpp">
+      <Filter>comp\num</Filter>
+    </ClCompile>
+    <ClCompile Include="el\num\num.cpp">
+      <Filter>comp\num</Filter>
+    </ClCompile>
+    <ClCompile Include="el\db\ext-sqlite.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\ext-openssl.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\salsa20.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\inet\irc-client.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\blake.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\bloom-filter.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\merkle-tree.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\crypto\scrypt.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="el\db\sqlite-mmap.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="el\comp\stdafx.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\ext-com.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\ext-registry.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\ext-win-nt.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\ext-win.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\ext2.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\getopt.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\binary-reader-writer.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\datetime.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-app.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-base.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-blob.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-core.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-encoding.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-file.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-fw.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-handlers.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-ip-address.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-net.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-os.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-stream.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\ext-string.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\http.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\internet.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\stack-trace.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\threader.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\bignum.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\xml\xml-writer.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\sockets.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\xml\xml.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\win-thread.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\com-module.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\libext\win32\excom.cpp">
+      <Filter>libext\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="el\xml\xml-reader.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\xml\xml-dom.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\xml\xml-node-reader.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+    <ClCompile Include="el\elwin\dllmodul.cpp">
+      <Filter>libext</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="coin\eng\proof-of-stake.h">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="coin\eng\resource.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\coin-model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="el\crypto\ecdsa.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\script.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\wallet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\eng.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\coin-protocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\param.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="p2p\net\p2p-net.h">
+      <Filter>Header Files\p2p</Filter>
+    </ClInclude>
+    <ClInclude Include="p2p\net\p2p-peers.h">
+      <Filter>Header Files\p2p</Filter>
+    </ClInclude>
+    <ClInclude Include="el\inet\irc-client.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\irc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\crypter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="el\db\ext-sqlite.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\inc\util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="el\num\mod.h">
+      <Filter>comp\num</Filter>
+    </ClInclude>
+    <ClInclude Include="el\num\num.h">
+      <Filter>comp\num</Filter>
+    </ClInclude>
+    <ClInclude Include="coin\eng\namecoin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="el\libext.h">
+      <Filter>libext\H</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="coin\eng\coineng.def">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="coin\eng\coin-com.idl">
+      <Filter>Resource Files</Filter>
+    </Midl>
+  </ItemGroup>
+  <ItemGroup>
+    <Msg_Compiler Include="coin\util\coin-msg.mc">
+      <Filter>Resource Files</Filter>
+    </Msg_Compiler>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="el\crypto\x86x64\scrypt_x86x64.asm">
+      <Filter>comp\crypto</Filter>
+    </MASM>
+    <MASM Include="el\crypto\x86x64\blake_x86x64.asm">
+      <Filter>comp\crypto</Filter>
+    </MASM>
+    <MASM Include="el\crypto\x86x64\sha256_x86x64.asm">
+      <Filter>comp\crypto</Filter>
+    </MASM>
+    <MASM Include="el\bignum\x86x64\bignum-x86x64.asm">
+      <Filter>libext\asm</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="coineng.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>
