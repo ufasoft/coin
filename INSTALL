@@ -1,0 +1,22 @@
+Installation Instructions
+*************************
+
+1. If you have AMD cards download and install AMD APP SDK for your Linux platform from:
+	http://developer.amd.com/tools/heterogeneous-computing/amd-accelerated-parallel-processing-app-sdk/downloads/
+
+2. Run:		
+	./configure
+
+3.	Run:
+		make
+	or
+		make CPPFLAGS=-DUCFG_TRC=1			# enable tracing
+
+4. Optionally run:
+	make install
+
+
+If the program don't find OpenCL.so run it as:
+LD_LIBRARY_PATH=$AMDAPPSDKROOT/lib/x86 ./coin-miner
+
+

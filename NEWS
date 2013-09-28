@@ -1,0 +1,48 @@
+0.66 (2013-07-12)
+=================
+FeatherCoin (FTC) currency
+
+
+0.64 (2013-07-01)
+=================
+LiteCoin 0.6.9 compatibility
+
+
+0.63
+=================
+ModMiner Quad FPGA mining
+
+0.62 (2013-6-10)
+=================
+Bloom Filters (BIP0037) for SPV peers
+
+
+0.61 (2013-6-5)
+=================
+Blockchain database converted to Ufasoft DBLite Engine
+DevCoin (DVC) currency
+
+0.55 (2013-4-10)
+=================
+TerraCoin (TRC) currency
+
+
+0.50 (2013-3-24)
+=================
+PPCoin 0.3 upgrade
+Novacoin (NVC) currency
+
+
+0.43 (2013-1-27)
+=================
+
+* AMD HD 7800/7900 GPU mining
+* PPCoin currency
+* -I (-10..10)    - GPU Intensity option
+
+
+0.38 (2012-12-02)
+=================
+
+* Stratum protocol
+* getblocktemplate (BIP 22)
