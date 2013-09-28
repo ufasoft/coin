@@ -96,7 +96,6 @@
 #endif
 
 #define UCFG_USE_RESOURCES 0
-
 #define UCFG_BITCOIN_USE_CRASHDUMP 0
 
 
