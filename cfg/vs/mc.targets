@@ -1,0 +1,38 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<ItemGroup>
+    	<PropertyPageSchema Include="$(MSBuildThisFileDirectory)\$(MSBuildThisFileName).xml" />
+		<AvailableItemName Include="Msg_Compiler"> <Targets>_Msg_Compiler</Targets> </AvailableItemName>
+	</ItemGroup>
+  	<UsingTask TaskName="Msg_Compiler" TaskFactory="XamlTaskFactory" AssemblyName="Microsoft.Build.Tasks.v4.0">
+ 		<Task>$(MSBuildThisFileDirectory)\$(MSBuildThisFileName).xml</Task>
+  	</UsingTask>
+	
+	<Target Name="_Msg_Compiler" BeforeTargets="$(Msg_CompilerBeforeTargets)" AfterTargets="$(Msg_CompilerAfterTargets)" Condition="'@(Msg_Compiler)' != ''"
+			Outputs="%(Msg_Compiler.HeaderPath)\%(Filename).h;%(ResourcePath)\%(Filename).rc;%(ResourcePath)\%(Filename)_MSG_EN.bin"
+			Inputs="@(Msg_Compiler);%(Msg_Compiler.AdditionalDependencies)">
+		<Message Importance="High" Text="%(Msg_Compiler.ExecutionDescription)" />
+		<MakeDir Directories="%(Msg_Compiler.HeaderPath)" />
+		<Msg_Compiler
+			CommandLineTemplate="%(Msg_Compiler.CommandLineTemplate)"
+			HeaderPath="%(Msg_Compiler.HeaderPath)"
+			ResourcePath="%(Msg_Compiler.ResourcePath)"
+			UnicodeBin="%(Msg_Compiler.UnicodeBin)"
+			AdditionalOptions="%(Msg_Compiler.AdditionalOptions)"
+			Inputs="@(Msg_Compiler-&gt;'%(Fullpath)')"
+		 />
+  	</Target>
+  
+
+	<Target Name="_CleanMsg_Compiler" BeforeTargets="CoreCppClean" AfterTargets="_PrepareForClean" Condition="'@(Msg_Compiler)' != ''">
+    	<PropertyGroup>
+      		<CleanMsg_CompilerFilePatternsToDelete>%(Msg_Compiler.HeaderPath)\%(Filename).h;%(ResourcePath)\%(Filename).rc;%(ResourcePath)\%(Filename)_MSG_EN.bin</CleanMsg_CompilerFilePatternsToDelete>
+    	</PropertyGroup>
+    	<ItemGroup>
+      		<CoreCppClean>
+        		<FilePatternsToDelete Condition="'%(CoreCppClean.FilePatternsToDelete)' != ''">%(CoreCppClean.FilePatternsToDelete);$(CleanMsg_CompilerFilePatternsToDelete)</FilePatternsToDelete>
+        		<FilePatternsToDelete Condition="'%(CoreCppClean.FilePatternsToDelete)' == ''">$(CleanMsg_CompilerFilePatternsToDelete)</FilePatternsToDelete>
+      		</CoreCppClean>
+    	</ItemGroup>
+	</Target> 
+
+</Project>

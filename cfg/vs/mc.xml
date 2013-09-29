@@ -1,0 +1,54 @@
+﻿<ProjectSchemaDefinitions xmlns="clr-namespace:Microsoft.Build.Framework.XamlTypes;assembly=Microsoft.Build.Framework" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=mscorlib" xmlns:impl="clr-namespace:Microsoft.VisualStudio.Project.Contracts.Implementation;assembly=Microsoft.VisualStudio.Project.Contracts.Implementation">
+  	<Rule Name="Msg_Compiler" PageTemplate="tool" DisplayName="MC" Order="200" SwitchPrefix="-">
+    	<Rule.DataSource>
+      		<DataSource Persistence="ProjectFile" ItemType="Msg_Compiler" />
+    	</Rule.DataSource>
+
+		<Rule.Categories>
+			<Category Name="General">
+				<Category.DisplayName><sys:String>General</sys:String></Category.DisplayName>
+      		</Category>
+
+			<Category Name="Command Line" Subtype="CommandLine">
+				<Category.DisplayName> <sys:String>Command Line</sys:String> </Category.DisplayName>
+      		</Category>
+    	</Rule.Categories>
+
+  		<StringProperty Subtype="folder" Name="HeaderPath" Category="General" DisplayName="Header Path" Description="Path where Header Located -h" Switch="h "  Separator=" "/>
+  		<StringProperty Subtype="folder" Name="ResourcePath" Category="General" DisplayName="Resource Path" Description="Path where Resource Located -r" Switch="r "  Separator=" " />
+		<BoolProperty Name="UnicodeBin" DisplayName="UNICODE BIN" Category="General"  Description="Messages in Bin should be UNICODE -U (Default)" Switch="U" />
+
+    	<StringProperty Name="Inputs" Category="Command Line" IsRequired="true"> 
+ 			<StringProperty.DataSource>
+				<DataSource Persistence="ProjectFile" ItemType="Msg_Compiler" SourceType="Item" />
+    		</StringProperty.DataSource>
+    	</StringProperty>
+
+    	<StringProperty Name="CommandLineTemplate" DisplayName="Command Line" Visible="False" IncludeInCommandLine="False" />
+
+    	<StringProperty Name="Msg_CompilerBeforeTargets" DisplayName="Execute Before" IncludeInCommandLine="False" Description="Specifies the targets for the custom build rule to run before.">
+			<StringProperty.DataSource>
+        		<DataSource Persistence="ProjectFile" ItemType="" HasConfigurationCondition="true" />
+      		</StringProperty.DataSource>
+    	</StringProperty>
+
+    	<StringProperty Name="Msg_CompilerAfterTargets" DisplayName="Execute After" IncludeInCommandLine="False" Description="Specifies the targets for the custom build rule to run after.">
+    		<StringProperty.DataSource>
+        		<DataSource Persistence="ProjectFile" ItemType="" HasConfigurationCondition="true" />
+      		</StringProperty.DataSource>
+    	</StringProperty>
+
+    	<StringListProperty Name="Outputs" DisplayName="Outputs" Visible="False" IncludeInCommandLine="False" />
+
+    	<StringProperty Name="ExecutionDescription" DisplayName="Execution Description" IncludeInCommandLine="False" Visible="False"/>
+
+    	<StringListProperty Name="AdditionalDependencies" DisplayName="Additional Dependencies" Visible="False" IncludeInCommandLine="False" />
+    	<StringProperty  Subtype="AdditionalOptions"   Name="AdditionalOptions"   Category="Command Line">
+      		<StringProperty.DisplayName><sys:String>Additional Options</sys:String></StringProperty.DisplayName>
+      		<StringProperty.Description><sys:String>Additional Options</sys:String></StringProperty.Description>
+    	</StringProperty>
+  	</Rule>
+	<ItemType Name="Msg_Compiler" DisplayName="Messages File" />
+	<FileExtension Name="*.mc" ContentType="Msg_Compiler" />
+	<ContentType Name="Msg_Compiler" DisplayName="MC" ItemType="Msg_Compiler" />
+</ProjectSchemaDefinitions>

@@ -1,0 +1,13 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Msg_CompilerBeforeTargets)' == '' and '$(Msg_CompilerAfterTargets)' == ''">
+    <Msg_CompilerBeforeTargets>Midl</Msg_CompilerBeforeTargets>
+    <Msg_CompilerAfterTargets>CustomBuild</Msg_CompilerAfterTargets>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Msg_Compiler>
+		<CommandLineTemplate>mc.exe [AllOptions] [AdditionalOptions] -b %(FullPath) || MC.EXE from the Windows SDK not found, put it to the PATH</CommandLineTemplate>
+		<Outputs>%(Msg_Compiler.HeaderPath)\%(Filename).h;%(ResourcePath)\%(Filename).rc;%(ResourcePath)\%(Filename)_MSG_EN.bin</Outputs>
+      	<ExecutionDescription>Compiling .mc file...</ExecutionDescription>
+    </Msg_Compiler>
+  </ItemDefinitionGroup>
+</Project>
