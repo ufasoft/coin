@@ -1,0 +1,146 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
+#pragma once
+#define _SHARED_MUTEX_
+
+namespace ExtSTL {
+
+class SharedMutexImp;
+class RecursiveSharedMutexImp;
+
+class shared_mutex : Ext::NonCopiable {			// RW-lock with Starvation Prevention
+	typedef shared_mutex class_type;
+public:
+	shared_mutex();
+	~shared_mutex();
+
+	void lock();
+	bool try_lock();
+	void unlock();
+	void lock_shared();
+	bool try_lock_shared();
+	void unlock_shared();
+private:
+
+#if UCFG_USE_PTHREADS
+	pthread_rwlock_t m_rwlock;
+#else
+	SRWLOCK m_srwlock;
+	SharedMutexImp *m_pimpl;
+
+	void InitSharedMutex();
+	void InitSRWSharedMutex();
+#endif
+};
+
+template <class M>
+class shared_lock : public Ext::NonCopiable {
+	typedef shared_lock class_type;
+public:
+	typedef M mutex_type;
+
+	shared_lock()
+		:	m_pm(0)
+		,	m_owns(false)
+	{}
+
+	shared_lock(EXT_RV_REF(shared_lock) rv)
+		:	m_pm(exchange(rv.m_pm, nullptr))
+		,	m_owns(exchange(rv.m_owns, false))
+	{		
+	}
+
+	explicit shared_lock(mutex_type& m)
+		:	m_pm(&m)
+		,	m_owns(true)
+	{
+		m_pm->lock_shared();
+	}
+
+	shared_lock(mutex_type& m, adopt_lock_t)
+		:	m_pm(&m)
+		,	m_owns(true)
+	{}
+
+	shared_lock(mutex_type& m, defer_lock_t)
+		:	m_pm(&m)
+		,	m_owns(false)
+	{}
+
+	shared_lock(mutex_type& m, try_to_lock_t)
+		:	m_pm(&m)
+		,	m_owns(m.try_lock_shared())
+	{}
+
+	~shared_lock() {
+		if (m_owns)
+			m_pm->unlock_shared();
+	}
+
+	shared_lock& operator=(EXT_RV_REF(shared_lock) rv) {
+		if (this != &rv) {
+			if (m_owns)
+				m_pm->unlock_shared();
+			m_pm = exchange(rv.m_pm, nullptr);
+			m_owns = exchange(rv.m_owns, false);
+		}
+		return *this;	
+	}
+
+	mutex_type *mutex() const { return m_pm; }
+	bool owns_lock() const { return m_owns; }
+	EXPLICIT_OPERATOR_BOOL() const { return m_owns ? EXT_CONVERTIBLE_TO_TRUE : 0; }
+
+	void swap(shared_lock& u) {
+		std::swap(m_pm, u.m_pm);
+		std::swap(m_owns, u.m_owns);
+	}
+
+	mutex_type *release() {
+		m_owns = false;
+		return exchange(m_pm, nullptr);
+	}
+
+	void lock() {
+		if (!m_pm)
+			Ext::ThrowImp(E_FAIL); //!!! throw system_error(errc::operation_not_permitted);
+		m_pm->lock_shared();
+		m_owns = true;
+	}
+
+	bool try_lock() {
+		if (!m_pm)
+			Ext::ThrowImp(E_FAIL); //!!! tthrow system_error(errc::operation_not_permitted);
+		if (m_owns)
+			Ext::ThrowImp(E_FAIL); //!!! tthrow system_error(errc::resource_deadlock_would_occur);
+		return m_owns = m_pm->try_lock_shared();
+	}
+
+	void unlock() {
+		m_owns = false;
+		m_pm->unlock_shared();
+	}
+private:
+	mutex_type *m_pm;
+	bool m_owns;
+};
+
+template <class T>
+inline void swap(shared_lock<T>& x, shared_lock<T>& y) {
+	x.swap(y);
+}
+
+} // ExtSTL::
+
+
+namespace std {
+	using ExtSTL::shared_mutex;
+	using ExtSTL::shared_lock;
+}
+
