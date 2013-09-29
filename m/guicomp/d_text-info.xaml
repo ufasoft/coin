@@ -1,0 +1,9 @@
+﻿<Window x:Class="GuiComp.DialogTextInfo"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Info" Height="391" Width="436" ResizeMode="NoResize">
+	<StackPanel>
+   		<TextBox Name="textInfo" x:FieldModifier="public" IsReadOnly="True"/>
+        <Button Content="Ok" IsCancel="true" IsDefault="true" HorizontalAlignment="Center"   VerticalAlignment="Bottom" Padding="7,3.5" RenderTransformOrigin="0.533,0.001" />
+	</StackPanel>
+</Window>
