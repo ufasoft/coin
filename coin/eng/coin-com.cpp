@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 #include <el/xml.h>
 
@@ -112,7 +104,7 @@ public:
 
 	HRESULT __stdcall get_Comment(BSTR *r)
 	METHOD_BEGIN {
-		*r = m_wtx.Comment.AllocSysString();
+		*r = m_wtx.GetComment().AllocSysString();
 	} METHOD_END
 
 	HRESULT __stdcall get_Hash(BSTR *r)
@@ -151,10 +143,7 @@ public:
 		*r = m_alert.RelayUntil.ToOADate();
 	} METHOD_END
 
-	HRESULT __stdcall get_Comment(BSTR *r)
-	METHOD_BEGIN {
-		*r = ("Alert: "+m_alert.Comment + " " + m_alert.StatusBar).AllocSysString();
-	} METHOD_END
+	HRESULT __stdcall get_Comment(BSTR *r);
 };
 
 
@@ -389,7 +378,7 @@ public:
 			try {
 				std::rethrow_exception(m_wallet.Eng.CriticalException);
 			} catch (RCExc ex) {
-				os << ex.Message;
+				os << ex.what();
 			}
 		} else {
 			do {
@@ -716,6 +705,11 @@ METHOD_BEGIN {
 	*r = m_wallet.GetAddressByString(m_wtx.To.ToString()).Detach();
 } METHOD_END
 
+
+HRESULT __stdcall AlertCom::get_Comment(BSTR *r)
+METHOD_BEGIN {
+	*r = (m_wallet.m_wallet.Eng.ChainParams.Name + " Alert: " + m_alert.Comment + " " + m_alert.StatusBar).AllocSysString();
+} METHOD_END
 
 
 } // Coin::

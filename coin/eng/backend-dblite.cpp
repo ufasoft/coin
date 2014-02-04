@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "param.h"
@@ -33,11 +25,16 @@ const size_t PUBKEYTOTXES_ID_SIZE = 8;
 
 class MdbBlockChainDb;
 
-class DbTxRef : NonCopiable {
+class DbTxRef : noncopyable {
 public:
 	DbTxRef(DbStorage& env);
 
 	operator DbTransaction&() { return *m_p; }
+
+	void CommitIfLocal() {
+		if (m_pMdbTx.get())
+			m_pMdbTx->Commit();
+	}
 private:
 	DbTransaction *m_p;
 
@@ -138,6 +135,7 @@ public:
 			DbTransaction dbtx(m_db);
 			eng.UpgradeDb(ver);
 			m_db.SetUserVersion(ver);
+			dbtx.Commit();
 		}
 	}
 
@@ -171,7 +169,7 @@ public:
 
 		DbCursor c(dbt, m_tableBlocks);
 		if (!c.Get(BlockKey(height)))
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(E_COIN_BlockNotFound);
 		return LoadBlock(dbt, height, c.Data);
 	}
 
@@ -204,6 +202,7 @@ public:
 		DbTxRef dbt(m_db);
 		m_tableBlocks.Put(dbt, blockKey, msB, true);
 		m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
+		dbt.CommitIfLocal();
 	}
 
 	struct TxData {
@@ -265,6 +264,7 @@ public:
 			else
 				PutTxDatas(TxKey(txid8), txDatas);
 		}
+		dbt.CommitIfLocal();
 	}
 
 	bool FindTxById(const ConstBuf& txid8, Tx *ptx) override {
@@ -374,6 +374,7 @@ LAB_FOUND:
 		}
 		if (eng.Mode == EngMode::BlockExplorer)
 			InsertPubkeyToTxes(dbt, tx);
+		dbt.CommitIfLocal();
 	}
 
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override {
@@ -414,12 +415,14 @@ LAB_FOUND:
 		DbTxRef dbt(m_db);
 		id = htole(id);
 		m_tablePubkeys.Put(dbt, ConstBuf(&id, PUBKEYID_SIZE), pk);
+		dbt.CommitIfLocal();
 	}
 
 	void UpdatePubkey(Int64 id, const ConstBuf& pk) override {
 		DbTxRef dbt(m_db);
 		id = htole(id);
 		m_tablePubkeys.Put(dbt, ConstBuf(&id, PUBKEYID_SIZE), pk);		
+		dbt.CommitIfLocal();
 	}
 
 	void BeginTransaction() override {
@@ -610,6 +613,7 @@ bool MdbBlockChainDb::Create(RCString path) {
 		if (eng.Mode == EngMode::BlockExplorer) {
 			m_tablePubkeyToTxes.Open(dbt, true);
 		}
+		dbt.Commit();
 	}
 	m_db.Checkpoint();
 	if (TryToConvert(path))
@@ -808,7 +812,9 @@ void MdbBlockChainDb::PutTxDatas(const ConstBuf& txKey, const TxDatas& txDatas) 
 			txData.Write(wr, true);
 		}
 	}
-	m_tableTxes.Put(DbTxRef(m_db), txKey, ms);
+	DbTxRef dbt(m_db);
+	m_tableTxes.Put(dbt, txKey, ms);
+	dbt.CommitIfLocal();
 }
 
 vector<Int64> MdbBlockChainDb::GetTxesByPubKey(const HashValue160& pubkey) {

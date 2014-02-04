@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "coin-protocol.h"
@@ -143,11 +135,11 @@ Block WalletBase::CreateNewBlock() {
 		}
 
 		Block bestBlock = m_eng->BestBlock();
-		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height+1)+nFees;
 		block.m_pimpl->PrevBlockHash = Hash(bestBlock);
+		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height+1, block.m_pimpl->PrevBlockHash)+nFees;
 		block.m_pimpl->Height = bestBlock.Height+1;
 		block.m_pimpl->Timestamp = m_eng->GetTimestampForNextBlock();
-		block.m_pimpl->DifficultyTargetBits = m_eng->GetNextTargetRequired(bestBlock, block).m_value;
+		block.m_pimpl->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
 		block.m_pimpl->Nonce = 0;
 
 		CTxMap txMap;
@@ -286,7 +278,7 @@ void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
 		ScriptWriter wr(ms);
 		if (block.Ver >= 2)
 			wr << Int64(block.Height);
-		wr << BigInteger(block.get_Timestamp().UnixEpoch) << BigInteger(m_extraNonce) << OP_2 << blob;
+		wr << BigInteger(to_time_t(block.get_Timestamp())) << BigInteger(m_extraNonce) << OP_2 << blob;
 		Tx& tx = block.GetFirstTxRef();
 		tx.m_pimpl->m_txIns.at(0).put_Script(ms);
 		tx.m_pimpl->m_nBytesOfHash = 0;
@@ -353,10 +345,7 @@ LAB_START:
 		wd->Hash1 = Blob(0, 64);
 		FormatHashBlocks(wd->Hash1.data(), 32);
 
-		BitsToTargetBE(block.get_DifficultyTarget().m_value, wd->TargetBE);
-#ifdef X_DEBUG//!!!D
-		*(UInt32*)(wd.TargetBE+4) = 0xFFFFFFFF;
-#endif
+		wd->HashTarget = HashValue::FromDifficultyBits(block.get_DifficultyTarget().m_value);
 		wd->Timestamp = now;
 		wd->Data = blob;
 		wd->Midstate = CalcSha256Midstate(wd->Data);
@@ -388,7 +377,7 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 		wb = it->second.first.second;
 		m_merkleToBlock.erase(it);
 	}
-	block.m_pimpl->Timestamp = DateTime::FromUnix(letoh(pd[17]));
+	block.m_pimpl->Timestamp = DateTime::from_time_t(letoh(pd[17]));
 	block.m_pimpl->Nonce = letoh(pd[19]);
 	block.m_pimpl->m_hash.reset();
 #ifdef X_DEBUG//!!!D

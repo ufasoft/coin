@@ -1,15 +1,8 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 
-#include <p2p/net/p2p-net.h>
+#include <el/inet/p2p-net.h>
+namespace P2P = Ext::Inet::P2P;
 using P2P::Link;
 using P2P::Peer;
 
@@ -79,8 +72,8 @@ public:
 	ptr<CoinFilter> Filter;
 	CBool RelayTxes;	
 
-	CoinLink(P2P::NetManager& netManager, CThreadRef& tr)
-		:	base(netManager, tr)
+	CoinLink(P2P::NetManager& netManager, thread_group& tr)
+		:	base(&netManager, &tr)
 		,	LastReceivedBlock(-1)
 	{}
 
@@ -322,36 +315,13 @@ public:
 	}
 };
 
-class PingMessage : public CoinMessage {
+class PingPongMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
 	UInt64 Nonce;
 
-	PingMessage()
-		:	base("ping")
-		,	Nonce(0)
-	{}
-
-	void Write(BinaryWriter& wr) const override {
-		wr << Nonce;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		if (Link->PeerVersion >= 60001 && !rd.BaseStream.Eof())
-			rd >> Nonce;
-	}
-
-	void Process(P2P::Link& link) override;
-};
-
-class PongMessage : public CoinMessage {
-	typedef CoinMessage base;
-public:
-	UInt64 Nonce;
-
-	PongMessage()
-		:	base("pong")
-		,	Nonce(0)
+	PingPongMessage(RCString command)
+		:	base(command)
 	{}
 
 	void Write(BinaryWriter& wr) const override {
@@ -360,6 +330,33 @@ public:
 
 	void Read(const BinaryReader& rd) override {
 		rd >> Nonce;
+	}
+};
+
+class PingMessage : public PingPongMessage {
+	typedef PingPongMessage base;
+public:
+	PingMessage()
+		:	base("ping")
+	{
+		Ext::Random().NextBytes(Buf(&Nonce, sizeof Nonce));
+	}
+
+	void Read(const BinaryReader& rd) override {
+		if (Link->PeerVersion >= 60001 && !rd.BaseStream.Eof())
+			base::Read(rd);
+	}
+
+	void Process(P2P::Link& link) override;
+};
+
+class PongMessage : public PingPongMessage {
+	typedef PingPongMessage base;
+public:
+	PongMessage()
+		:	base("pong")
+	{
+		Nonce = 0;
 	}
 };
 

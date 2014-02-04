@@ -1,16 +1,15 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 
 #include "wallet.h"
 #include "script.h"
+
+#ifdef X_DEBUG//!!!D
+#	include <el/xml.h>
+	namespace Coin {
+#		include "../blockexplorer/xml-write.cpp"
+	}
+#endif
 
 namespace Coin {
 
@@ -54,7 +53,7 @@ WalletTx::WalletTx(const Tx& tx)
 {}
 
 void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
-	Timestamp = DateTime::FromUnix(sr.GetInt32(0));
+	Timestamp = DateTime::from_time_t(sr.GetInt32(0));
 	CMemReadStream stm(sr.GetBytes(1));
 	Coin::DbReader rd(stm, &Eng());
 	rd.BlockchainDb = false;
@@ -87,6 +86,12 @@ bool WalletTx::IsConfirmed(Wallet& wallet) const {
 	return true;
 }
 
+String WalletTx::GetComment() const {
+	String s = m_pimpl->GetComment();
+	String r = s.IsEmpty() ? String() : s;
+	return Comment.IsEmpty() ? r : r + ". " + Comment;
+}
+
 Int64 Penny::get_Debit() const {
 	Throw(E_NOTIMPL);
 	/*!!!
@@ -96,8 +101,6 @@ Int64 Penny::get_Debit() const {
 	*/
 }
 
-
-//!!!  static regex s_reIsPayToScriptHash("\\xA9\\x14[^]{20,20}\\x87");		// binary, VC don't allows regex for binary data
 
 bool IsPayToScriptHash(const Blob& script) {
 	const byte *p = script.constData();
@@ -135,13 +138,9 @@ void VerifySignature(const Tx& txFrom, const Tx& txTo, UInt32 nIn, Int32 nHashTy
     if (txIn.PrevOutPoint.Index >= txFrom.TxOuts().size())
         Throw(E_FAIL);
     const TxOut& txOut = txFrom.TxOuts()[txIn.PrevOutPoint.Index]; 
-#ifdef X_DEBUG//!!!D
-	if (txOut.Value == 1014505)
-		cout << "";
-#endif
     if (txIn.PrevOutPoint.TxHash != Hash(txFrom) || !VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType)) {
-#ifdef X_DEBUG//!!!D
-		
+#ifdef _DEBUG//!!!D
+		TRC(1, "txTo " << Hash(txTo));		
 		bool bC = txIn.PrevOutPoint.TxHash == Hash(txFrom);
 		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType);
 		bb = bb;
@@ -248,7 +247,7 @@ Int64 Wallet::Add(WalletTx& wtx, bool bPending) {
 			.Bind(1, m_dbNetId)
 			.Bind(2, hashTx)
 			.Bind(3, ms)
-			.Bind(4, wtx.Timestamp.UnixEpoch)
+			.Bind(4, to_time_t(wtx.Timestamp))
 			.Bind(5, wtx.Height >= 0 ? wtx.Height : (bPending ? -1 : -2))
 			.Bind(6, wtx.Comment)
 			.Bind(7, bool(wtx.m_bFromMe))
@@ -259,7 +258,7 @@ Int64 Wallet::Add(WalletTx& wtx, bool bPending) {
 }
 
 bool Wallet::InsertUserTx(Int64 txid, int nout, Int64 value, const HashValue160& hash160) {
-	if (SqliteCommand("SELECT * FROM usertxes WHERE txid=?", m_eng->m_cdb.m_dbWallet).Bind(1, txid).ExecuteReader().Read())
+	if (SqliteCommand("SELECT * FROM usertxes WHERE txid=? AND nout=?", m_eng->m_cdb.m_dbWallet).Bind(1, txid).Bind(2, nout).ExecuteReader().Read())
 		return false;
 	if (nout < 0) {
 		SqliteCommand("INSERT INTO usertxes (txid, nout, value, addr160) VALUES(?, NULL, ?, ?)", m_eng->m_cdb.m_dbWallet)
@@ -292,7 +291,8 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 					.ExecuteNonQuery();
 			}
 			HashValue160 hash160;
-			EXT_FOR (const TxOut& txOut, wtx.TxOuts()) {
+			for (int i=0; i<wtx.TxOuts().size(); ++i) {
+				const TxOut& txOut = wtx.TxOuts()[i];
 				if (!FindMine(txOut)) {
 					Blob pubkey;
 					bool r = false;
@@ -300,13 +300,14 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 					case 33:
 					case 65:
 					case 20:
-						InsertUserTx(txid, -1, txOut.Value, hash160);
-						goto LAB_FOUND;
+						InsertUserTx(txid, i, txOut.Value, hash160);
+						break;
+//						goto LAB_FOUND;
 					}					
 				}
 			}
-LAB_FOUND:
-			;
+//LAB_FOUND:
+//			;
 		}
 		if (IsMine(wtx)) {
 			for (int i=0; i<wtx.TxOuts().size(); ++i) {
@@ -588,7 +589,7 @@ void Wallet::CancelPendingTxes() {
 
 void Wallet::ReacceptWalletTxes() {
 	vector<HashValue> vQueue;
-	SqliteCommand cmdTx(EXT_STR("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId << " ORDER BY timestamp"), m_eng->m_cdb.m_dbWallet);	//!!! timestamp < " << m_eng->Chain.DtBestReceived.UnixEpoch-5*60 << " AND
+	SqliteCommand cmdTx(EXT_STR("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId << " ORDER BY timestamp"), m_eng->m_cdb.m_dbWallet);	//!!! timestamp < " << to_time_t(m_eng->Chain.DtBestReceived) - 5*60 << " AND
 	for (DbDataReader dr=cmdTx.ExecuteReader(); dr.Read();) {
 		WalletTx wtx;
 		wtx.LoadFromDb(dr);
@@ -759,6 +760,14 @@ WalletTx Wallet::GetTx(const HashValue& hashTx) {
 	return wtx;
 }
 
+pair<Blob, HashValue160> Wallet::GetReservedPublicKey() {
+	EXT_LOCK (m_eng->m_cdb.MtxDb) {
+		MyKeyInfo *ki = m_eng->m_cdb.FindReservedKey();
+		Blob pubKey = ki ? ki->PubKey : m_eng->m_cdb.Hash160ToMyKey.begin()->second.PubKey;			
+		return make_pair(pubKey, Hash160(pubKey));
+	}
+}
+
 bool Wallet::SelectCoins(UInt64 amount, UInt64 fee, int nConfMine, int nConfTheirs, pair<unordered_set<Penny>, UInt64>& pp) {
 	pp.first.clear();
 	pp.second = 0;
@@ -860,7 +869,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 
 			if (nChange > 0) {
 				tx.ChangePubKey = GetReservedPublicKey().first;
-				Blob scriptChange = Script(vSend[0].first).IsAddress() ? Script::BlobFromAddress(Hash160(tx.ChangePubKey)) : Script::BlobFromPubKey(tx.ChangePubKey);
+				Blob scriptChange = Script(vSend[0].first).IsAddress() ? Script::BlobFromAddress(Address(Hash160(tx.ChangePubKey))) : Script::BlobFromPubKey(tx.ChangePubKey);
 				tx.TxOuts().insert(tx.TxOuts().begin() + Ext::Random().Next(tx.TxOuts().size()), TxOut(nChange, scriptChange));
 			}
 
@@ -901,18 +910,10 @@ void Wallet::Commit(WalletTx& wtx) {
 	Relay(wtx);
 }
 
-pair<Blob, HashValue160> Wallet::GetReservedPublicKey() {
-	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		MyKeyInfo *ki = m_eng->m_cdb.FindReservedKey();
-		Blob pubKey = ki ? ki->PubKey : m_eng->m_cdb.Hash160ToMyKey.begin()->second.PubKey;			
-		return make_pair(pubKey, Hash160(pubKey));
-	}
-}
-
 void Wallet::SetNextResendTime(const DateTime& dt) {
 	m_dtNextResend = dt + TimeSpan::FromSeconds(Ext::Random().Next(30*60));
 	TRC(2, "next resend at " << m_dtNextResend);
-#ifdef _DEBUG//!!!D
+#ifdef X_DEBUG//!!!D
 	m_dtNextResend = dt + TimeSpan::FromSeconds(3);
 #endif
 }
@@ -935,6 +936,15 @@ void Wallet::ResendWalletTxes() {
 						WalletTx wtx;
 						wtx.LoadFromDb(dr);
 						if (!wtx.IsCoinBase()) {
+
+#ifdef X_DEBUG//!!!D
+							{
+								XmlTextWriter x("c:\\work\\coin\\tx.log");
+								x.Formatting = XmlFormatting::Indented;
+								x << wtx;
+							}
+							wtx.Check();
+#endif
 
 	#ifdef X_DEBUG//!!!D
 

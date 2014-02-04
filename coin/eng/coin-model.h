@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/xml.h>
@@ -27,7 +19,8 @@ using Ext::DB::sqlite_(NS)::SqliteMalloc;
 using Ext::DB::sqlite_(NS)::SqliteVfs;
 
 
-#include <p2p/net/p2p-net.h>
+#include <el/inet/p2p-net.h>
+namespace P2P = Ext::Inet::P2P;
 using P2P::Link;
 using P2P::Peer;
 
@@ -39,7 +32,7 @@ using P2P::Peer;
 
 #include "param.h"
 
-#include "util.h"
+#include "../util/util.h"
 #include "coin-msg.h"
 
 namespace Coin {
@@ -153,7 +146,7 @@ struct OutPoint {
 	};
 } namespace Coin {
 
-class COIN_CLASS TxIn : public CPersistent {
+class COIN_CLASS TxIn {		// Keep this struct small without VTBL
 private:
 	mutable Blob m_script;
 	Blob m_sig;
@@ -174,8 +167,8 @@ public:
 
 	void put_Script(const ConstBuf& script) { m_script = script; }
 
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
+	void Write(BinaryWriter& wr) const;
+	void Read(const BinaryReader& rd);
 
 	friend class TxObj;
 };
@@ -218,15 +211,6 @@ private:
 
 class Tx;
 class CTxMap;
-
-#ifdef X_DEBUG//!!!D
-class COIN_CLASS  TxCounter {
-public:
-	TxCounter();
-	TxCounter(const TxCounter&);
-	~TxCounter();
-};
-#endif
 
 class COIN_CLASS Target {
 public:
@@ -274,9 +258,12 @@ public:
 	virtual void Read(const BinaryReader& rd);
 	virtual void WritePrefix(BinaryWriter& wr) const {}
 	virtual void ReadPrefix(const BinaryReader& rd) {}
+	virtual void WriteSuffix(BinaryWriter& wr) const {}
+	virtual void ReadSuffix(const BinaryReader& rd) {}
     bool IsFinal(int height = 0, const DateTime dt = 0) const;
 	virtual Int64 GetCoinAge() const { Throw(E_NOTIMPL); }
 	void ReadTxIns(const DbReader& rd) const;
+	virtual String GetComment() const { return nullptr; }
 protected:
 	const vector<TxIn>& TxIns() const;
 	virtual void CheckCoinStakeReward(Int64 reward, const Target& target) const  {}
@@ -316,7 +303,7 @@ public:
 	void Read(const BinaryReader& rd) override;
 	void Check() const;
 	UInt32 GetSerializeSize() const;
-	Int64 GetMinFee(UInt32 blockSize = 1, bool bAllowFree = true, MinFeeMode mode = MinFeeMode::Block) const;
+	Int64 GetMinFee(UInt32 blockSize = 1, bool bAllowFree = true, MinFeeMode mode = MinFeeMode::Block, UInt32 nBytes = UInt32(-1)) const;
 
 	Int32 get_Height() const { return m_pimpl->Height; }
 	void put_Height(Int32 v) { m_pimpl->Height = v; }
@@ -749,7 +736,7 @@ private:
 
 extern const byte s_mergedMiningHeader[4];
 int CalcMerkleIndex(int merkleSize, int chainId, UInt32 nonce);
-COIN_EXPORT ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf);
+ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf);
 
 
 inline bool IsPubKey(const ConstBuf& cbuf) {
@@ -767,7 +754,7 @@ public:
 	const TxOut& GetOutputFor(const OutPoint& prev) const;
 };
 
-class CConnectJob : public NonCopiable {
+class CConnectJob : noncopyable {
 public:
 	CoinEng& Eng;
 	

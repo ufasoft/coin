@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -53,36 +45,6 @@ void TxOut::Write(BinaryWriter& wr) const {
 	wr << Value;
 	CoinSerialized::WriteBlob(wr, get_PkScript());
 }
-
-
-#ifdef X_DEBUG//!!!D
-
-}
-
-#include "sqlite3.h"
-
-namespace Coin {
-volatile Int32 s_nObjectCount; //!!!D
-
-TxCounter::TxCounter() {
-	Interlocked::Increment(s_nObjectCount);
-	if (!(s_nObjectCount & 0xFF)) {
-		Int64 mem = ::sqlite3_memory_used();
-		Int64 lim = sqlite3_soft_heap_limit64(-1);
-		mem = mem;
-	}
-}
-
-TxCounter::TxCounter(const TxCounter&) {
-	Interlocked::Increment(s_nObjectCount);
-}
-
-TxCounter::~TxCounter() {
-	Interlocked::Decrement(s_nObjectCount);
-	if (s_nObjectCount < 0)
-		s_nObjectCount = s_nObjectCount;
-}
-#endif
 
 void TxOut::Read(const BinaryReader& rd) {
 	Value = rd.ReadUInt64();
@@ -198,6 +160,7 @@ void TxObj::Write(BinaryWriter& wr) const {
 	CoinSerialized::Write(wr, TxIns());
 	CoinSerialized::Write(wr, TxOuts);
 	wr << LockBlock;
+	WriteSuffix(wr);
 }
 
 void TxObj::Read(const BinaryReader& rd) {
@@ -213,7 +176,8 @@ void TxObj::Read(const BinaryReader& rd) {
 		throw PeerMisbehavingExc(10);
 	LockBlock = rd.ReadUInt32();
 	if (LockBlock >= 500000000)
-		LockTimestamp = DateTime::FromUnix(LockBlock);
+		LockTimestamp = DateTime::from_time_t(LockBlock);
+	ReadSuffix(rd);
 }
 
 bool TxObj::IsFinal(int height, const DateTime dt) const {
@@ -224,7 +188,7 @@ bool TxObj::IsFinal(int height, const DateTime dt) const {
         nBlockHeight = nBestHeight;
     if (nBlockTime == 0)
         nBlockTime = GetAdjustedTime(); */
-    if (LockTimestamp < (LockTimestamp < DateTime::FromUnix(LOCKTIME_THRESHOLD) ? height : dt))
+    if (LockTimestamp < (LockTimestamp < DateTime::from_time_t(LOCKTIME_THRESHOLD) ? height : dt))
         return true;
 	EXT_FOR (const TxIn& txIn, TxIns()) {
         if (!txIn.IsFinal())
@@ -602,6 +566,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		tx.m_pimpl->WritePrefix(wr);
 		wr << tx.TxIns() << tx.TxOuts();
 		wr.Write7BitEncoded(tx.LockBlock);
+		tx.m_pimpl->WriteSuffix(wr);
 	} else {
 		UInt64 v = UInt64(tx.m_pimpl->Ver) << 2;
 		if (tx.IsCoinBase())
@@ -612,6 +577,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		tx.m_pimpl->WritePrefix(wr);
 		if (tx.LockBlock)
 			wr.Write7BitEncoded(tx.LockBlock);
+		tx.m_pimpl->WriteSuffix(wr);
 
 		for (int i=0; i<tx.TxOuts().size(); ++i) {
 			const TxOut& txOut = tx.TxOuts()[i];
@@ -677,6 +643,7 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 		rd >> tx.m_pimpl->m_txIns >> tx.m_pimpl->TxOuts;
 		tx.m_pimpl->m_bLoadedIns = true;
 		tx.m_pimpl->LockBlock = (UInt32)rd.Read7BitEncoded();
+		tx.m_pimpl->ReadSuffix(rd);
 	} else {
 		v = rd.Read7BitEncoded();
 		tx.m_pimpl->Ver = (UInt32)(v >> 2);
@@ -684,6 +651,7 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 		tx.m_pimpl->m_bIsCoinBase = v & 1;
 		if (v & 2)
 			tx.LockBlock = (UInt32)rd.Read7BitEncoded();
+		tx.m_pimpl->ReadSuffix(rd);
 
 		while (!rd.BaseStream.Eof()) {
 			UInt64 valtyp = rd.Read7BitEncoded();
@@ -716,7 +684,7 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 		}
 	}	
 	if (tx.LockBlock >= 500000000)
-		tx.m_pimpl->LockTimestamp = DateTime::FromUnix(tx.LockBlock);
+		tx.m_pimpl->LockTimestamp = DateTime::from_time_t(tx.LockBlock);
 	return rd;
 }
 
@@ -754,11 +722,12 @@ UInt32 Tx::GetSerializeSize() const {
 	return EXT_BIN(_self).Size;
 }
 
-Int64 Tx::GetMinFee(UInt32 blockSize, bool bAllowFree, MinFeeMode mode) const {
+Int64 Tx::GetMinFee(UInt32 blockSize, bool bAllowFree, MinFeeMode mode, UInt32 nBytes) const {
 	CoinEng& eng = Eng();
     Int64 nBaseFee = mode==MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
 
-    UInt32 nBytes = GetSerializeSize();
+	if (UInt32(-1) == nBytes)
+		nBytes = GetSerializeSize();
     UInt32 nNewBlockSize = blockSize + nBytes;
     Int64 nMinFee = (1 + (Int64)nBytes / 1000) * nBaseFee;
 

@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include EXT_HEADER_FUTURE
@@ -22,6 +14,10 @@
 #include "coin-msg.h"
 
 namespace Coin {
+
+HashValue160 Hash160(const ConstBuf& mb) {
+	return HashValue160(RIPEMD160().ComputeHash(SHA256().ComputeHash(mb)));
+}
 
 CTxes::CTxes(const CTxes& txes)												// Cloning ctor
 	:	base(txes.size())
@@ -228,14 +224,19 @@ HashValue BlockObj::MerkleRoot(bool bSave) const {
 }
 
 HashValue BlockObj::Hash() const {
-	if (!m_hash)
-		m_hash = Coin::Hash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << UInt32(Timestamp.UnixEpoch) << get_DifficultyTarget() << Nonce));
+	if (!m_hash) {
+		Blob hdata = EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce);
+		if (Eng().ChainParams.HashAlgo == HashAlgo::Metis)
+			m_hash = MetisHash(hdata);
+		else
+			m_hash = Coin::Hash(hdata);
+	}
 	return m_hash.get();
 }
 
 HashValue BlockObj::PowHash(CoinEng& eng) const {
 	return eng.ChainParams.HashAlgo == HashAlgo::SCrypt
-		? ScryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << UInt32(Timestamp.UnixEpoch) << get_DifficultyTarget() << Nonce))
+		? ScryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce))
 		: Hash();
 }
 
@@ -264,7 +265,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent) {
 
 	if (!eng.ChainParams.IsTestNet) {
 		UInt16 ver = (Ver & 0xFF);
-		if (ver > 6)
+		if (ver > 112)															//!!!?
 			Throw(E_EXT_Protocol_Violation);
 		else if (ver < 1 || ver > eng.MaxBlockVersion)
 			Throw(E_EXT_New_Protocol_Version);
@@ -276,7 +277,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent) {
 	HashValue merkleRoot;
 	rd >> PrevBlockHash >> merkleRoot;
 	m_merkleRoot = merkleRoot;
-	Timestamp = DateTime::FromUnix(rd.ReadUInt32());
+	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
 
@@ -319,7 +320,7 @@ void BlockObj::Write(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 
 	CoinSerialized::WriteVarInt(wr, Ver);
-	wr << UInt32(Timestamp.UnixEpoch) << get_DifficultyTarget() << Nonce;
+	wr << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
 	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 		AuxPow->Write(wr);
 }
@@ -328,36 +329,13 @@ void BlockObj::Read(const DbReader& rd) {
 	CoinEng& eng = Eng();
 
 	Ver = (UInt32)CoinSerialized::ReadVarInt(rd);
-	Timestamp = DateTime::FromUnix(rd.ReadUInt32());
+	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
 	m_merkleRoot.reset();
 	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 		(AuxPow = new Coin::AuxPow)->Read(rd);
 }
-
-
-
-
-/*!!!R
-DbWriter& operator<<(DbWriter& wr, const Block& block) {	
-	wr << block.Ver << block.PrevBlockHash << block.MerkleRoot() << UInt32(block.Timestamp.UnixEpoch) << block.DifficultyTarget << block.Nonce;
-	if (wr.PersistentTxes)
-		CoinSerialized::Write(wr, block.m_txes);
-	return wr;
-}
-
-const DbReader& operator>>(const DbReader& rd, Block& block) {
-	block.ReadHeader(rd);
-	if (rd.PersistentTxes) {
-		CoinSerialized::Read(rd, block.m_txes);
-		for (int i=0; i<block.m_txes.size(); ++i)
-			block.m_txes[i].Height = block.Height;				// Valid only when Height already set
-	}
-	block.m_bMerkleCalculated = true;
-	block.m_hash.reset();
-	return rd;
-}*/
 
 BigInteger BlockObj::GetWork() const {
 	return Eng().ChainParams.MaxTarget / get_DifficultyTarget();
@@ -389,6 +367,9 @@ TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInt
 	return bo.Timestamp - GetBlockByHeight(r).Timestamp;					//!!! should use curchain instead of main chain, but will fail only for forks longer than TargetInterval
 }
 
+TimeSpan CoinEng::AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) {
+	return clamp(span, targetSpan/4, targetSpan*4);	
+}
 
 static DateTime s_dt15Feb2012(2012, 2, 15);
 static Target s_minTestnetTarget(0x1D0FFFFF);
@@ -408,9 +389,9 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 		}
 		return blockLast.DifficultyTarget;
 	}
-	int nInterval = GetIntervalForCalculatingTarget(blockLast.Height);	
+	int nInterval = GetIntervalForCalculatingTarget(blockLast.Height);
 	TimeSpan targetSpan = ChainParams.BlockSpan * nInterval,
-		span = std::min(std::max(GetActualSpanForCalculatingTarget(*blockLast.m_pimpl, nInterval), targetSpan/4), targetSpan*4);
+		span = AdjustSpan(blockLast.Height, GetActualSpanForCalculatingTarget(*blockLast.m_pimpl, nInterval), targetSpan);
 
 #ifdef X_DEBUG//!!!D
 	{
@@ -430,7 +411,17 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 	}
 #endif
 
-	return std::min(Target(BigInteger(blockLast.get_DifficultyTarget())*span.get_Ticks()/targetSpan.get_Ticks()), ChainParams.MaxTarget);		//!!!
+#ifdef X_DEBUG//!!!D
+	String shex = EXT_STR(hex << BigInteger(ChainParams.MaxTarget));
+	int len = strlen(shex);
+
+#endif
+
+	return Target(BigInteger(blockLast.get_DifficultyTarget())*span.get_Ticks()/targetSpan.get_Ticks());
+}
+
+Target CoinEng::GetNextTarget(const Block& blockLast, const Block& block) {
+	return std::min(ChainParams.MaxTarget, GetNextTargetRequired(blockLast, block));
 }
 
 void BlockObj::Check(bool bCheckMerkleRoot) {
@@ -452,7 +443,7 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 	if (!AuxPow && ProofType()==ProofOf::Work) {
 		if (eng.ChainParams.HashAlgo == HashAlgo::Sha256 || eng.ChainParams.HashAlgo == HashAlgo::Prime)
 			CheckPow(DifficultyTarget);
-		else {
+		else if (Hash() != eng.ChainParams.Genesis) {
 			HashValue hash = PowHash(eng);
 			byte ar[33];
 			memcpy(ar, hash.data(), 32);
@@ -487,7 +478,7 @@ void BlockObj::CheckCoinbaseTx(Int64 nFees) {
 		auto proofType = ProofType();
 #endif
 		Int64 valueOut = m_txes[0].ValueOut;
-		if (valueOut > eng.GetSubsidy(Height, eng.ToDifficulty(DifficultyTarget))+nFees) {
+		if (valueOut > eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true)+nFees) {
 			Throw(E_COIN_SubsidyIsVeryBig);
 		}
 	}
@@ -574,8 +565,7 @@ Int64 RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 			}
 			tx.CheckInOutValue(nValueIn, fee, job.Eng.AllowFreeTxes ? 0 : tx.GetMinFee(1, false), job.DifficultyTarget); 
 		}
-	} catch (RCExc ex) {
-		HRESULT hr = ex.HResult;
+	} catch (RCExc) {
 		job.Failed = true;
 	}
 	return fee;
@@ -768,7 +758,7 @@ void CConnectJob::Calculate() {
 	}
 }
 
-class CoinEngTransactionScope : NonCopiable {
+class CoinEngTransactionScope : noncopyable {
 public:
 	CoinEng& Eng;
 	ITransactionable& m_db;
@@ -887,6 +877,8 @@ void Block::Connect() const {
 		prevTxHashes.reserve(m_pimpl->m_txes.size());
 		Coin::TxHashesOutNums txHashOutNums;
 		for (int i=0; i<m_pimpl->m_txes.size(); ++i) {
+			if (!eng.Runned)
+				Throw(E_EXT_ThreadInterrupted);
 			const Tx& tx = m_pimpl->m_txes[i];
 			if (eng.ShouldBeSaved(tx)) {
 				Coin::HashValue txHash = Coin::Hash(tx);
@@ -1085,12 +1077,12 @@ void Block::Accept() {
 	else {
 		Block blockPrev = eng.LookupBlock(PrevBlockHash);
 		
-		Target targetNext = eng.GetNextTargetRequired(blockPrev, _self);
+		Target targetNext = eng.GetNextTarget(blockPrev, _self);
 		if (get_DifficultyTarget() != targetNext) {
 			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(get_DifficultyTarget()));
-			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTargetRequired(blockPrev, _self)));
+			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
 #ifdef _DEBUG//!!!D
- 			eng.GetNextTargetRequired(blockPrev, _self);
+ 			eng.GetNextTarget(blockPrev, _self);
 #endif
 			Throw(E_COIN_IncorrectProofOfWork);
 		}
@@ -1180,7 +1172,15 @@ void Block::Process(P2P::Link *link) {
 	}
 	TRC(3, "    " << hash << ", PrevBlock: " << PrevBlockHash);
 
-	Check(true);
+	try {
+		DBG_LOCAL_IGNORE_NAME(E_COIN_BlockNotFound, ignE_COIN_BlockNotFound);
+
+		Check(true);
+	} catch (RCExc ex) {
+		if (HResultInCatch(ex) == E_COIN_BlockNotFound)
+			return;
+		throw;
+	}
 	if (hash==eng.ChainParams.Genesis || eng.HaveBlockInMainTree(PrevBlockHash)) {
 		Accept();
 

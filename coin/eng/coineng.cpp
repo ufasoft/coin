@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -47,8 +39,8 @@ void MsgLoopThread::Execute() {
 			} else
 				m_ev.Lock(P2P::PERIODIC_SECONDS*1000);
 		}
-	} catch (RCExc e) {
-		if (e.HResult != HRESULT_FROM_WIN32(WSAENOTSOCK))
+	} catch (RCExc ex) {
+		if (HResultInCatch(ex) != HRESULT_FROM_WIN32(WSAENOTSOCK))
 			throw;
 	}
 
@@ -77,6 +69,7 @@ void ChainParams::Init() {
 	CoinbaseMaturity = 100;
 	PowOfDifficultyToHalfSubsidy = 1;
 	PayToScriptHashHeight = numeric_limits<int>::max();
+	ScriptAddressVersion = 5;
 	CheckDupTxHeight = numeric_limits<int>::max();
 	Listen = true;
 	MedianTimeSpan = 11;
@@ -94,12 +87,13 @@ MyKeyInfo::~MyKeyInfo() {
 
 Blob MyKeyInfo::PlainPrivKey() const {
 	byte typ = 0;
-	return Blob(&typ, 1)+get_PrivKey();
+	return Blob(&typ, 1) + get_PrivKey();
 }
 
 Blob MyKeyInfo::EncryptedPrivKey(Aes& aes) const {
 	byte typ = 'A';
-	return Blob(&typ, 1)+aes.Encrypt(get_PrivKey()+Crc32().ComputeHash(get_PrivKey()));
+	Blob privKey = PrivKey;
+	return Blob(&typ, 1) + aes.Encrypt(privKey + Crc32().ComputeHash(privKey));
 }
 
 
@@ -221,6 +215,13 @@ Block CoinEng::GetBlockByHeight(UInt32 height) {
 			return block;
 	}
 	block = Db->FindBlock(height);
+
+#ifdef X_DEBUG //!!!D
+	HashValue h1 = Hash(block);
+	block.m_pimpl->m_hash.reset();
+	ASSERT(h1 == Hash(block));
+#endif
+
 	ASSERT(block.Height == height);
 	HashValue hashBlock = Hash(block);
 	EXT_LOCK (Caches.Mtx) {
@@ -425,6 +426,9 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 	a = xml.GetAttribute("AddressVersion");
 	AddressVersion = !a.IsEmpty() ? Convert::ToByte(a) : (IsTestNet ? 111 : 0);
 
+	a = xml.GetAttribute("ScriptAddressVersion");
+	ScriptAddressVersion = !a.IsEmpty() ? Convert::ToByte(a) : (IsTestNet ? 196 : 5);
+
 	a = xml.GetAttribute("ChainID");
 	ChainId = !a.IsEmpty() ? Convert::ToInt32(a) : 0;
 
@@ -444,19 +448,8 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 		AuxPowStartBlock = Convert::ToInt32(a);
 	}
 
-	if (!(a = xml.GetAttribute("Algo")).IsEmpty()) {
-		String ua = a.ToUpper();
-		if (ua == "SHA256")
-			HashAlgo = Coin::HashAlgo::Sha256;
-		else if (ua == "SCRYPT")
-			HashAlgo = Coin::HashAlgo::SCrypt;
-		else if (ua == "PRIME")
-			HashAlgo = Coin::HashAlgo::Prime;
-		else if (ua == "SOLID")
-			HashAlgo = Coin::HashAlgo::Solid;
-		else
-			Throw(E_NOTIMPL);
-	}
+	if (!(a = xml.GetAttribute("Algo")).IsEmpty())
+		HashAlgo = StringToAlgo(a);
 
 	a = xml.GetAttribute("FullPeriod");
 	FullPeriod = !a.IsEmpty() && atoi(a);
@@ -511,7 +504,9 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name, ptr<IBlockChainDb
 								params.LastCheckpointHeight = std::max(height, params.LastCheckpointHeight);
 								params.Checkpoints.insert(make_pair(height, HashValue(rd.GetAttribute("Hash"))));
 							} else if (elName == "Seed") {
-								params.AddSeedEndpoint(rd.GetAttribute("EndPoint"));
+								vector<String> ss = rd.GetAttribute("EndPoint").Trim().Split();
+								EXT_FOR (const String& seed, ss)
+									params.AddSeedEndpoint(seed);
 							} else if (elName == "AlertPubKey") {
 								params.AlertPubKeys.push_back(Blob::FromHexString(rd.GetAttribute("Key")));
 							} else if (elName == "CheckpointMasterPubKey") {
@@ -559,6 +554,7 @@ protected:
 		Name = "DnsThread";
 
 		DBG_LOCAL_IGNORE_WIN32(WSAHOST_NOT_FOUND);
+		DBG_LOCAL_IGNORE_WIN32(WSATRY_AGAIN);
 
 		EXT_FOR (const String& dns, DnsServers) {
 			try {
@@ -634,7 +630,7 @@ void CoinEng::Start() {
 void CoinEng::Stop() {
 	Runned = false;
 	EXT_LOCK (m_mtxThreadStateChange) {
-		m_tr.SignalStop();
+		m_tr.interrupt_all();
 	}
 	EXT_LOCK (m_cdb.MtxNets) {
 		Ext::Remove(m_cdb.m_nets, this);
@@ -642,7 +638,7 @@ void CoinEng::Stop() {
 	if (ChannelClient)
 		m_cdb.IrcManager.DetachChannelClient(exchange(ChannelClient, nullptr));
 	EXT_LOCK (m_mtxThreadStateChange) {
-		m_tr.WaitStop();
+		m_tr.join_all();
 	}
 	Close();
 }
@@ -728,12 +724,13 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		TRC(2, ex.Message);
 		Misbehaving(m, ex.HowMuch);
 	} catch (RCExc ex) {
-		switch (ex.HResult) {
+		switch (HResultInCatch(ex)) {
 		case E_COIN_SizeLimits:
 		case E_COIN_RejectedByCheckpoint:
 			Misbehaving(m, 100);
 			break;
 		case E_COIN_TxNotFound:
+		case E_COIN_AllowedErrorDuringInitialDownload:
 			break;
 		case E_COIN_RecentCoinbase:			//!!!? not misbehavig
 		case E_COIN_AlertVerifySignatureFailed:
@@ -742,7 +739,7 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 			goto LAB_MIS;
 		case E_COIN_VeryBigPayload:
 		default:
-			TRC(2, ex.Message);
+			TRC(2, ex.what());
 LAB_MIS:
 			Misbehaving(m, 1);
 		}
@@ -780,7 +777,7 @@ void CoinEng::SendVersionMessage(Link& link) {
 	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
 	m->UserAgent = "/" MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/";		// BIP 0014
 #ifdef X_DEBUG//!!!D
-	m->UserAgent = "/Satoshi:0.7.0/";
+	m->UserAgent = "/Satoshi:0.8.0/";
 #endif
 	m->RemoteTimestamp = DateTime::UtcNow();
 	RandomRef().NextBytes(Buf(&m->Nonce, sizeof m->Nonce));
@@ -992,7 +989,7 @@ void CoinEng::ContinueLoad0() {
 
 			SqliteCommand cmdPeers("SELECT endpoints.ip, port, lastlive, services FROM endpoints JOIN peers ON endpoints.ip=peers.ip WHERE NOT peers.ban AND netid=?", m_cdb.m_dbPeers);
 			for (DbDataReader dr=cmdPeers.Bind(1, m_idPeersNet).ExecuteReader(); dr.Read();) {
-				if (ptr<Peer> peer = Add(IPEndPoint(IPAddress(dr.GetBytes(0)), (UInt16)dr.GetInt32(1)), (UInt64)dr.GetInt64(3), DateTime::FromUnix(dr.GetInt32(2))))
+				if (ptr<Peer> peer = Add(IPEndPoint(IPAddress(dr.GetBytes(0)), (UInt16)dr.GetInt32(1)), (UInt64)dr.GetInt64(3), DateTime::from_time_t(dr.GetInt32(2))))
 					peer->IsDirty = false;
 			}
 		}
@@ -1035,7 +1032,7 @@ VersionMessage::VersionMessage()
 }
 
 void VersionMessage::Write(BinaryWriter& wr) const {
-	wr << ProtocolVer << Services << Int64(RemoteTimestamp.UnixEpoch) << RemotePeerInfo << LocalPeerInfo << Nonce;
+	wr << ProtocolVer << Services << Int64(to_time_t(RemoteTimestamp)) << RemotePeerInfo << LocalPeerInfo << Nonce;
 	WriteString(wr, UserAgent);
 	wr << LastReceivedBlock << RelayTxes;
 }
@@ -1043,7 +1040,7 @@ void VersionMessage::Write(BinaryWriter& wr) const {
 void VersionMessage::Read(const BinaryReader& rd) {
 	ProtocolVer = rd.ReadUInt32();
 	Services = rd.ReadUInt64();
-	RemoteTimestamp = DateTime::FromUnix(rd.ReadUInt64());
+	RemoteTimestamp = DateTime::from_time_t(rd.ReadUInt64());
 	if (ProtocolVer >= 106) {
 		rd >> RemotePeerInfo >>	LocalPeerInfo >> Nonce;
 		UserAgent = ReadString(rd);
@@ -1287,8 +1284,8 @@ void PingMessage::Process(P2P::Link& link) {
 }
 
 DateTime CoinEng::GetTimestampForNextBlock() {
-	Int64 epoch = std::max(BestBlock().GetMedianTimePast()+TimeSpan::FromSeconds(1), DateTime::UtcNow()).UnixEpoch;		// round to seconds
-	return DateTime::FromUnix(epoch);
+	Int64 epoch = to_time_t(std::max(BestBlock().GetMedianTimePast()+TimeSpan::FromSeconds(1), DateTime::UtcNow()));		// round to seconds
+	return DateTime::from_time_t(epoch);
 }
 
 double CoinEng::ToDifficulty(const Target& target) {

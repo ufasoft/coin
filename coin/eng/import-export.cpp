@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 #include <el/xml.h>
 #include <el/crypto/hash.h>
@@ -149,7 +141,7 @@ void CoinDb::ImportDat(RCString filepath, RCString password) {
 				CWalletKey wkey;
 				BinaryReader(CMemReadStream(val)) >> wkey;
 				MyKeyInfo ki;
-				ki.Timestamp = DateTime::FromUnix(wkey.nTimeCreated);
+				ki.Timestamp = DateTime::from_time_t(wkey.nTimeCreated);
 				ki.SetPrivData(wkey.vchPrivKey, pp.second.Size == 33);
 				if (ki.PubKey != pp.second)
 					Throw(E_FAIL);
@@ -241,7 +233,7 @@ LAB_DECRYPTED:
 								DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, 19), ignDup);
 								eng.m_iiEngEvents->AddRecipient(a);
 							} catch (RCExc ex) {
-								if (ex.HResult != E_COIN_RecipientAlreadyPresents)
+								if (HResultInCatch(ex) != E_COIN_RecipientAlreadyPresents)
 									throw;
 							}
 						}
@@ -306,7 +298,7 @@ void CoinDb::ExportWalletToXml(RCString filepath) {
 			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
 				XmlOut xo(w, "Transactions");
 				xo["hash"] = EXT_STR(HashValue(dr.GetBytes(0)));
-				xo["timestamp"] = DateTime::FromUnix(dr.GetInt64(1)).ToString("u");
+				xo["timestamp"] = DateTime::from_time_t(dr.GetInt64(1)).ToString("u");
 				xo["netname"] = dr.GetString(2);
 				String comment = dr.GetString(3);
 				if (!comment.IsEmpty())

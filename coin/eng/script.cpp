@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -66,10 +58,13 @@ bool Script::IsAddress() {
 		&& _self[4].Opcode == OP_CHECKSIG;
 }
 
-Blob Script::BlobFromAddress(const HashValue160& hash160) {
+Blob Script::BlobFromAddress(const Address& addr) {
 	MemoryStream ms;
 	ScriptWriter wr(ms);
-	wr << OP_DUP << OP_HASH160 << hash160 << OP_EQUALVERIFY << OP_CHECKSIG;
+	if (addr.Ver == Eng().ChainParams.AddressVersion)
+		wr << OP_DUP << OP_HASH160 << HashValue160(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+	else
+		wr << OP_HASH160 << HashValue160(addr) << OP_EQUAL;
 	return ms;
 }
 
@@ -298,6 +293,8 @@ HashValue SignatureHash(const ConstBuf& script, const Tx& txTo, int nIn, Int32 n
 
 	return Hash(EXT_BIN(txTmp << nHashType));
 }
+
+
 
 bool CheckSig(ConstBuf sig, Dsa& dsa, const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType) {
 	if (0 == sig.Size || (nHashType = nHashType ? nHashType : sig.P[sig.Size-1]) != sig.P[sig.Size-1])

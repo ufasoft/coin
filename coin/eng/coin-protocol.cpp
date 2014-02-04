@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/ecdsa.h>
@@ -148,8 +140,12 @@ void AddrMessage::Read(const BinaryReader& rd) {
 void AddrMessage::Process(P2P::Link& link) {
 	if (PeerInfos.size() > 1000)
 		throw PeerMisbehavingExc(20);
+	DateTime now = DateTime::UtcNow(),
+		lowerLimit(1974, 1, 1),
+		upperLimit(now + TimeSpan::FromMinutes(10)),
+		dtDefault(now + TimeSpan::FromDays(5));
 	EXT_FOR (const PeerInfo& pi, PeerInfos) {
-		link.Net->Add(pi.Ep, pi.Services, pi.Timestamp);
+		link.Net->Add(pi.Ep, pi.Services, pi.Timestamp > lowerLimit && pi.Timestamp < upperLimit ? pi.Timestamp : dtDefault);
 	}
 }
 
@@ -304,8 +300,8 @@ String GetBlocksMessage::ToString() const {
 void Alert::Read(const BinaryReader& rd) {
 	Int64 relayUntil, expiration;
 	rd >> Ver >> relayUntil >> expiration >> NId >> NCancel >> SetCancel >> MinVer >> MaxVer;
-	RelayUntil = DateTime::FromUnix(relayUntil);
-	Expiration = DateTime::FromUnix(expiration);
+	RelayUntil = DateTime::from_time_t(relayUntil);
+	Expiration = DateTime::from_time_t(expiration);
 
 	int n = rd.ReadSize();
 	for (int i=0; i<n; ++i)
@@ -453,7 +449,7 @@ vector<Tx> MerkleBlockMessage::Init(const Block& block, CoinFilter& filter) {
 }
 
 void MerkleBlockMessage::Write(BinaryWriter& wr) const {
-	wr << Ver << PrevBlockHash << MerkleRoot << UInt32(Timestamp.UnixEpoch) << DifficultyTargetBits << Nonce << NTransactions;
+	wr << Ver << PrevBlockHash << MerkleRoot << (UInt32)to_time_t(Timestamp) << DifficultyTargetBits << Nonce << NTransactions;
 	CoinSerialized::Write(wr, PartialMT.Items);
 	vector<byte> v;
 	to_block_range(PartialMT.Bitset, back_inserter(v));
@@ -462,7 +458,7 @@ void MerkleBlockMessage::Write(BinaryWriter& wr) const {
 
 void MerkleBlockMessage::Read(const BinaryReader& rd) {
 	rd >> Ver >> PrevBlockHash >> MerkleRoot;
-	Timestamp = DateTime::FromUnix(rd.ReadUInt32());
+	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	rd >> DifficultyTargetBits >> Nonce >> NTransactions;
 	CoinSerialized::Read(rd, PartialMT.Items);
 	Blob blob = CoinSerialized::ReadBlob(rd);

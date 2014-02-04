@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/db/ext-sqlite.h>
@@ -16,8 +8,9 @@
 #include <el/crypto/bloom-filter.h>
 using namespace Ext::Crypto;
 
-#include <p2p/net/p2p-net.h>
-#include <p2p/net/detect-global-ip.h>
+#include <el/inet/p2p-net.h>
+#include <el/inet/detect-global-ip.h>
+namespace P2P = Ext::Inet::P2P;
 
 using P2P::Link;
 using P2P::Peer;
@@ -61,7 +54,7 @@ public:
 	CoinDb& m_cdb;
 	AutoResetEvent m_ev;
 
-	MsgLoopThread(CThreadRef& tr, CoinDb& cdb)
+	MsgLoopThread(thread_group& tr, CoinDb& cdb)
 		:	base(&tr)
 		,	m_cdb(cdb)
 	{
@@ -107,7 +100,7 @@ public:
 	Coin::HashAlgo HashAlgo;
 	CBool FullPeriod;
 	CInt<int> ChainId;
-	CInt<byte> AddressVersion;
+	CInt<byte> AddressVersion, ScriptAddressVersion;
 	int AuxPowStartBlock;
 	bool IsTestNet;
 	bool Listen;
@@ -303,7 +296,7 @@ public:
 	CHash160ToMyKey Hash160ToMyKey;
 	ptr<CoinFilter> Filter;
 
-	CThreadRef m_tr;
+	thread_group m_tr;
 	ptr<Coin::MsgLoopThread> MsgLoopThread;
 
 	Coin::IrcManager IrcManager;
@@ -357,7 +350,7 @@ public:
 #endif
 	
 	void OnIpDetected(const IPAddress& ip) override;
-	Link *CreateLink(CThreadRef& tr) override;
+	Link *CreateLink(thread_group& tr) override;
 	bool IsBanned(const IPAddress& ip) override;
 	void BanPeer(Peer& peer) override;
 	void SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers);
@@ -369,7 +362,7 @@ private:
 	void CreateDbPeers();
 
 	void CheckPasswordPolicy(RCString password);
-	void InitAes(Aes& aes, RCString password);
+	void InitAes(Aes& aes, RCString password, byte encrtyptAlgo);
 	void UpdateOrInsertPeer(const Peer& peer);
 };
 
@@ -419,7 +412,7 @@ ENUM_CLASS(EngMode) {
 	BlockExplorer
 } END_ENUM_CLASS(EngMode)
 
-inline CoinEng& Eng() { return *t_pCoinEng; }
+inline CoinEng& Eng() noexcept { return *t_pCoinEng; }
 COIN_EXPORT CoinEng& ExternalEng();
 
 class LocatorHashes : public vector<HashValue> {
@@ -603,7 +596,7 @@ public:
 	virtual void OnDisconnectInputs(const Tx& tx) {}
 	virtual bool ShouldBeSaved(const Tx& tx) { return !LiteMode; }
 
-	virtual Int64 GetSubsidy(int height, double difficulty = 0) {
+	virtual Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty = 0, bool bForCheck = false) {
 		return ChainParams.InitBlockValue >> (height/ChainParams.HalfLife);
 	}
 
@@ -632,7 +625,7 @@ public:
 		return ChainParams.CoinValue/10000;
 	}
 
-	virtual Target GetNextTargetRequired(const Block& blockLast, const Block& block);
+	virtual Target GetNextTarget(const Block& blockLast, const Block& block);
 
 	virtual bool MiningAllowed() { return true; }
 
@@ -699,7 +692,9 @@ protected:
 	virtual void TryUpgradeDb();
 	virtual int GetIntervalForModDivision(int height);
 	virtual int GetIntervalForCalculatingTarget(int height);
+	virtual TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan);
 	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval);
+	virtual Target GetNextTargetRequired(const Block& blockLast, const Block& block);
 	virtual void UpdateMinFeeForTxOuts(Int64& minFee, const Int64& baseFee, const Tx& tx);
 private:
 	mutex m_mtxThreadStateChange;	
@@ -746,8 +741,8 @@ void SetUserVersion(SqliteConnection& db, const Version& ver = Version());
 Blob ToUncompressedKey(const ConstBuf& cbuf);
 Blob ToCompressedKey(const ConstBuf& cbuf);
 
-class TxNotFoundExc : public Exc {
-	typedef Exc base;
+class TxNotFoundExc : public Exception {
+	typedef Exception base;
 public:
 	HashValue HashTx;
 
@@ -762,8 +757,8 @@ public:
 	}
 };
 
-class PeerMisbehavingExc : public Exc {
-	typedef Exc base;
+class PeerMisbehavingExc : public Exception {
+	typedef Exception base;
 public:
 	int HowMuch;
 
@@ -774,8 +769,8 @@ public:
 };
 
 
-class VersionExc : public Exc {
-	typedef Exc base;
+class VersionExc : public Exception {
+	typedef Exception base;
 public:
 	Ext::Version Version;
 

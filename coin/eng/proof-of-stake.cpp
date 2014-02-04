@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "proof-of-stake.h"
@@ -67,7 +59,7 @@ void PosTxObj::CheckCoinStakeReward(Int64 reward, const Target& target) const {
 HashValue PosBlockObj::Hash() const {
 	if (!m_hash) {
 		MemoryStream ms;
-		BinaryWriter(ms).Ref() << Ver << PrevBlockHash << MerkleRoot() << UInt32(Timestamp.UnixEpoch) << get_DifficultyTarget() << Nonce;
+		BinaryWriter(ms).Ref() << Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
 		ConstBuf mb = ms;
 		switch (Eng().ChainParams.HashAlgo) {
 		case HashAlgo::Sha256:
@@ -148,7 +140,7 @@ HashValue PosBlockObj::HashProofOfStake() const {
 		BinaryWriter wr(ms);
 		WriteKernelStakeModifier(wr, blockPrev);
 		
-		wr << UInt32(blockPrev.get_Timestamp().UnixEpoch);
+		wr << (UInt32)to_time_t(blockPrev.get_Timestamp());
 		MemoryStream msBlock;
 		BinaryWriter wrPrev(msBlock);
 		blockPrev.WriteHeader(wrPrev);
@@ -161,7 +153,7 @@ HashValue PosBlockObj::HashProofOfStake() const {
 			wrPrev << t;
 		}
 
-		wr << UInt32(dtPrev.UnixEpoch) << UInt32(txIn.PrevOutPoint.Index) << UInt32(dtTx.UnixEpoch);
+		wr << (UInt32)to_time_t(dtPrev) << UInt32(txIn.PrevOutPoint.Index) << (UInt32)to_time_t(dtTx);
 		HashValue h = Coin::Hash(ms);
 
 		byte ar[33];
@@ -313,7 +305,7 @@ void PosBlockObj::ComputeStakeModifier() {
 				Throw(E_FAIL);
 		}
 
-		DateTime dtStartOfPrevInterval = DateTime::FromUnix(blockPrev.get_Timestamp().UnixEpoch / (int)MODIFIER_INTERVAL.TotalSeconds * (int)MODIFIER_INTERVAL.TotalSeconds);
+		DateTime dtStartOfPrevInterval = DateTime::from_time_t(to_time_t(blockPrev.get_Timestamp()) / (int)MODIFIER_INTERVAL.TotalSeconds * (int)MODIFIER_INTERVAL.TotalSeconds);
 		if (dtModifier < dtStartOfPrevInterval) {
 			typedef multimap<DateTime, Block> CCandidates;
 			CCandidates candidates;
@@ -403,7 +395,7 @@ PosEng::PosEng(CoinDb& cdb)
 	AllowFreeTxes = false;
 }
 
-Int64 PosEng::GetSubsidy(int height, double difficulty) {
+Int64 PosEng::GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) {
 	Int64 centValue = ChainParams.CoinValue / 100;
 	double dr = GetMaxSubsidy() / (pow(difficulty, ChainParams.PowOfDifficultyToHalfSubsidy) * centValue);
 	Int64 r = Int64(ceil(dr)) * centValue;

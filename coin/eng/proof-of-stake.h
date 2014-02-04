@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include "eng.h"
@@ -29,11 +21,11 @@ protected:
 	PosTxObj *Clone() const override { return new PosTxObj(_self); }
 
 	void WritePrefix(BinaryWriter& wr) const override {
-		wr << UInt32(Timestamp.get_UnixEpoch());
+		wr << (UInt32)to_time_t(Timestamp);
 	}
 
 	void ReadPrefix(const BinaryReader& rd) override {
-		Timestamp = DateTime::FromUnix(rd.ReadUInt32());
+		Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	}
 
 	void CheckCoinStakeReward(Int64 reward, const Target& target) const override;
@@ -124,12 +116,15 @@ protected:
 	Int64 GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
 	bool MiningAllowed() override { return false; }
 	Int64 GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
-	Int64 GetSubsidy(int height, double difficulty) override;
+	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
 
 	TxObj *CreateTxObj() override { return new PosTxObj; }
 	virtual TimeSpan GetTargetSpacingWorkMax(const DateTime& dt) { return TimeSpan::FromHours(2); }
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override;
 	
+	Target GetNextTarget(const Block& blockLast, const Block& block) override {
+		return GetNextTargetRequired(blockLast, block);
+	}
 
 	CoinMessage *CreateCheckPointMessage() override;
 };

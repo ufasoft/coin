@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "param.h"
@@ -104,13 +96,23 @@ public:
 		m_db.ExecuteNonQuery("PRAGMA page_size=8192");
 
 		m_db.ExecuteNonQuery(
-			"CREATE TABLE blocks (id INTEGER PRIMARY KEY, hash UNIQUE, data, txhashes);"
-			"CREATE TABLE txes (id INTEGER PRIMARY KEY, blockid INTEGER, data, ins, coins);"
+			"CREATE TABLE blocks (id INTEGER PRIMARY KEY"
+								", hash UNIQUE"
+								", data"
+								", txhashes);"
+			"CREATE TABLE txes (id INTEGER PRIMARY KEY"
+								", blockid INTEGER"
+								", data"
+								", ins"
+								", coins);"
 			);
 		if (Eng().Mode == EngMode::BlockExplorer)
-			m_db.ExecuteNonQuery("CREATE TABLE pubkeys (id INTEGER PRIMARY KEY, data, txhashes);");
+			m_db.ExecuteNonQuery("CREATE TABLE pubkeys (id INTEGER PRIMARY KEY"
+														", data"
+														", txhashes);");
 		else
-			m_db.ExecuteNonQuery("CREATE TABLE pubkeys (id INTEGER PRIMARY KEY, data);");
+			m_db.ExecuteNonQuery("CREATE TABLE pubkeys (id INTEGER PRIMARY KEY"
+														", data);");
 
 		SetUserVersion(m_db);
 		SetPragmas();

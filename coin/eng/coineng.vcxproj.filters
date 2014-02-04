@@ -1,0 +1,291 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="comp">
+      <UniqueIdentifier>{ebfa1da2-1203-4121-a20c-40a976b3bf3a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\h">
+      <UniqueIdentifier>{cd20eeff-2a07-43c4-a0cb-f17b3c72d610}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\p2p">
+      <UniqueIdentifier>{309d769e-0d6b-41a6-a90f-80edce3c5316}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\crypto">
+      <UniqueIdentifier>{02931251-a8c0-4d06-bd1b-8bd69ba95d11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\num">
+      <UniqueIdentifier>{7cbbe4d5-0a78-4bdc-97a0-00fef5947fe1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\db">
+      <UniqueIdentifier>{7b5115a6-e4af-4d01-92f2-95839edb2d0b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\xml">
+      <UniqueIdentifier>{42bd6f2c-064b-4479-b13f-127465310d56}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\currency">
+      <UniqueIdentifier>{985db27c-9a5f-4e52-a867-322305289df2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp\p2p">
+      <UniqueIdentifier>{70d04523-1420-4a39-8298-96baa6739ce6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="coineng.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\stdafx.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\irc-client.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\p2p-net.cpp">
+      <Filter>comp\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\detect-global-ip.cpp">
+      <Filter>comp\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="coin-model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="script.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wallet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin-com.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin-protocol.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\p2p-peers.cpp">
+      <Filter>comp\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="generate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="irc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="block.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coindb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="crypter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="import-export.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ecdsa.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\aes.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\num\mod.cpp">
+      <Filter>comp\num</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\num\num.cpp">
+      <Filter>comp\num</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\db\bdb.cpp">
+      <Filter>comp\db</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\db\bdb-reader.cpp">
+      <Filter>comp\db</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\db\ext-sqlite.cpp">
+      <Filter>comp\db</Filter>
+    </ClCompile>
+    <ClCompile Include="import-export-bdb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="backend-sqlite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="backend-dblite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="proof-of-stake.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\merkle-tree.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\bloom-filter.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\json-writer.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="coinrpc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\xml\xml-dom.cpp">
+      <Filter>comp\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\xml\xml-node-reader.cpp">
+      <Filter>comp\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\xml\xml-writer.cpp">
+      <Filter>comp\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\xml\xml-reader.cpp">
+      <Filter>comp\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\protoshares.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\bitcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\devcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\feathercoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\namecoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\novacoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\ppcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\primecoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\solidcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\terracoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="mempool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\dogecoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\metiscoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\earthcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin-model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\ecdsa.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="script.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wallet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="eng.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="coin-protocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="param.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\inet\p2p-net.h">
+      <Filter>Header Files\p2p</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\inet\p2p-peers.h">
+      <Filter>Header Files\p2p</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\inet\irc-client.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="irc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="crypter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\db\ext-sqlite.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\num\mod.h">
+      <Filter>comp\num</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\num\num.h">
+      <Filter>comp\num</Filter>
+    </ClInclude>
+    <ClInclude Include="file_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="proof-of-stake.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\hash.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\bloom-filter.h">
+      <Filter>comp\h</Filter>
+    </ClInclude>
+    <ClInclude Include="coinrpc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="currency\namecoin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="coineng.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="coineng.def">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="coin-com.idl">
+      <Filter>Resource Files</Filter>
+    </Midl>
+  </ItemGroup>
+</Project>
