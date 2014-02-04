@@ -362,9 +362,9 @@ Invalid Value
 .
 
 MessageId=
-SymbolicName= E_EXT_ThreadStopped
+SymbolicName= E_EXT_ThreadInterrupted
 Language=E
-Thread Stopped
+Thread Interupted
 .
 
 MessageId=
@@ -769,34 +769,40 @@ Language=E
 CrashRpt error
 .
 
+MessageId=
+SymbolicName= E_EXT_UnsupportedEncryptionAlgorithm
+Language=E
+Unsupported Encryption Algorithm
+.
+
 MessageId=32772
 SymbolicName= E_EXT_JSON_RPC_ParseError
-Severity=Error
+Severity=Warning
 Facility=JSON_RPC
 Language=E
 JSON-RPC Parse Error
 .
 
-MessageId=32869
+MessageId=32933
 SymbolicName= E_EXT_JSON_RPC_Internal
 Language=E
 JSON-RPC Internal Error
 .
 
 
-MessageId=32870
+MessageId=32934
 SymbolicName= E_EXT_JSON_RPC_InvalidParams
 Language=E
 JSON-RPC Invalid method parameter(s).
 .
 
-MessageId=32871
+MessageId=32935
 SymbolicName= E_EXT_JSON_RPC_MethodNotFound
 Language=E
 JSON-RPC Method not found
 .
 
-MessageId=32872
+MessageId=32936
 SymbolicName= E_EXT_JSON_RPC_IsNotRequest
 Language=E
 The JSON sent is not a valid Request object.

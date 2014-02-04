@@ -1,13 +1,4 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
-
 
 #pragma warning(disable: 4073)
 #pragma init_seg(lib)				// to initialize DateTime::MaxValue early
@@ -94,7 +85,7 @@ DateTime::DateTime(int year, int month, int day, int hour, int minute, int secon
 
 DateTime::DateTime(const tm& t) {
 	tm _t = t;
-	_self = FromUnix(mktime(&_t));
+	_self = from_time_t(mktime(&_t));
 }
 
 DateTime::DateTime(const SYSTEMTIME& st) {
@@ -108,12 +99,8 @@ DateTime::DateTime(const SYSTEMTIME& st) {
 #endif
 }
 
-DateTime DateTime::FromUnix(Int64 epoch) {
+DateTime DateTime::from_time_t(Int64 epoch) {
 	return DateTime(epoch*10000000 + Unix_DateTime_Offset);
-}
-
-Int64 DateTime::get_UnixEpoch() const {
-	return (Ticks-Unix_DateTime_Offset)/10000000;
 }
 
 String TimeSpan::ToString(int w) const {
@@ -285,10 +272,10 @@ bool CPreciseTimeBase::Recalibrate(Int64 st, Int64 tsc, Int64 stPeriod, Int64 ts
 			m_minFreq = std::min(m_minFreq, freq);
 			m_maxFreq = std::max(m_maxFreq, freq);
 
-			TRC(3, "Fq=" << m_minFreq << " < " << freq << "(" << m_mul << ", " << m_shift << ") < " << m_maxFreq << " Hz Spread: " << (m_maxFreq-m_minFreq)*100/m_maxFreq << " %");
+			TRC(6, "Fq=" << m_minFreq << " < " << freq << "(" << m_mul << ", " << m_shift << ") < " << m_maxFreq << " Hz Spread: " << (m_maxFreq-m_minFreq)*100/m_maxFreq << " %");
 
 			if ((m_maxFreq-m_minFreq)*(100/MAX_FREQ_INSTABILITY) > m_maxFreq) {
-				TRC(2, "Switching PreciseTime");
+				TRC(5, "Switching PreciseTime");
 				if (s_pCurrent == this) {
 					s_pCurrent = m_pNext;
 					return true;
@@ -299,7 +286,7 @@ bool CPreciseTimeBase::Recalibrate(Int64 st, Int64 tsc, Int64 stPeriod, Int64 ts
 				m_period = std::min(Int64(m_period)*2, MAX_PERIOD);
 
 		} else if (stPeriod < 0 || cntPeriod < 0) {
-			TRC(2, "Some period is Negative");
+			TRC(5, "Some period is Negative");
 		}
 
 		if (bResetBase) {
@@ -355,7 +342,7 @@ Int64 CPreciseTimeBase::GetTime(PFNSimpleUtc pfnSimpleUtc) {
 		if (!bResetBase && MyAbs(st-ct) < CORRECTION_PRECISION)
 			r = ct;		
 		else {
-			TRC(3, "ST-diff " << stPeriod << "  CT-diff " << (st-(m_stBase+(((tscPeriod & m_mask)*m_mul)>>m_shift)))/10000 << "ms TSC-diff = " << tscAfter-tsc << "   Prev Recalibration: " << stPeriod/10000000 << " s ago");
+			TRC(6, "ST-diff " << stPeriod << "  CT-diff " << (st-(m_stBase+(((tscPeriod & m_mask)*m_mul)>>m_shift)))/10000 << "ms TSC-diff = " << tscAfter-tsc << "   Prev Recalibration: " << stPeriod/10000000 << " s ago");
 			bSwitch = Recalibrate(st, tsc, stPeriod, tscPeriod, bResetBase);
 		}
 	} else {
@@ -368,7 +355,7 @@ Int64 CPreciseTimeBase::GetTime(PFNSimpleUtc pfnSimpleUtc) {
 	} else if (r < m_stPrev) {
 		Int64 stPrev = m_stPrev;
 		if (stPrev-r > 10*10000000) {
-			TRC(3, "Time Anomaly: " << r-m_stPrev << "  stPrev = " << hex << stPrev << " r=" << hex << r);
+			TRC(6, "Time Anomaly: " << r-m_stPrev << "  stPrev = " << hex << stPrev << " r=" << hex << r);
 
 			m_stPrev = r;
 		} else {
@@ -428,7 +415,7 @@ public:
 
 	Int64 GetFrequency(Int64 stPeriod, Int64 tscPeriod) override {
 		Int64 freq = System.PerformanceFrequency;
-		TRC(3, "Declared Freq: " << freq << " Hz");
+		TRC(6, "Declared Freq: " << freq << " Hz");
 //!!!?not accurate		return freq;
 		return base::GetFrequency(stPeriod, tscPeriod);
 	}
@@ -651,6 +638,10 @@ TimeZoneInfo TimeZoneInfo::Local() {
 }
 
 #endif // !UCFG_WDM
+
+Int64 AFXAPI to_time_t(const DateTime& dt) {
+	return (dt.Ticks - Unix_DateTime_Offset) / 10000000;
+}
 
 } // Ext::
 

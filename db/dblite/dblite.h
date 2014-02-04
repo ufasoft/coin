@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/stl/dynamic_bitset>
@@ -15,7 +7,7 @@
 
 #if UCFG_LIB_DECLS
 #	ifdef _DBLITE
-#		define DBLITE_CLASS AFX_CLASS_EXPORT
+#		define DBLITE_CLASS // AFX_CLASS_EXPORT
 #	else
 #		define DBLITE_CLASS
 #		pragma comment(lib, "dblite")
@@ -303,7 +295,7 @@ struct PagePos {
 	bool operator==(const PagePos& v) const { return Page==v.Page && Pos==v.Pos; }
 };
 
-class DBLITE_CLASS DbCursor : NonCopiable {
+class DBLITE_CLASS DbCursor : noncopyable {
 	typedef DbCursor class_type;
 public:
 	DbCursor *Next, *Prev;		// for IntrusiveList<>
@@ -388,8 +380,8 @@ public:
 	String Name;
 	DbTransaction& Tx;
 	Page Root;
-	CBool Dirty;
 	byte KeySize;
+	CBool Dirty;
 
 	BTree(const BTree& v);
 
@@ -424,7 +416,7 @@ private:
 	friend class DbCursor;
 };
 
-class DBLITE_CLASS DbTransaction : NonCopiable, public ITransactionable {
+class DBLITE_CLASS DbTransaction : noncopyable, public ITransactionable {
 public:
 	KVStorage& Storage;
 

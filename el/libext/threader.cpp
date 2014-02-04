@@ -1,12 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
+
+#pragma warning(disable: 4073)
+#pragma init_seg(lib)				// to initialize DateTime::MaxValue early
 
 #if UCFG_WIN32
 #	include <winuser.h>
@@ -24,6 +19,44 @@
 #if !UCFG_STDSTL || !UCFG_CPP11_HAVE_MUTEX || UCFG_SPECIAL_CRT
 #	include <el/stl/mutex>
 #endif
+
+using namespace std;
+using namespace Ext;
+
+static mutex s_mtxDestructibleTls;
+typedef IntrusiveList<CDestructibleTls> CListDestructibleTlses;
+static CListDestructibleTlses s_listDestructibleTlses;
+
+static void TlsCleanup(void *arg) {
+	EXT_LOCK (s_mtxDestructibleTls) {
+		EXT_FOR (CDestructibleTls& dtls, s_listDestructibleTlses) {
+			if (void *p = dtls.get_Value())
+				dtls.OnThreadDetach(p);
+		}
+	}
+}
+
+#if UCFG_USE_PTHREADS
+
+static volatile int s_initCleanup = (::pthread_cleanup_push(&TlsCleanup, 0), 1);
+
+#elif defined(_MSC_VER)
+
+static void NTAPI TlsCallback(PVOID DllHandle, DWORD Reason, PVOID Reserved) {
+	if (Reason == DLL_THREAD_DETACH)
+		TlsCleanup(0);
+}
+
+extern "C" {
+
+extern DWORD _tls_used;
+DWORD volatile dw = _tls_used;	// forces a tls directory to be created, volatile prevent optimization
+
+#pragma section(".CRT$XLC",long,read)
+ __declspec(allocate(".CRT$XLC")) PIMAGE_TLS_CALLBACK _xl_y  = TlsCallback;
+} // "C"
+
+#endif // _MSC_VER
 
 namespace ExtSTL {
 #if !UCFG_STDSTL || !UCFG_CPP11_HAVE_THREAD
@@ -47,21 +80,24 @@ ostream& operator<<(ostream& os, const thread::id& v) {
 } // ExtSTL::
 
 
+
 namespace Ext {
 
 using namespace std;
 
 size_t ThreadBase::DefaultStackSize;
 
-ThreadBase::ThreadBase(CThreadRef *ownRef)
-	:	//!!! CWinThread(ThreaderFunction, this),
-		StackSize(0)
+ThreadBase::ThreadBase(thread_group *ownRef)
+	:	StackSize(0)
 	,	StackOffset(0)
 	,	m_bAutoDelete(true)
 	,	m_owner(ownRef)
 	,	m_bStop(false)
-	,	m_bSleeping(false)
+	,	m_bInterruptionEnabled(true)
 	,	m_bAPC(false)
+#if UCFG_WIN32
+	,	m_nThreadID(0)
+#endif
 #if UCFG_USE_PTHREADS
 	,	m_tid()
 #elif UCFG_OLE
@@ -77,13 +113,21 @@ ThreadBase::~ThreadBase() {
 		m_threadRef->StopChilds();
 		delete m_threadRef;
 	}
-
-#if UCFG_EXTENDED	
-	if (AFX_MODULE_THREAD_STATE* pState = AfxGetModuleState()->m_thread.GetDataNA())			// cleanup module state
-		if (pState->m_pCurrentThread == this)
-			pState->m_pCurrentThread = nullptr;
+#if UCFG_WIN32
+	if (_AFX_THREAD_STATE *ats = exchange(m_pAfxThreadState, nullptr))
+		delete ats;
 #endif
 }
+
+#if UCFG_WIN32
+
+_AFX_THREAD_STATE& ThreadBase::AfxThreadState() {
+	if (!m_pAfxThreadState)
+		m_pAfxThreadState = new _AFX_THREAD_STATE;
+	return *m_pAfxThreadState;
+}
+
+#endif  // UCFG_WIN32
 
 //!!!DCTls Thread::t_pCurThreader;//!!!
 
@@ -91,32 +135,41 @@ ThreadBase::~ThreadBase() {
 
 ThreadBase::propclass_CurrentThread ThreadBase::CurrentThread; //!!!
 
-#if !UCFG_EXTENDED
-static CTls s_currentThread;
-#endif
+//!!!Rstatic CTls s_currentThread;
+
+static class CThreadDestructibleTls : public CDestructibleTls {
+	typedef CDestructibleTls base;
+public:
+	CThreadDestructibleTls& operator=(const ThreadBase* p) {
+		base::put_Value(p);
+		return _self;
+	}
+
+	operator ThreadBase*() const { return (ThreadBase*)get_Value(); }
+	ThreadBase* operator->() const { return operator ThreadBase*(); }
+
+	void OnThreadDetach(void *p) override {
+		CCounterIncDec<ThreadBase, Interlocked>::Release((ThreadBase*)p);
+	}
+} t_pCurThread;
+
+
+//EXT_THREAD_PTR(ThreadBase, t_pCurThread);
 
 ThreadBase* ThreadBase::get_CurrentThread() {
-#if UCFG_EXTENDED || UCFG_WIN32
-	AFX_MODULE_THREAD_STATE& mts = *AfxGetModuleState()->m_thread;
-	if (!mts.m_pCurrentThread) { //!!!
-		mts.m_pCurrentThread = new Thread;
-		mts.m_pCurrentThread->AttachSelf();
+	ThreadBase* r = t_pCurThread;
+	if (!r) {
+		(r = new Thread)->AttachSelf();				//!!! Leak
 	}
-	return mts.m_pCurrentThread;
-#else
-	if (!s_currentThread.get_Value())
-		s_currentThread.Value = new Thread; // Leak
-	return (ThreadBase*)s_currentThread.get_Value();
-#endif
-	//!!!D	return *(Thread*)t_pCurThreader.Value;
+	return r;
 }
 
 ThreadBase* AFXAPI ThreadBase::TryGetCurrentThread() {
-#if UCFG_EXTENDED || UCFG_WIN32
-	return AfxGetModuleState()->m_thread->m_pCurrentThread;
-#else
-	return (ThreadBase*)s_currentThread.get_Value();
-#endif
+	return t_pCurThread;
+}
+
+void ThreadBase::SetCurrentThread() {
+	t_pCurThread = this;
 }
 
 //!!!#endif
@@ -146,22 +199,32 @@ void ThreadBase::ReleaseHandle(HANDLE h) const {
 
 #endif
 
-void ThreadBase::AttachSelf() {
+void ThreadBase::Attach(HANDLE h, DWORD id, bool bOwn) {
+	SafeHandle::Attach(h, bOwn);
 #if UCFG_WIN32
-	SafeHandle::Attach(GetCurrentThread(), false);
+	m_nThreadID = id;
+#endif
+#if UCFG_WIN32 && !UCFG_STDSTL //!!!?
+	m_tid.m_tid = id;
+#endif
+}
+
+void ThreadBase::AttachSelf() {
+	SetCurrentThread();
+#if UCFG_WIN32
+	Attach(GetCurrentThread(), ::GetCurrentThreadId(), false);
 #	if !UCFG_STDSTL
-	m_tid = this_thread::get_id();
+	m_tid = std::this_thread::get_id();
 #	endif
-	m_nThreadID = ::GetCurrentThreadId();
 #else
 	m_ptid = ::pthread_self();
 	m_tid = thread::id(m_ptid);
 #endif
 }
 
-CThreadRef& ThreadBase::GetThreadRef() {
+thread_group& ThreadBase::GetThreadRef() {
 	if (!m_threadRef)
-		m_threadRef = new CThreadRef;
+		m_threadRef = new thread_group;
 	return *m_threadRef;
 }
 
@@ -174,8 +237,7 @@ void ThreadBase::SleepImp(DWORD dwMilliseconds) {
 #else
 	usleep(dwMilliseconds*1000);
 #endif
-	if (m_bStop)
-		Throw(E_EXT_ThreadStopped);
+	interruption_point();
 }
 
 
@@ -217,31 +279,45 @@ void ThreadBase::InitCOM() {
 
 #endif
 
-CThreadRef::~CThreadRef() {
+thread_group::~thread_group() {
 	if (m_bSync)			//!!!?
 		StopChilds();
 }
 
-void CThreadRef::StopChilds() {
-	SignalStop();
-	WaitStop();
+int thread_group::size() const {
+	return EXT_LOCKED(m_cs, (int)m_threads.size());
 }
 
-void CThreadRef::SignalStop() {
+void thread_group::add_thread(ThreadBase *t) {
 	EXT_LOCK (m_cs) {
-		for (int i=0; i<m_ar.size(); i++) {
-			ThreadBase *t = m_ar[i];
-			t->m_bAutoDelete = false;
-			if (*t)
-				t->Stop();
+		m_threads.insert(t);
+		ExternalAddRef();
+	}
+}
+
+void thread_group::remove_thread(ThreadBase *t) {
+	EXT_LOCK (m_cs) {
+		if (t->m_bAutoDelete) {
+			m_threads.erase(t);
 		}
 	}
 }
 
-void CThreadRef::WaitStop() {
+void thread_group::interrupt_all() {
+	EXT_LOCK (m_cs) {
+		for (CThreadColl::iterator it=m_threads.begin(), e=m_threads.end(); it!=e; ++it) {
+			ThreadBase *t = it->get();
+			t->m_bAutoDelete = false;
+			if (*t)
+				t->interrupt();
+		}
+	}
+}
+
+void thread_group::join_all() {
 	CThreadColl ar;
 	EXT_LOCK (m_cs) {
-		ar.swap(m_ar);
+		ar.swap(m_threads);
 	}
 	for (CThreadColl::iterator i(ar.begin()), e(ar.end()); i!=e; ++i) {
 		if ((*i)->Valid())
@@ -251,33 +327,31 @@ void CThreadRef::WaitStop() {
 	}
 }
 
-bool CThreadRef::StopChild(ThreadBase *t, int msTimeout) {
+void thread_group::StopChilds() {
+	interrupt_all();
+	join_all();
+}
+
+bool thread_group::StopChild(ThreadBase *t, int msTimeout) {
 	EXT_LOCK (m_cs) {
 		t->m_bAutoDelete = false;
 		if (*t)
-			t->Stop();
+			t->interrupt();
 	}
 	if (*t) {
 		if (!t->Join(msTimeout))
 			return false;
 	}
 
-	EXT_LOCK (m_cs) {
-		m_ar.erase(std::remove(m_ar.begin(), m_ar.end(), t), m_ar.end());
-	}
+	EXT_LOCKED(m_cs, m_threads.erase(t));
 	return true;
 }
 
 void ThreadBase::Delete() {
 	if (m_owner) {
 		m_owner->ExternalRelease();
-		EXT_LOCK (m_owner->m_cs) {
-			if (m_bAutoDelete)
-				m_owner->m_ar.erase(std::remove(m_owner->m_ar.begin(), m_owner->m_ar.end(), this), m_owner->m_ar.end());
-		}
+		m_owner->remove_thread(this);
 	}
-//!!!R	if (m_bAutoDelete)
-//!!!R		delete this;
 }
 
 void ThreadBase::Execute() {
@@ -305,6 +379,7 @@ void ThreadBase::put_Name(RCString name) {
 		DWORD dwFlags; // reserved for future use, must be zero
 	};
 
+	ASSERT(m_nThreadID);
 	THREADNAME_INFO info = { 0x1000, m_name, m_nThreadID };
 	__try {
 		RaiseException(0x406D1388, 0, sizeof(info)/sizeof(DWORD), (ULONG_PTR*)&info);
@@ -333,6 +408,11 @@ void ThreadBase::OnEnd() {
 #if UCFG_OLE
 	m_usingCOM.Uninitialize();
 #endif
+}
+
+void ThreadBase::interruption_point() {
+	if (m_bInterruptionEnabled && m_bStop)
+		Throw(E_EXT_ThreadInterrupted);
 }
 
 void ThreadBase::OnAPC() {
@@ -386,14 +466,20 @@ void ThreadBase::PostMessage(UINT message, WPARAM wParam, LPARAM lParam) {
 
 #	if !UCFG_WCE
 
-VOID CALLBACK ThreadBase::APCProc(ULONG_PTR dwParam) {
-	((ThreadBase*)dwParam)->OnAPC();
+VOID CALLBACK ThreadBase::APCProc(ULONG_PTR param) {
+	ThreadBase *t = (ThreadBase*)param;
+	if (t->m_bInterruptionEnabled)
+		t->OnAPC();
 }
 
 void ThreadBase::QueueUserAPC(PAPCFUNC pfnAPC, ULONG_PTR dwData) {
+	static DWORD winMajVersion = System.Version.dwMajorVersion;
 	if (::QueueUserAPC(pfnAPC, HandleAccess(_self), dwData))
 		return;
-	Throw(E_EXT_QueueUserAPC);				// No GetLastError value
+	if (winMajVersion >= 6)
+		Win32Check(false, ERROR_GEN_FAILURE);
+	else
+		Throw(E_EXT_QueueUserAPC);				// No GetLastError value
 }
 
 void ThreadBase::QueueAPC() {
@@ -428,11 +514,14 @@ static void Sigusr1Handler(int sig) {
 }
 #endif
 
-void ThreadBase::SignalStop() {
+void ThreadBase::interrupt() {
+	Stop();
+}
+
+void ThreadBase::Stop() {
 	m_bStop = true;
 	if (Valid()) {
-		if (m_bSleeping) {
-
+		if (m_bInterruptionEnabled) {		//!!!
 #if UCFG_USE_PTHREADS
 			static bool s_bSigusr1HandlerInited;
 			if (!s_bSigusr1HandlerInited) {
@@ -445,14 +534,15 @@ void ThreadBase::SignalStop() {
 			PthreadCheck(::pthread_kill(m_ptid, SIGUSR1));  //!!!? may be other signal
 
 #elif !UCFG_WCE
-			QueueAPC();
+			try {
+				DBG_LOCAL_IGNORE_WIN32(ERROR_GEN_FAILURE);
+
+				QueueAPC();
+			} catch (RCExc) {
+			}
 #endif
 		}
 	}
-}
-
-void ThreadBase::Stop() {
-	SignalStop();
 }
 
 void ThreadBase::WaitStop() {
@@ -460,22 +550,52 @@ void ThreadBase::WaitStop() {
 		Join();
 }
 
-/*
-struct _AFX_THREAD_STARTUP {
-	ThreadBase *m_pThread;
-#ifdef WIN32
-	AFX_MODULE_STATE *m_pModuleState;
-#endif
-};*/
+byte __afxThreadData[sizeof(CThreadSlotData)];
+CThreadSlotData *_afxThreadData;
+
+void CThreadSlotData::DeleteValues(CThreadData *pData, HINSTANCE hInst) {
+	bool bDelete = true;
+	for (size_t i = 1; i < pData->size(); i++) {
+		if (!hInst || m_arSlotData[i].hInst == hInst) {			
+			if ((*pData)[i])										// delete the data since hInst matches (or is NULL)
+				delete exchange((*pData)[i], nullptr);
+		} else if ((*pData)[i])
+			bDelete = false;
+	}
+	if (bDelete) {
+		EXT_LOCK (m_criticalSection) {
+			m_tdatas.erase(pData->ThreadId);
+			m_tls.Value = 0;
+		}
+	}
+}
+
+#define SLOT_USED   0x01    // slot is allocated
+
+
+
+//!!!__declspec(nothrow)
+CThreadSlotData::CThreadSlotData()
+	:	m_nRover(1)
+	,	m_nMax(0)
+{
+}
+
+void CThreadSlotData::DeleteValues(HINSTANCE hInst, bool bAll) {
+	EXT_LOCK (m_criticalSection) {
+		if (bAll) {
+			for (CTDatas::iterator it=m_tdatas.begin(), e=m_tdatas.end(); it!=e; ++it)
+				DeleteValues(&it->second, hInst);
+		} else if (CThreadData* pData = (CThreadData*)(void*)m_tls.Value)
+			DeleteValues(pData, hInst);
+	}
+}
+
+CThreadSlotData::~CThreadSlotData() {
+	DeleteValues(0, true);
+}
 
 void AFXAPI AfxTermThread(HINSTANCE hInstTerm) {
-#if UCFG_EXTENDED
-#	if !UCFG_WCE && UCFG_GUI
-	if (!hInstTerm)
-		if (_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetDataNA())
-			pThreadState->m_pToolTip.reset();
-#	endif
-#endif
 	if (_afxThreadData)
 		_afxThreadData->DeleteValues(hInstTerm, false);		//!!! 
 }
@@ -483,15 +603,13 @@ void AFXAPI AfxTermThread(HINSTANCE hInstTerm) {
 void AFXAPI AfxEndThread(UINT nExitCode, bool bDelete) {
 #if UCFG_EXTENDED || UCFG_WIN32
 	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
-	if (ThreadBase *pThread = pState->m_pCurrentThread) {
+	if (ThreadBase *pThread = Thread::TryGetCurrentThread()) {
 		pThread->OnEnd();
 		if (bDelete)
 			pThread->Delete();
-		pState->m_pCurrentThread = 0;
 	}
-#else
-	s_currentThread.Value = 0;
 #endif
+	t_pCurThread = nullptr;
 	AfxTermThread();
 #if UCFG_USE_PTHREADS
 	::pthread_exit((void*)(uintptr_t)nExitCode);
@@ -504,7 +622,7 @@ void AFXAPI AfxEndThread(UINT nExitCode, bool bDelete) {
 
 void ThreadBase::OnEndThread(bool bDelete) {
 #if UCFG_WIN32
-	TRC(4, hex << Name << " " << m_nThreadID.Value());
+	TRC(4, Name << " " << hex << m_nThreadID);
 #endif
 	
 	OnEnd();
@@ -514,6 +632,11 @@ void ThreadBase::OnEndThread(bool bDelete) {
 }
 
 UInt32 ThreadBase::CppThreadThunk() {
+	SetCurrentThread();
+#if UCFG_USE_POSIX
+	m_ptid = ::pthread_self();
+	m_tid = thread::id(m_ptid);
+#endif
 	UInt32 exitCode = (UINT)E_FAIL; //!!!
 	alloca(StackOffset);							// to prevent cache line aliasing 
 	try {
@@ -523,9 +646,9 @@ UInt32 ThreadBase::CppThreadThunk() {
 #endif
 		{
 			struct ActiveThreadKeeper {
-				CThreadRef *m_tr;
+				thread_group *m_tr;
 
-				ActiveThreadKeeper(CThreadRef *tr)
+				ActiveThreadKeeper(thread_group *tr)
 					:	m_tr(tr)
 				{
 					if (m_tr)
@@ -538,13 +661,13 @@ UInt32 ThreadBase::CppThreadThunk() {
 				}
 			} actveThreadKeeper(m_owner);
 
-			DBG_LOCAL_IGNORE(E_EXT_ThreadStopped);
+			DBG_LOCAL_IGNORE(E_EXT_ThreadInterrupted);
 
 			Execute();
 			exitCode = m_exitCode;
 		}
 		OnEndThread(true);
-	} catch (ThreadAbortException& ex) {
+	} catch (thread_interrupted& ex) {
 		exitCode = m_exitCode = ex.HResult;
 		TRC(1, ex.Message << " in Thread: " << get_id() << "\t" << Name);
 		OnEndThread(true);
@@ -560,63 +683,49 @@ UInt32 ThreadBase::CppThreadThunk() {
 #if UCFG_WCE
 
 UINT ThreadBase::ThreaderFunction(LPVOID pParam) {
+	UINT r = (UINT)E_FAIL;
 	__try {
 //!!!R		_AFX_THREAD_STARTUP *pStartup = (_AFX_THREAD_STARTUP*)pParam;
 		ThreadBase *pT = (ThreadBase*)pParam;
-		return pT->CppThreadThunk();
+		r = pT->CppThreadThunk();
 	} __except (ProcessExceptionInFilter(GetExceptionInformation()), EXCEPTION_EXECUTE_HANDLER) {
 		ProcessExceptionInExcept();
-		return (UINT)E_FAIL;
-	}	
+	}
+	t_pCurThread = nullptr;
+	return r;
 }
 
 
 #else
 
 #if UCFG_USE_PTHREADS
-	void * __cdecl ThreadBase::ThreaderFunction(void *pParam)
+void * __cdecl ThreadBase::ThreaderFunction(void *pParam)
 #else
-	UINT ThreadBase::ThreaderFunction(LPVOID pParam)
+UINT ThreadBase::ThreaderFunction(LPVOID pParam)
 #endif
 {
-	//!!!  set_terminate(Myterminate_handler);//!!!
-
-	//!!!	__try
-	//!!!	{
-	//!!!  pThread->InitCOM();
-	//!!!		bool bDelete = true;
 	ThreadBase *pT = (ThreadBase*)pParam;;
-#if UCFG_WIN32
 
-	_AFX_THREAD_STATE* pThreadState = AfxGetThreadState();
-	pThreadState->m_pModuleState = pT->m_pModuleStateForThread; //!!!pStartup->m_pModuleState;
-	AFX_MODULE_STATE *pModuleState = AfxGetModuleState();
-#ifdef _AFXDLL
-	pT->m_pModuleState = pModuleState;
+#if UCFG_WIN32
+	AfxSetModuleState(pT->m_pModuleStateForThread);
+#	ifdef _AFXDLL
+	pT->m_pModuleState = pT->m_pModuleStateForThread ? pT->m_pModuleStateForThread : &_afxBaseModuleState;
+#	endif
 #endif
-	pModuleState->m_thread->m_pCurrentThread = pT;
-#else
-	s_currentThread.Value = pT;
-#endif
-//!!!R	delete pStartup;
 
 	DWORD r = pT->CppThreadThunk();
+	t_pCurThread = nullptr;
 
 #if UCFG_USE_PTHREADS
+	::pthread_exit((void*)(uintptr_t)r);
 	return (void*)(uintptr_t)r;
+#elif UCFG_WCE
+	::ExitThread(r);
+	return r;
 #else
+	_endthreadex(r);
 	return r;
 #endif
-
-	/*!!!
-	pT->TryExecute();
-	DWORD exitCode = pT->ExitCode;
-	AfxEndThread(exitCode, bDelete);
-	return exitCode;*/
-	/*!!!	}
-	__except (MyExceptHandler(GetExceptionInformation()))
-	{} */
-	return 0;
 }
 
 #endif
@@ -627,13 +736,13 @@ void ThreadBase::Create(DWORD dwCreateFlags, size_t nStackSize
 #endif
 						)
 {
-
 	ASSERT(!Valid());
 
 #ifdef WIN32
-	m_pModuleStateForThread = AfxGetThreadState()->m_pModuleState;
+	m_pModuleStateForThread = AfxGetModuleState();
 #endif
-	Interlocked::Increment(base::m_dwRef);
+	Interlocked::Increment(base::m_dwRef);	// Trunned thread decrements m_dwRef;
+	ptr<ThreadBase> tThis = this;			// if keep this object live if the fread exits quickly
 #if UCFG_USE_PTHREADS
 	CAttr attr;
 	if (nStackSize)
@@ -646,33 +755,25 @@ void ThreadBase::Create(DWORD dwCreateFlags, size_t nStackSize
 	m_tid = thread::id(m_ptid);
 #else
 	HANDLE h;
-	DWORD threadID;
-
+	DWORD threadID = 0;
 #	if UCFG_WCE
-		h = ::CreateThread(lpSecurityAttrs, nStackSize, (LPTHREAD_START_ROUTINE)&ThreaderFunction, this, dwCreateFlags, &threadID);
+		h = ::CreateThread(lpSecurityAttrs, nStackSize, (LPTHREAD_START_ROUTINE)&ThreaderFunction, this, dwCreateFlags|CREATE_SUSPENDED, &threadID);		// CREATE_SUSPENDED is necessary to sync access to SafeHandle
 #	else
-		h = (HANDLE)_beginthreadex(lpSecurityAttrs, (UINT)nStackSize, &ThreaderFunction, this, dwCreateFlags, (UINT*)&threadID); //!!!
+		h = (HANDLE)_beginthreadex(lpSecurityAttrs, (UINT)nStackSize, &ThreaderFunction, this, dwCreateFlags|CREATE_SUSPENDED, (UINT*)&threadID);			//!!!	CREATE_SUSPENDED is necessary to sync access to SafeHandle
 #	endif
 	if (!h || h==(HANDLE)-1) {
 		CCounterIncDec<ThreadBase, Interlocked>::Release(this);
 	}
 	Attach(h, threadID);
+	if (!(dwCreateFlags & CREATE_SUSPENDED))
+		Resume();
 #endif
 }
 
 void ThreadBase::Start(DWORD flags) {
-	try {
-		BeforeStart();
-	} catch (RCExc) {
-//!!!R		if (m_bAutoDelete)
-//!!!R			delete this;
-		throw;
-	}
+	BeforeStart();
 	if (m_owner) {
-		EXT_LOCK (m_owner->m_cs) {
-			m_owner->m_ar.push_back(this);
-			m_owner->ExternalAddRef();
-		}
+		m_owner->add_thread(this);
 	}
 	if (!StackSize) {
 		if (!ThreadBase::DefaultStackSize) {
@@ -688,11 +789,41 @@ void ThreadBase::Start(DWORD flags) {
 	Create(flags, StackSize);
 }
 
+namespace this_thread {
+
+bool AFXAPI interruption_enabled() noexcept {
+	return ThreadBase::get_CurrentThread()->m_bInterruptionEnabled;
+}
+
+bool AFXAPI interruption_requested() noexcept {
+	return ThreadBase::get_CurrentThread()->m_bStop;
+}
+
+void AFXAPI interruption_point() {
+	ThreadBase::get_CurrentThread()->interruption_point();
+}
+
+disable_interruption::disable_interruption()
+	:	base(ThreadBase::get_CurrentThread()->m_bInterruptionEnabled, false)
+{}
+
+restore_interruption::restore_interruption(disable_interruption& di)
+	:	base(ThreadBase::get_CurrentThread()->m_bInterruptionEnabled, di.m_prev)
+{}
+
+void AFXAPI sleep_for(const TimeSpan& span) {
+	DWORD ms = clamp(DWORD(span.TotalMilliseconds), (DWORD)0, (DWORD)INFINITE);
+	ThreadBase::get_CurrentThread()->Sleep(ms);
+}
+
+} // Ext::this_thread::
+
+
 CSeparateThreadThreader::CSeparateThreadThreader(CSeparateThread& st)
 	:	ThreadBase(&st)
 	,	m_st(st)
 {
-	m_bSleeping = true;
+	m_bInterruptionEnabled = true;
 }
 
 CSeparateThreadThreader::~CSeparateThreadThreader() {
@@ -729,7 +860,7 @@ void CSeparateThread::Create(DWORD flags) {
 }
 
 #ifdef WIN32
-CWinThread::CWinThread(CThreadRef *ownRef)
+CWinThread::CWinThread(thread_group *ownRef)
 	:	ThreadBase(ownRef)
 {
 	m_pThreadParams = 0;
@@ -747,18 +878,6 @@ void CWinThread::CommonConstruct() {
 	m_hr = 0;
 	m_lpfnOleTermOrFreeLib = 0;
 }
-
-CWinThread* AFXAPI AfxBeginThread(AFX_THREADPROC pfnThreadProc, LPVOID pParam, int nPriority, UINT nStackSize, DWORD dwCreateFlags, LPSECURITY_ATTRIBUTES lpSecurityAttrs) {
-	CWinThread* pThread = new CWinThread(pfnThreadProc, pParam);
-	pThread->Create(dwCreateFlags|CREATE_SUSPENDED, nStackSize, lpSecurityAttrs);
-	pThread->Priority = nPriority;
-#if !UCFG_USE_PTHREADS
-	if (!(dwCreateFlags & CREATE_SUSPENDED))
-		pThread->Resume();
-#endif
-	return pThread;
-}
-
 
 #endif
 
@@ -780,34 +899,28 @@ void AFXAPI AfxTlsRelease() {
 	}
 }
 
-void CThreadSlotData::DeleteValues(CThreadData *pData, HINSTANCE hInst) {
-	bool bDelete = true;
-	for (int i = 1; i < pData->size(); i++) {
-		if (!hInst || m_arSlotData[i].hInst == hInst) {
-			// delete the data since hInst matches (or is NULL)
-			delete (CNoTrackObject*)(*pData)[i];
-			(*pData)[i] = 0;
-		} else if ((*pData)[i])
-			bDelete = false;
-	}
-	if (bDelete) {
-		EXT_LOCK (m_criticalSection) {
-			Remove(m_list, pData);
-			m_tls.Value = 0;
-		}
-	}
-}
-
-#define SLOT_USED   0x01    // slot is allocated
 
 
 void *CThreadSlotData::GetThreadValue(int nSlot) {
 	ASSERT(nSlot && nSlot < m_nMax);
 	ASSERT(m_arSlotData[nSlot].dwFlags & SLOT_USED);
 	CThreadData *pData = (CThreadData*)(void*)m_tls.Value;
-	if (!pData || nSlot >= pData->size())
+	if (!pData || nSlot >= (ssize_t)pData->size())
 		return 0;
 	return (*pData)[nSlot];
+}
+
+void CThreadSlotData::FreeSlot(int nSlot) {
+	EXT_LOCK (m_criticalSection) {
+		ASSERT(nSlot && nSlot < m_nMax);
+		ASSERT(m_arSlotData[nSlot].dwFlags & SLOT_USED);
+		for (CTDatas::iterator it=m_tdatas.begin(), e=m_tdatas.end(); it!=e; ++it) {
+			CThreadData& tdata = it->second;
+			if (nSlot < (ssize_t)tdata.size())
+				delete exchange(tdata[nSlot], nullptr);
+		}
+		m_arSlotData[nSlot].dwFlags &= ~SLOT_USED;
+	}
 }
 
 CThreadLocalObject::~CThreadLocalObject() {
@@ -815,21 +928,6 @@ CThreadLocalObject::~CThreadLocalObject() {
 		_afxThreadData->FreeSlot(m_nSlot);
 	m_nSlot = 0;
 }
-
-void CThreadSlotData::FreeSlot(int nSlot) {
-	EXT_LOCK (m_criticalSection) {
-		ASSERT(nSlot && nSlot < m_nMax);
-		ASSERT(m_arSlotData[nSlot].dwFlags & SLOT_USED);
-		for (int i=0; i<m_list.size(); i++) {
-			if (nSlot < m_list[i]->size()) {
-				delete (CNoTrackObject*)(*m_list[i])[nSlot];
-				(*m_list[i])[nSlot] = 0;
-			}
-		}
-		m_arSlotData[nSlot].dwFlags &= ~SLOT_USED;
-	}
-}
-
 
 int CThreadSlotData::AllocSlot() {
 	EXT_LOCK (m_criticalSection) {
@@ -857,19 +955,14 @@ int CThreadSlotData::AllocSlot() {
 	}
 }
 
-void CThreadSlotData::SetValue(int nSlot, void *pValue) {
+void CThreadSlotData::SetValue(int nSlot, CNoTrackObject *pValue) {
 	ASSERT(nSlot && nSlot < m_nMax);
 	ASSERT(m_arSlotData[nSlot].dwFlags & SLOT_USED);
 	CThreadData *pData = (CThreadData*)(void*)m_tls.Value;
-	if (!pData || nSlot >= pData->size() && pValue) {
-		if (!pData) {
-			pData = new CThreadData;
-			EXT_LOCK (m_criticalSection) {
-				m_list.push_back(pData);
-			}
-		}
+	if (!pData || nSlot >= (ssize_t)pData->size() && pValue) {
+		if (!pData)
+			m_tls.Value = pData = EXT_LOCKED(m_criticalSection, &m_tdatas.insert(make_pair(std::this_thread::get_id(), CThreadData())).first->second);
 		pData->resize(m_nMax);
-		m_tls.Value = pData;
 	}
 	(*pData)[nSlot] = pValue;
 }
@@ -883,11 +976,17 @@ CNoTrackObject* CThreadLocalObject::GetDataNA() {
 	return pValue;
 }
 
+CNoTrackObject::CNoTrackObject() {
+}
+
+CNoTrackObject::~CNoTrackObject() {
+}
+
 void *CNoTrackObject::operator new(size_t nSize) {
 #ifdef WIN32
 	void* p = ::LocalAlloc(LPTR, nSize);
 #else
-	void* p = malloc(nSize);
+	void* p = Malloc(nSize);
 #endif
 	if (!p)
 		Throw(E_OUTOFMEMORY);
@@ -895,12 +994,13 @@ void *CNoTrackObject::operator new(size_t nSize) {
 }
 
 void CNoTrackObject::operator delete(void* p) {
-	if (p)
+	if (p) {
 #ifdef WIN32
 		::LocalFree(p);
 #else
-		free(p);
+		Free(p);
 #endif
+	}
 }
 
 CTls::CTls() {
@@ -927,41 +1027,19 @@ void CTls::put_Value(const void *p) {
 #endif
 }
 
-
-
-BYTE __afxThreadData[sizeof(CThreadSlotData)];
-
-CThreadSlotData *_afxThreadData;
-
-
-//!!!__declspec(nothrow)
-CThreadSlotData::CThreadSlotData()
-	:	m_nRover(1)
-	,	m_nMax(0)
-{
+CDestructibleTls::CDestructibleTls() {
+	EXT_LOCKED(s_mtxDestructibleTls, s_listDestructibleTlses.push_back(_self));
 }
 
-void CThreadSlotData::DeleteValues(HINSTANCE hInst, bool bAll) {
-	EXT_LOCK (m_criticalSection) {
-		if (!bAll) {
-			CThreadData* pData = (CThreadData*)(void*)m_tls.Value;
-			if (pData)
-				DeleteValues(pData, hInst);
-		} else
-			for (int i=0; i<m_list.size(); i++) 
-				DeleteValues(m_list[i].get(), hInst);
-	}
-}
-
-CThreadSlotData::~CThreadSlotData() {
-	DeleteValues(0, true);
+CDestructibleTls::~CDestructibleTls() {
+	EXT_LOCKED(s_mtxDestructibleTls, s_listDestructibleTlses.erase(CListDestructibleTlses::iterator(this)));
 }
 
 void CThreadSlotData::AssignInstance(HINSTANCE hInst) {
 	EXT_LOCK (m_criticalSection) {
 		ASSERT(hInst != NULL);
 
-		for (int i = 1; i < m_arSlotData.size(); i++) {
+		for (size_t i = 1; i < m_arSlotData.size(); i++) {
 			if (m_arSlotData[i].hInst == NULL && (m_arSlotData[i].dwFlags & SLOT_USED))
 				m_arSlotData[i].hInst = hInst;
 		}
@@ -1081,8 +1159,8 @@ void PoolThread::Execute() {
 			if (!wi->m_bStop) {
 				try {
 					wi->Execute();
-				} catch (RCExc e) {
-					wi->HResult = e.HResult;
+				} catch (RCExc ex) {
+					wi->HResult = HResultInCatch(ex);
 				}
 				wi->Finished = true;
 				m_curWi = nullptr;
@@ -1133,6 +1211,19 @@ ptr<WorkItem> ThreadPool::QueueUserWorkItem(WorkItem *wi) {
 #endif  // _WIN32
 
 bool g_bProcessDetached;
+
+#ifdef WIN32
+
+int CWinThread::ExitInstance() {
+#if UCFG_WIN_MSG
+	return (int)AfxGetCurrentMessage()->wParam;
+#else
+	return true;
+#endif
+}
+#endif
+
+
 
 } // Ext::
 

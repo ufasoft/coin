@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -782,12 +774,8 @@ DbTransaction::DbTransaction(KVStorage& storage, bool bReadOnly)
 DbTransaction::~DbTransaction() {
 	CKVStorageKeeper keeper(&Storage);
 
-	if (!m_bComplete) {
-		if (std::uncaught_exception())
-			Rollback();
-		else
-			Commit();
-	}
+	if (!m_bComplete)
+		Rollback();
 
 	//Tables.clear();			// explicit to be in scope of t_pKVStorage 
 }

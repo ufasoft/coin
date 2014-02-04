@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "ext-fw.h"
@@ -88,7 +80,6 @@ CAppBase::CAppBase()
 		ProcessArgv(__argc, __wargv);
 	AFX_MODULE_STATE* pModuleState = _AFX_CMDTARGET_GETSTATE();
 	pModuleState->m_pCurrentCApp = this;
-	pModuleState->m_thread->m_pCurrentThread = this;
 
 #if UCFG_USE_RESOURCES
 	{
@@ -106,13 +97,13 @@ CAppBase::CAppBase()
 }
 
 String CAppBase::GetCompanyName() {
-	String companyName = "CompanyName";
+	String companyName = MANUFACTURER;
 	DWORD dw;
 	try {
 		if (GetFileVersionInfoSize((_TCHAR*)(const _TCHAR*)AfxGetModuleState()->FileName, &dw)) //!!!
 			companyName = FileVersionInfo().CompanyName;
-	} catch (RCExc)
-	{}
+	} catch (RCExc){
+	}
 	return companyName;
 }
 
@@ -361,8 +352,8 @@ int CConApp::Main(int argc, argv_char_t *argv[]) {
 			wcerr << endl;
 		}
 		Execute();
-	} catch (RCExc e) {
-		switch (e.HResult) {
+	} catch (const Exception& ex) {
+		switch (ex.HResult) {
 		case 1:
 			Usage();
 		case 0:
@@ -375,9 +366,12 @@ int CConApp::Main(int argc, argv_char_t *argv[]) {
 			Environment::ExitCode = 3;  // Compilation error
 			break;
 		default:
-			wcerr << e << endl;
+			wcerr << ex << endl;
 			Environment::ExitCode = 2;
 		}
+	} catch (const exception& ex) {
+		cerr << ex.what() << endl;
+		Environment::ExitCode = 2;
 	}
 #if UCFG_COMPLEX_WINAPP || !UCFG_EXTENDED
 	ExitInstance();

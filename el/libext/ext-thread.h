@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include EXT_HEADER(queue)
@@ -16,7 +8,11 @@ typedef struct tagMSG MSG;
 namespace Ext {
 
 class CWinThread;
-class CThreadRef;
+class thread_group;
+
+typedef const std::exception& RCExc;
+
+HRESULT AFXAPI HResultInCatch(RCExc);
 
 class PoolThread;
 template <> struct ptr_traits<PoolThread> {
@@ -24,6 +20,7 @@ template <> struct ptr_traits<PoolThread> {
 };
 
 class AFX_MODULE_STATE;
+class _AFX_THREAD_STATE;
 
 class EXTAPI ThreadBase :
 #if UCFG_WIN_MSG
@@ -42,6 +39,10 @@ public:
 	typedef Interlocked interlocked_policy;
 
 #if UCFG_WIN32
+	CPointer<_AFX_THREAD_STATE> m_pAfxThreadState;
+
+	_AFX_THREAD_STATE& AfxThreadState();
+
 	class HandleAccess : protected SafeHandle::HandleAccess {
 		typedef SafeHandle::HandleAccess base;
 	public:
@@ -66,7 +67,7 @@ public:
 
 	EXT_DATA static size_t DefaultStackSize;
 
-	CPointer<CThreadRef> m_owner;
+	CPointer<thread_group> m_owner;
 	size_t StackSize;
 	size_t StackOffset;
 	String m_name;
@@ -75,7 +76,7 @@ public:
 	DWORD m_dwCoInit;
 #endif
 private:
-	CPointer<CThreadRef> m_threadRef;
+	CPointer<thread_group> m_threadRef;
 	CPointer<AFX_MODULE_STATE> m_pModuleStateForThread;
 protected:
 #if !UCFG_WIN32 || !UCFG_STDSTL //!!!?
@@ -83,7 +84,7 @@ protected:
 #endif
 public:
 #if UCFG_WIN32
-	CInt<UInt32> m_nThreadID;
+	volatile UInt32 m_nThreadID;
 #endif
 	CInt<UInt32> m_exitCode;
 #if !UCFG_WIN32 || !UCFG_STDSTL //!!!?
@@ -93,31 +94,23 @@ public:
 #endif
 
 	volatile bool m_bAutoDelete, m_bStop,
-		m_bSleeping,
+		m_bInterruptionEnabled,
 		m_bAPC;
 
-	ThreadBase(CThreadRef *ownRef = 0);
+	ThreadBase(thread_group *ownRef = 0);
 	~ThreadBase();
 
 	virtual CWinThread *AsWinThread() { return 0; }
 	virtual void OnEnd();
 	virtual void Delete();
 
-	void Attach(HANDLE h, DWORD id, bool bOwn = true) {
-		SafeHandle::Attach(h, bOwn);
-#if UCFG_WIN32 && !UCFG_STDSTL //!!!?
-		m_tid.m_tid = id;
-#endif
-#if UCFG_WIN32
-		m_nThreadID = id;
-#endif
-	}
-
+	void Attach(HANDLE h, DWORD id, bool bOwn = true);
 	void AttachSelf();
 
 //!!!#if UCFG_EXTENDED
 	static ThreadBase* AFXAPI get_CurrentThread();
 	static ThreadBase* AFXAPI TryGetCurrentThread();
+	void SetCurrentThread();
 	STATIC_PROPERTY_DEF_GET(ThreadBase, ThreadBase*, CurrentThread);
 //!!!#endif
 
@@ -197,8 +190,8 @@ public:
 	DEFPROP_GET(TimeSpan, TotalProcessorTime);
 	
 	void Start(DWORD flags = 0);
-	virtual void Stop(); //!!! for compatibility
-	virtual void SignalStop();
+	void interrupt();
+	void interruption_point();
 	virtual void WaitStop();
 
 #if UCFG_OLE
@@ -222,7 +215,7 @@ public:
 	void QueueAPC();
 #endif
 	//!!!D	static CTls t_pCurThreader;//!!!
-	CThreadRef& GetThreadRef();
+	thread_group& GetThreadRef();
 	void SleepImp(DWORD dwMilliseconds);
 protected:
 #if UCFG_USE_PTHREADS
@@ -233,10 +226,10 @@ protected:
 
 	virtual void BeforeStart() {}
 	virtual void Execute();
-
+	virtual void Stop(); //!!! for compatibility
 	virtual void OnAPC();
 #if UCFG_WIN32_FULL
-	static VOID CALLBACK APCProc(ULONG_PTR dwParam);
+	static VOID CALLBACK APCProc(ULONG_PTR param);
 #endif
 
 	EXT_API void Create(DWORD dwCreateFlags = 0, size_t nStackSize = 0
@@ -250,32 +243,48 @@ private:
 	void OnEndThread(bool bDelete);
 	UInt32 CppThreadThunk();
 	friend class Process;
-#ifdef WIN32
-	friend AFX_API CWinThread* AFXAPI AfxBeginThread(AFX_THREADPROC pfnThreadProc, LPVOID pParam = 0, int nPriority = THREAD_PRIORITY_NORMAL,
-		UINT nStackSize = 0, DWORD dwCreateFlags = 0, LPSECURITY_ATTRIBUTES lpSecurityAttrs = 0); //!!!
-#endif
-
-protected:
 };
 
+namespace this_thread {
 
-class CThreadRef {
+bool AFXAPI interruption_enabled() noexcept;
+bool AFXAPI interruption_requested() noexcept;
+void AFXAPI interruption_point();
+	
+class disable_interruption : public Ext::CBoolKeeper {
+	typedef Ext::CBoolKeeper base;
 public:
-	CCriticalSection m_cs;				// Often locked from static ctr/dtr, which not allowed by VC std::mutex implementation
+	disable_interruption();
+};
+
+class restore_interruption : public Ext::CBoolKeeper {
+	typedef Ext::CBoolKeeper base;
+public:
+	restore_interruption(disable_interruption& di);
+};
+
+void AFXAPI sleep_for(const TimeSpan& span);
+
+} // Ext::this_thread::
+
+class thread_group : noncopyable {
+public:
 	CEvent m_evFinal;
 	//!!!         m_evFinish;
-	typedef std::vector<ptr<ThreadBase> > CThreadColl;
-	CThreadColl m_ar;
 	volatile Int32 m_dwRef;
 	volatile Int32 RefCountActiveThreads;
 
-	CThreadRef(bool bSync = true)
+	thread_group(bool bSync = true)
 		:	m_dwRef(0)
 		,	m_bSync(bSync)
 		,	RefCountActiveThreads(0)
 	{}
 
-	virtual ~CThreadRef();
+	virtual ~thread_group();	
+	int size() const;
+	void add_thread(ThreadBase *t);
+	void remove_thread(ThreadBase *t);
+
 	void ExternalAddRef() { Interlocked::Increment(m_dwRef);}
 	void ExternalRelease() {
 		if (!Interlocked::Decrement(m_dwRef))
@@ -288,9 +297,13 @@ public:
 
 	void StopChilds();
 	bool StopChild(ThreadBase *t, int msTimeout = INFINITE);
-	void SignalStop();
-	void WaitStop();
+	void interrupt_all();
+	void join_all();
 protected:
+	mutable CCriticalSection m_cs;				// Often locked from static ctr/dtor, which not allowed by VC std::mutex implementation
+	typedef std::unordered_set<ptr<ThreadBase> > CThreadColl;
+	CThreadColl m_threads;
+public:
 	bool m_bSync;
 };
 
@@ -298,55 +311,54 @@ protected:
 AFX_API void AFXAPI AfxTermThread(HINSTANCE hInstTerm = 0);
 
 struct CSlotData {
-	DWORD dwFlags;      // slot flags (allocated/not allocated)
 	HINSTANCE hInst;    // module which owns this slot
+	DWORD dwFlags;      // slot flags (allocated/not allocated)
 
 	CSlotData()
-		:	dwFlags(0)
-		,	hInst(0)
+		:	hInst(0)
+		,	dwFlags(0)
 	{}
 };
 
-class CThreadData : public Object, public std::vector<void*> {
-};
+class CThreadData : public std::vector<CNoTrackObject*> {
+	typedef std::vector<CNoTrackObject*> base;
+public:
+	std::thread::id ThreadId;
 
-/*!!!
-struct CThreadData : public CNoTrackObject
-{
-int nCount;         // current size of pData
-LPVOID* pData;      // actual thread local data (indexed by nSlot)
-};*/
-
+	CThreadData()
+		:	base(10)											//!!!?
+		,	ThreadId(std::this_thread::get_id())
+	{}	
+};	
 
 class AFX_CLASS CThreadSlotData {
-	CCriticalSection m_criticalSection;
-
-	void DeleteValues(CThreadData* pData, HINSTANCE hInst);
 public:
+	CTls m_tls;
+
+	typedef std::unordered_map<std::thread::id, CThreadData> CTDatas;
+	CTDatas m_tdatas;  // list of CThreadData structures
+
+	std::vector<CSlotData> m_arSlotData;
+
+	int m_nRover;       // (optimization) for quick finding of free slots
+	int m_nMax;         // size of slot table below (in bits)
+
 	CThreadSlotData();
 	~CThreadSlotData();
 
 	int AllocSlot();
 	void FreeSlot(int nSlot);
 	void* GetValue(int nSlot);
-	void SetValue(int nSlot, void* pValue);
-	// delete all values in process/thread
-	void DeleteValues(HINSTANCE hInst, bool bAll = false);
-	// assign instance handle to just constructed slots
-	void AssignInstance(HINSTANCE hInst);
+	void SetValue(int nSlot, CNoTrackObject* pValue);	
+	void DeleteValues(HINSTANCE hInst, bool bAll = false);						// delete all values in process/thread
+	void AssignInstance(HINSTANCE hInst);										// assign instance handle to just constructed slots
+	void* GetThreadValue(int nSlot);											// special version for threads only!
 
-	CTls m_tls;
+	void* PASCAL operator new(size_t, void* p) { return p; }
+private:
+	CCriticalSection m_criticalSection;
 
-	int m_nRover;       // (optimization) for quick finding of free slots
-	int m_nMax;         // size of slot table below (in bits)
-	//	CSlotData* m_pSlotData; // state of each slot (allocated or not)
-	std::vector<ptr<CThreadData>> m_list;  // list of CThreadData structures
-	std::vector<CSlotData> m_arSlotData;
-
-	void* GetThreadValue(int nSlot); // special version for threads only!
-
-	void* PASCAL operator new(size_t, void* p)
-	{ return p; }
+	void DeleteValues(CThreadData* pData, HINSTANCE hInst);
 };
 
 extern CThreadSlotData *_afxThreadData;
@@ -362,14 +374,14 @@ public:
 	CSeparateThreadThreader(CSeparateThread& st);
 	~CSeparateThreadThreader();
 protected:
-	void BeforeStart();
+	void BeforeStart() override;
 	void Execute() override;
 	void Stop() override;
 
 friend class CSeparateThread;
 };
 
-class CSeparateThread : public CThreadRef {
+class CSeparateThread : public thread_group {
 public:
 	ptr<CSeparateThreadThreader> m_pT;
 
@@ -404,17 +416,15 @@ public:
 	AFX_THREADPROC m_pfnThreadProc;
 	void (*m_lpfnOleTermOrFreeLib)();
 
-	CWinThread(CThreadRef *ownRef = 0);
+	CWinThread(thread_group *ownRef = 0);
 
 	CWinThread(AFX_THREADPROC pfnThreadProc, LPVOID pParam);
 	void CommonConstruct();
 
 	CWinThread *AsWinThread() { return this; }
 
-#if UCFG_EXTENDED  
 	virtual int InitInstance() { return FALSE; }
 	virtual int ExitInstance();
-#endif
 
 #if UCFG_WIN_MSG
 	virtual bool IsIdleMessage(MSG& msg);
@@ -445,9 +455,6 @@ protected:
 	void Execute();
 	void OnEnd();
 #endif
-
-
-	friend UINT APIENTRY _AfxThreadEntry(void *pParam);
 };
 
 #endif	// WIN32
@@ -469,7 +476,7 @@ class Thread
 #endif
 
 public:
-	Thread(CThreadRef *ownRef = 0)
+	Thread(thread_group *ownRef = 0)
 		:	base(ownRef)
 	{}
 
@@ -579,7 +586,7 @@ public:
 		return QueueUserWorkItem(wi.get());
 	}
 protected:
-	CThreadRef m_tr;
+	thread_group m_tr;
 	CEvent m_evStop;
 	CSemaphore m_sem;
 	
@@ -593,6 +600,7 @@ friend class PoolThread;
 #endif // _WIN32
 
 extern bool g_bProcessDetached;
+
 
 } // Ext::
 

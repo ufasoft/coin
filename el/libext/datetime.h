@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 struct timeval;
@@ -198,11 +190,8 @@ public:
 	operator tm() const;
 
 	static Int64 AFXAPI SimpleUtc();
-	static DateTime AFXAPI FromUnix(Int64 epoch);
+	static DateTime AFXAPI from_time_t(Int64 epoch);
 	static DateTime AFXAPI FromAsctime(RCString s);
-
-	Int64 get_UnixEpoch() const;
-	DEFPROP_GET(Int64, UnixEpoch);
 
 	int get_Hour() const { 
 #ifdef WIN32
@@ -282,7 +271,7 @@ public:
 
 	LocalDateTime ToLocalTime();
 	static LocalDateTime AFXAPI Now();
-	static DateTime AFXAPI UtcNow();
+	static DateTime AFXAPI UtcNow() noexcept;
 
 	/*!!!
 	static DateTime AFXAPI get_PreciseNow();
@@ -473,7 +462,7 @@ protected:
 
 	void ResetBounds() {
 		m_mul = 0;
-		m_minFreq = std::numeric_limits<Int64>::max();
+		m_minFreq = (std::numeric_limits<Int64>::max)();
 		m_maxFreq = 0;
 	}
 
@@ -492,7 +481,7 @@ protected:
 
 	bool Recalibrate(Int64 st, Int64 tsc, Int64 stPeriod, Int64 tscPeriod, bool bResetBase);
 
-	virtual Int64 GetTicks() =0;
+	virtual Int64 GetTicks() noexcept =0;
 	virtual Int64 GetFrequency(Int64 stPeriod, Int64 tscPeriod);
 };
 
@@ -514,6 +503,9 @@ public:
 		End();
 	}
 };
+
+Int64 AFXAPI to_time_t(const DateTime& dt);
+
 
 
 } // Ext::

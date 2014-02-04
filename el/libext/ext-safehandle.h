@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #if UCFG_WIN32
@@ -18,8 +10,9 @@
 
 namespace Ext {
 
-class Exc;
-typedef const Exc& RCExc;
+class Exception;
+//!!!R typedef const Exception& RCExc;
+//typedef const std::exception& RCExc;
 
 class CHandleBaseBase {
 public:
@@ -33,6 +26,11 @@ public:
 
 	virtual bool Release() const =0;
 	bool Close(bool bFromDtor = false);
+	
+	void swap(CHandleBaseBase& r) {
+		std::swap(m_nInUse, r.m_nInUse);
+		std::swap(m_bClosed, r.m_bClosed);
+	}
 protected:
 	volatile Int32 m_bClosed;					// Int32 because we need Interlocked operations, but sizeof(bool)==1
 };
@@ -54,14 +52,14 @@ template <class U> friend class CHandleKeeper;
 
 #ifndef WDM_DRIVER
 
-class EXTAPI CTls {	
+class EXTAPI CTls : noncopyable {	
 public:
 	typedef CTls class_type;
 
 	CTls();
 	~CTls();
 
-	__forceinline void *get_Value() const {
+	__forceinline void *get_Value() const noexcept {
 #if UCFG_USE_PTHREADS
 		return ::pthread_getspecific(m_key);
 #else
@@ -71,9 +69,7 @@ public:
 
 	void put_Value(const void *p);
 	DEFPROP(void*, Value);
-
 private:
-
 #if UCFG_USE_PTHREADS
 	pthread_key_t m_key;
 #else
@@ -96,6 +92,16 @@ public:
 
 	operator T*() const { return (T*)get_Value(); }
 	T* operator->() const { return operator T*(); }
+};
+
+class CDestructibleTls : public CTls {
+	typedef CTls base;
+public:
+	CDestructibleTls *Prev, *Next;
+
+	CDestructibleTls();
+	~CDestructibleTls();
+	virtual void OnThreadDetach(void *p) {}
 };
 
 #if UCFG_USE_DECLSPEC_THREAD
@@ -169,6 +175,7 @@ protected:
 
 
 class EXTAPI SafeHandle : public Object, public CHandleBase<SafeHandle> {
+	typedef CHandleBase<SafeHandle> base;
 	EXT_MOVABLE_BUT_NOT_COPYABLE(SafeHandle);
 public:
 	typedef HANDLE handle_type;
@@ -235,6 +242,12 @@ public:
 		return Valid() ? EXT_CONVERTIBLE_TO_TRUE : 0;
 	}
 
+	void swap(SafeHandle& r) {
+		base::swap(r);
+		std::swap(m_handle, r.m_handle);
+		std::swap(m_bOwn, r.m_bOwn);
+	}
+
 #if UCFG_WDM
 protected:
 	mutable void *m_pObject;
@@ -246,7 +259,6 @@ public:
 
 	NTSTATUS InitFromHandle(HANDLE h, ACCESS_MASK DesiredAccess, POBJECT_TYPE ObjectType, KPROCESSOR_MODE  AccessMode);
 #endif
-
 
 	HANDLE Detach();
 	void Duplicate(HANDLE h, DWORD dwOptions = 0);
@@ -286,9 +298,10 @@ public:
 	void InternalReleaseHandle() const;
 protected:
 	HANDLE DangerousGetHandleEx() const { return (HANDLE)m_handle; }
+	void ReplaceHandle(HANDLE h) { m_handle = (intptr_t)h; }
 	virtual void ReleaseHandle(HANDLE h) const;	
 private:
-	mutable intptr_t m_handle;
+	mutable volatile intptr_t m_handle;
 	const intptr_t m_invalidHandleValue;
 	CBool m_bOwn;	
 

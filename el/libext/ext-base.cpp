@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #pragma warning(disable: 4073)
@@ -267,10 +259,10 @@ SafeHandle::BlockingHandleAccess::~BlockingHandleAccess() {
 }
 
 #if !UCFG_WDM
-tls_ptr<String> Exc::t_LastStringArg;
+tls_ptr<String> Exception::t_LastStringArg;
 #endif
 
-String Exc::get_Message() const {
+String Exception::get_Message() const {
 #if UCFG_WDM
 	return m_message;
 #else
@@ -278,7 +270,13 @@ String Exc::get_Message() const {
 #endif
 }
 
-String Exc::ToString() const {
+const char *Exception::what() const {
+	if (m_message.IsEmpty())
+		m_message = get_Message();
+	return m_message.c_str();
+}
+
+String Exception::ToString() const {
 	String r = get_Message().TrimEnd();
 	for (CDataMap::const_iterator i=Data.begin(), e=Data.end(); i!=e; ++i)
 		r += "\n  "+i->first+": "+i->second;
@@ -289,18 +287,58 @@ String Exc::ToString() const {
 	return r;
 }
 
-Exc::Exc(HRESULT hr, RCString message)
-	:	HResult(hr)
+static class HResultCategrory : public error_category {
+	const char *name() const override {
+		return "HResult";		
+	}
+
+	string message(int eval) const override {
+		return AfxProcessError(eval);		
+	}
+} s_hresultCategory;
+
+const std::error_category& hresult_category() {
+	return s_hresultCategory;
+}
+
+Exception::Exception(HRESULT hr, RCString message)
+	:	base(hr, hresult_category(), message.IsEmpty() ? string() : message)
+	,	HResult(hr)
 	,	m_message(message)		
 {
-	STATIC_ASSERT(offsetof(Exc, HResult) == sizeof(void*));			// to support IgnoreList
-
 #if !UCFG_WCE
 	if (CStackTrace::Use)
 		StackTrace = CStackTrace::FromCurrentThread();
 #endif
 }
 
+HRESULT AFXAPI HResultInCatch(RCExc) {		// arg not used
+	try {
+		throw;
+	} catch (const Exception& ex) {
+		return ex.HResult;
+	} catch (const system_error& ex) {
+		const error_code& ec = ex.code();
+		const error_category& cat = ec.category();
+		int ecode = ec.value();
+		if (cat == generic_category())
+			return HRESULT_FROM_C(ecode);
+		else if (cat == system_category())
+			return (HRESULT) (((ecode) & 0x0000FFFF) | (FACILITY_OS << 16) | 0x80000000);
+		else if (cat == hresult_category())
+			return ecode;
+		else
+			return (HRESULT) (((ecode) & 0x0000FFFF) | (FACILITY_UNKNOWN << 16) | 0x80000000);			//!!! category info lost here
+	} catch (const bad_alloc&) {
+		return E_OUTOFMEMORY;
+	} catch (invalid_argument&) {
+		return E_INVALIDARG;
+	} catch (bad_cast&) {
+		return E_EXT_InvalidCast;
+	} catch (const exception&) {
+		return E_FAIL;
+	}
+}
 
 INT_PTR AFXAPI AfxApiNotFound() {
 	Throw(HRESULT_OF_WIN32(ERROR_PROC_NOT_FOUND));
@@ -311,23 +349,21 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 	KeBugCheck(hr);
 #else
 	switch (hr) {
-	case E_ACCESSDENIED:			throw AccessDeniedExc();
-	case E_OUTOFMEMORY:				throw OutOfMemoryExc();
+	case E_ACCESSDENIED:			throw AccessDeniedException();
+	case E_OUTOFMEMORY:				throw bad_alloc();
 	case E_INVALIDARG:				throw ArgumentExc();
 	case E_EXT_EndOfStream:			throw EndOfStreamException();
 	case E_EXT_FileFormat:			throw FileFormatException();
 	case E_NOTIMPL:					throw NotImplementedExc();
 	case E_FAIL:					throw UnspecifiedException();
-	case E_EXT_ThreadStopped:		throw ThreadAbortException();
-	case E_EXT_InvalidCast:
-		throw bad_cast();
-	case HRESULT_OF_WIN32(ERROR_STACK_OVERFLOW):
-		throw StackOverflowExc();
+	case E_EXT_ThreadInterrupted:	throw thread_interrupted();
+	case E_EXT_InvalidCast:			throw bad_cast();
+	case HRESULT_OF_WIN32(ERROR_STACK_OVERFLOW):	throw StackOverflowExc();
 	case HRESULT_OF_WIN32(ERROR_FILE_NOT_FOUND):
 		{
-			FileNotFoundExc e;
+			FileNotFoundException e;
 #if !UCFG_WDM
-			e.FileName = *Exc::t_LastStringArg;
+			e.FileName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
@@ -335,7 +371,7 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 		{
 			FileAlreadyExistsExc e;
 #if !UCFG_WDM
-			e.FileName = *Exc::t_LastStringArg;
+			e.FileName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
@@ -348,20 +384,20 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 		{
 			ProcNotFoundExc e;
 #if !UCFG_WDM
-			e.ProcName = *Exc::t_LastStringArg;
+			e.ProcName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
 //!!!R	case HRESULT_OF_WIN32(ERROR_INVALID_HANDLE):
 //!!!R		::MessageBox(0, _T(" aa"), _T(" aa"), MB_OK); //!!!D
 	default:
-		throw Exc(hr);
+		throw Exception(hr);
 	}	
 #endif
 }
 
 DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr, const char *funname) {
-	TRC(1, funname <<  ": Throw Error " << hex << hr); 
+	TRC(1, funname <<  ": " << AfxProcessError(hr)); 
 
 	ThrowImp(hr);
 }
@@ -383,7 +419,7 @@ DECLSPEC_NORETURN void AFXAPI ThrowS(HRESULT hr, RCString msg) {
 #if UCFG_WDM && !_HAS_EXCEPTIONS
 	KeBugCheck(hr);
 #else
-	throw Exc(hr, msg);
+	throw Exception(hr, msg);
 #endif
 }
 
@@ -426,6 +462,8 @@ class CDebugStreambuf : public streambuf {
 bool CTrace::s_bShowCategoryNames;
 static CDebugStreambuf s_debugStreambuf;
 void *CTrace::s_pOstream = new ostream(&s_debugStreambuf);	// ostream allocated in Heap because it should be valid after PROCESS_DETACH
+void *CTrace::s_pSecondStream;
+bool CTrace::s_bPrintDate;
 
 #if UCFG_WDM && defined(_DEBUG)
 	int CTrace::s_nLevel = 1;
@@ -635,49 +673,71 @@ inline int AFXAPI GetThreadNumber() {
 #endif
 }
 
-CTraceWriter::CTraceWriter(int level, const char* funname) {
-	if (m_bLog = level & CTrace::s_nLevel) {
-		DateTime dt = DateTime::Now();
-		int h = dt.Hour,
-			m = dt.Minute,
-			s = dt.Second,
-			ms = dt.Millisecond;
-		size_t size = 100;
-		if (funname)
-			size += strlen(funname);
-		char *buf = (char*)alloca(size);
-		sprintf(buf, "%4x %02d:%02d:%02d.%03d ", GetThreadNumber(), h, m, s, ms);
-		if (funname)
-			strcat(strcat(buf, funname), " ");
-		m_os.write(buf, strlen(buf));
+CTraceWriter::CTraceWriter(int level, const char* funname)
+	:	m_pos(level & CTrace::s_nLevel ? (ostream*)CTrace::s_pOstream : 0)
+{
+	if (m_pos) {
+		m_bPrintDate = CTrace::s_bPrintDate;
+		Init(funname);
 	}
+}
+
+CTraceWriter::CTraceWriter(ostream *pos)
+	:	m_pos(pos)
+	,	m_bPrintDate(true)
+{
+	Init(0);
+}
+
+void CTraceWriter::Init(const char* funname) {
+    if (funname)
+		m_os << funname << " ";
 }
 
 static InterlockedSingleton<mutex> s_pCs;
 
 CTraceWriter::~CTraceWriter() {
-	if (m_bLog) {
+	if (m_pos) {
 		m_os << '\n';
-		string s = m_os.str();
-		ostream& os = *(ostream*)CTrace::s_pOstream;
+		string str = m_os.str();		
+		DateTime dt = DateTime::Now();
+		int h = dt.Hour,
+    		m = dt.Minute,
+    		s = dt.Second,
+    		ms = dt.Millisecond;
+		int tid = GetThreadNumber();
+		char *buf = (char*)alloca(100);
+		if (m_bPrintDate)
+			sprintf(buf, "%4x %4d-%02d-%02d %02d:%02d:%02d.%03d ", tid, int(dt.Year), int(dt.Month), int(dt.Day), h, m, s, ms);
+		else
+			sprintf(buf, "%4x %02d:%02d:%02d.%03d ", tid, h, m, s, ms);
+		string date_s = buf + str;
+		string time_str;
+		if (ostream *pSecondStream = (ostream*)CTrace::s_pSecondStream) {
+			sprintf(buf, "%4x %02d:%02d:%02d.%03d ", tid, h, m, s, ms);
+			time_str = buf + str;
+		}
+
 		EXT_LOCK (*s_pCs) {
 	#if !UCFG_WDM
 			TraceBlocker traceBlocker;
 			if (traceBlocker.Trace)
 	#endif
-				os.write(s.data(), s.size()).flush();
+			{
+				m_pos->write(date_s.data(), date_s.size()).flush();
+				if (ostream *pSecondStream = (ostream*)CTrace::s_pSecondStream)
+					pSecondStream->write(time_str.data(), time_str.size()).flush();
+			}
 		}
 	}
 }
 
 ostream& CTraceWriter::Stream() {
-	if (m_bLog)
-		return m_os;
-	return s_nullStream;
+	return m_pos ? static_cast<ostream&>(m_os) : s_nullStream;
 }
 
 void CTraceWriter::VPrintf(const char* fmt, va_list args) {
-	if (m_bLog) {
+	if (m_pos) {
 		char buf[1000];
 #if UCFG_USE_POSIX
         vsnprintf(buf, sizeof(buf), fmt, args );
@@ -689,7 +749,7 @@ void CTraceWriter::VPrintf(const char* fmt, va_list args) {
 }
 
 void CTraceWriter::Printf(const char* fmt, ...) {
-	if (m_bLog) {
+	if (m_pos) {
 		va_list args;
         va_start(args, fmt);
 		VPrintf(fmt, args);
@@ -716,7 +776,7 @@ String CEscape::Escape(CEscape& esc, RCString s) {
 	size_t size = blob.Size;
 	ostringstream os;
 	const char *p = (const char*)blob.constData(); 
-	for (int i=0; i<size; ++i) {
+	for (size_t i=0; i<size; ++i) {
 		char ch = p[i];
 		esc.EscapeChar(os, ch);
 	}

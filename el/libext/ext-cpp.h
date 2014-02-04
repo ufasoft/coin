@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #if UCFG_STDSTL
@@ -33,6 +25,12 @@
 #	define EXT_HEADER_DYNAMIC_BITSET EXT_HEADER(dynamic_bitset)
 #else
 #	define EXT_HEADER_DYNAMIC_BITSET <el/stl/dynamic_bitset>
+#endif
+
+#if UCFG_STD_FILESYSTEM
+#	define EXT_HEADER_FILESYSTEM EXT_HEADER(filesystem)
+#else
+#	define EXT_HEADER_FILESYSTEM <el/stl/filesystem>
 #endif
 
 #define EXT_HASH_VALUE_NS Ext
@@ -109,8 +107,6 @@ AFX_API bool AFXAPI AfxAssertFailedLine(const char* sexp, const char*fileName, i
 #		define ASSERT assert
 #	endif
 
-#include "interlocked.h"
-
 
 #if (!UCFG_CPP11 /*!!! || defined(_MSC_VER) && _MSC_VER >= 1600 */) && !defined(__GXX_EXPERIMENTAL_CXX0X__) && UCFG_STDSTL
 #	define BEGIN_STD_TR1 namespace std { namespace tr1 {
@@ -136,7 +132,11 @@ AFX_API bool AFXAPI AfxAssertFailedLine(const char* sexp, const char*fileName, i
 #	endif
 #endif
 
-
+#if !UCFG_CPP14_NOEXCEPT
+#	define noexcept throw()
+#endif
+#	include "interlocked.h"
+#undef noexcept
 
 #if UCFG_STL
 
@@ -217,7 +217,12 @@ AFX_API bool AFXAPI AfxAssertFailedLine(const char* sexp, const char*fileName, i
 
 #endif //  UCFG_STL
 
+#if !UCFG_CPP14_NOEXCEPT
+#	define noexcept throw()
+#endif
+
 #include "exthelpers.h"		// uses std::swap() from <utility>
+
 
 namespace Ext {
 	class CCriticalSection;
@@ -227,15 +232,7 @@ namespace Ext {
 		virtual R operator()(P1 p1) =0;
 	};
 
-	class NonCopiable {
-	protected:
-		NonCopiable() {}
-	private:
-		NonCopiable(const NonCopiable&);	
-		NonCopiable& operator=(const NonCopiable&);
-	};
-
-}
+} // Ext::
 
 #if UCFG_CPP11 && UCFG_WCE
 #	include <el/stl/type_traits>
@@ -314,10 +311,10 @@ typename enable_if<Ext::is_movable<T>::value, Ext::rv<T>&>::type move(T& x) {
 #		include <el/stl/clocale>
 #		include <el/stl/ext-locale.h>
 #	endif
+#	include "ext-hash.h"
 #	if !UCFG_STDSTL
 #		include <el/stl/extstl.h>
 #	endif
-#	include "ext-hash.h"
 //#	undef NS
 #endif
 
@@ -363,7 +360,8 @@ public:
 	void* __stdcall operator new(size_t nSize);
 	void __stdcall operator delete(void*);
 
-	virtual ~CNoTrackObject() {}
+	CNoTrackObject();
+	virtual ~CNoTrackObject();
 };
 
 #if UCFG_FRAMEWORK && !defined(_CRTBLD)
@@ -491,7 +489,7 @@ template <> struct is_scalar<std::nullptr_t> { //!!! bug in VC
 } // std::
 #endif // UCFG_MSC_VERSION <= 1800
 
-#if !UCFG_STD_EXCHANGE
+#if !UCFG_STD_EXCHANGE && !UCFG_MINISTL
 namespace std {
 template <typename T, typename U>
 inline T Do_exchange(T& obj, const U EXT_REF new_val, false_type) {
@@ -548,7 +546,7 @@ namespace Ext {
 
 using std::exchange;
 
-#if UCFG_FULL
+#if UCFG_FULL && !UCFG_MINISTL
 template <class T, size_t MAXSIZE>
 class vararray : public std::array<T, MAXSIZE> {
 	typedef std::array<T, MAXSIZE> base;
@@ -652,14 +650,14 @@ class CAlloc {
 public:
 #if UCFG_INDIRECT_MALLOC
 	EXT_DATA static void * (AFXAPI *s_pfnMalloc)(size_t size);
-	EXT_DATA static void (AFXAPI *s_pfnFree)(void *p);
+	EXT_DATA static void (AFXAPI *s_pfnFree)(void *p) noexcept ;
 	EXT_DATA static size_t (AFXAPI *s_pfnMSize)(void *p);
 	EXT_DATA static void * (AFXAPI *s_pfnRealloc)(void *p, size_t size);
 	EXT_DATA static void * (AFXAPI *s_pfnAlignedMalloc)(size_t size, size_t align);
 	EXT_DATA static void (AFXAPI *s_pfnAlignedFree)(void *p);
 #endif
 	static void * AFXAPI Malloc(size_t size);
-	static void AFXAPI Free(void *p);
+	static void AFXAPI Free(void *p) noexcept ;
 	static size_t AFXAPI MSize(void *p);
 	static void * AFXAPI Realloc(void *p, size_t size);
 	static void * AFXAPI AlignedMalloc(size_t size, size_t align);
@@ -685,7 +683,7 @@ public:
 #endif
 	}
 
-	inline void __fastcall Free(void *p) {
+	inline void __fastcall Free(void *p) noexcept {
 #if UCFG_INDIRECT_MALLOC
 		CAlloc::s_pfnFree(p);
 #else
@@ -1068,27 +1066,26 @@ namespace Ext {
 #if !UCFG_MINISTL
 class EXT_CLASS CTraceWriter {
 public:
-	CTraceWriter(int level, const char* funname = 0);
-	~CTraceWriter();
-	//		operator std::ostream&();
-	std::ostream& Stream();
+	CTraceWriter(int level, const char* funname = 0) noexcept;
+	CTraceWriter(std::ostream *pos) noexcept;
+	~CTraceWriter() noexcept;
+	std::ostream& Stream() noexcept;
 	void VPrintf(const char* fmt, va_list args);
 	void Printf(const char* fmt, ...);
 	static CTraceWriter& AFXAPI CreatePreObject(char *obj, int level, const char* funname);
 	static void AFXAPI StaticPrintf(int level, const char* funname, const char* fmt, ...);
 private:
 	std::ostringstream m_os;
-	bool m_bLog;
+	std::ostream *m_pos;
+	bool m_bPrintDate;
 
+	void Init(const char* funname);
 };
 #endif // !UCFG_MINISTL
 
-
-#ifdef WIN32
-
-AFX_API int AFXAPI Win32Check(LRESULT i);
-AFX_API bool AFXAPI Win32Check(BOOL b, DWORD allowableError);
-
+#if UCFG_WIN32
+	AFX_API int AFXAPI Win32Check(LRESULT i);
+	AFX_API bool AFXAPI Win32Check(BOOL b, DWORD allowableError);
 #endif
 
 template <size_t n>

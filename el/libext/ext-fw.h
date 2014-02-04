@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 
@@ -68,10 +60,11 @@ const int NOTIFY_PROBABILITY = 1000;
 
 #if UCFG_USE_POSIX
 
-class DlException : public Exc {
+class DlException : public Exception {
+	typedef Exception base;
 public:
 	DlException()
-		:	Exc(E_EXT_Dynamic_Library, dlerror())
+		:	base(E_EXT_Dynamic_Library, dlerror())
 	{
 	}
 };
@@ -231,8 +224,8 @@ struct CTimesInfo {
 
 #endif
 
-class IOExc : public Exc {
-	typedef Exc base;
+class IOExc : public Exception {
+	typedef Exception base;
 public:
 	String FileName;
 
@@ -248,10 +241,10 @@ public:
 	}
 };
 
-class FileNotFoundExc : public IOExc {
+class FileNotFoundException : public IOExc {
 	typedef IOExc base;
 public:
-	FileNotFoundExc()
+	FileNotFoundException()
 		:	base(HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
 	{}
 };
@@ -264,19 +257,11 @@ public:
 	{}
 };
 
-class DirectoryNotFoundExc : public Exc {
-	typedef Exc base;
+class DirectoryNotFoundExc : public Exception {
+	typedef Exception base;
 public:
 	DirectoryNotFoundExc()
 		:	base(HRESULT_OF_WIN32(ERROR_PATH_NOT_FOUND))
-	{}
-};
-
-class WebExc : public Exc {
-	typedef Exc base;
-public:
-	WebExc(HRESULT hr, RCString msg = nullptr)
-		:	base(hr, msg)
 	{}
 };
 
@@ -590,6 +575,7 @@ public:
 	}
 
 	EXT_API void Open(RCString path, FileMode mode, FileAccess access = FileAccess::ReadWrite, FileShare share = FileShare::None);
+	size_t Read(void *buf, size_t count) const override;
 	void ReadBuffer(void *buf, size_t count) const override;
 	void WriteBuffer(const void *buf, size_t count) override;
 	void Close() const override;
@@ -840,7 +826,7 @@ public:
 
 #endif
 
-class EXTCLASS Path {
+class /*!!!R EXTCLASS*/ Path {
 public:
 	struct CSplitPath {
 		String m_drive,
@@ -1197,7 +1183,7 @@ public:
 	virtual hashval ComputeHash(const ConstBuf& mb);
 
 	virtual void InitHash(void *dst) {}
-	virtual void HashBlock(void *dst, const byte *src, UInt64 counter) {}
+	virtual void HashBlock(void *dst, const byte *src, UInt64 counter) noexcept {}
 protected:
 	CBool Is64Bit;
 };
@@ -1334,8 +1320,10 @@ public:
 	VarValue(Int64 v);
 	VarValue(int v);
 	VarValue(double v);
-	VarValue(bool v);
+	explicit VarValue(bool v);
 	VarValue(RCString v);
+	VarValue(const char *p);
+	VarValue(const std::vector<VarValue>& ar);
 
 	bool operator==(const VarValue& v) const;
 	bool operator!=(const VarValue& v) const { return !operator==(v); }
@@ -1360,6 +1348,9 @@ public:
 	void SetType(VarType typ);
 	std::vector<String> Keys() const { return Impl().Keys(); }
 private:
+	template <typename T>
+	VarValue(const T*);							// to prevent VarValue(bool) ctor for pointers
+
 	VarValueObj& Impl() const {
 		if (!m_pimpl)
 			Throw(E_INVALIDARG);
@@ -1500,6 +1491,136 @@ public:
 #endif
 
 
+struct ProcessStartInfo {
+	std::map<String, String> EnvironmentVariables;
+	String FileName,
+		Arguments,
+		WorkingDirectory;
+	CBool CreateNewWindow,
+		CreateNoWindow,
+		RedirectStandardInput,
+		RedirectStandardOutput,
+		RedirectStandardError;
+	DWORD Flags;
+
+	ProcessStartInfo(RCString fileName = String(), RCString arguments = String());
+};
+
+class ProcessObj : public SafeHandle { //!!!
+	typedef SafeHandle base;
+public:
+	typedef Interlocked interlocked_policy;
+
+	ProcessStartInfo StartInfo;
+
+#if UCFG_EXTENDED && !UCFG_WCE
+protected:
+	File m_fileIn, m_fileOut, m_fileErr;
+public:
+	FileStream StandardInput,
+		StandardOutput,
+		StandardError;
+#endif
+public:
+	ProcessObj();
+	ProcessObj(HANDLE handle, bool bOwn = false);
+
+	DWORD get_ID() const;
+	DWORD get_ExitCode() const;
+	bool get_HasExited();
+	void Kill();
+	void WaitForExit(DWORD ms = INFINITE);
+
+#if UCFG_WIN32
+	ProcessObj(pid_t pid, DWORD dwAccess = MAXIMUM_ALLOWED, bool bInherit = false);
+
+	bool Start();
+	static EXT_API Process AFXAPI Start(ProcessStartInfo psi);
+
+	EXT_API std::unique_ptr<CWinThread> Create(RCString commandLine, DWORD dwFlags = 0, const char *dir = 0, bool bInherit = false, STARTUPINFO *psi = 0);
+
+	void Terminate(DWORD dwExitCode)  {	Win32Check(::TerminateProcess(HandleAccess(*this), dwExitCode)); }
+
+	AFX_API CTimesInfo get_Times() const;
+	DEFPROP_GET(CTimesInfo, Times);
+
+	HWND get_MainWindowHandle() const;
+	DEFPROP_GET(HWND, MainWindowHandle);
+
+#if !UCFG_WCE
+	AFX_API DWORD get_Version() const;
+	DEFPROP_GET(DWORD, Version);
+
+	bool get_IsWow64();
+	DEFPROP_GET(bool, IsWow64);
+
+	DWORD get_PriorityClass() { return Win32Check(::GetPriorityClass(HandleAccess(*this))); }
+	void put_PriorityClass(DWORD pc) { Win32Check(::SetPriorityClass(HandleAccess(*this), pc)); }
+
+	String get_MainModuleFileName();
+	DEFPROP_GET(String, MainModuleFileName);
+#endif
+
+	void FlushInstructionCache(LPCVOID base = 0, SIZE_T size = 0) { Win32Check(::FlushInstructionCache(HandleAccess(*this), base, size)); }
+
+	DWORD VirtualProtect(void *addr, size_t size, DWORD flNewProtect);
+	MEMORY_BASIC_INFORMATION VirtualQuery(const void *addr);
+	SIZE_T ReadMemory(LPCVOID base, LPVOID buf, SIZE_T size);
+	SIZE_T WriteMemory(LPVOID base, LPCVOID buf, SIZE_T size); 	
+#endif // UCFG_WIN32
+protected:
+	bool Valid() const override {
+		return DangerousGetHandleEx() != 0;
+	}
+
+	void CommonInit();
+
+	int m_stat_loc;
+	mutable CInt<DWORD> m_pid;
+};
+
+
+class Process : public Pimpl<ProcessObj> {
+	typedef Process class_type;
+public:
+	static Process AFXAPI GetProcessById(pid_t pid);
+	static Process AFXAPI GetCurrentProcess();
+
+	ProcessStartInfo& StartInfo() { return m_pimpl->StartInfo; }
+
+	static Process AFXAPI Start(const ProcessStartInfo& psi);
+
+#if UCFG_EXTENDED && !UCFG_WCE
+	Stream& StandardInput() { return m_pimpl->StandardInput; }
+#endif
+
+	DWORD get_ID() const { return m_pimpl->get_ID(); }
+	DEFPROP_GET(DWORD, ID);
+
+	DWORD get_ExitCode() const { return m_pimpl->get_ExitCode(); }
+	DEFPROP_GET(DWORD, ExitCode);
+
+	void Kill() { m_pimpl->Kill(); }
+	void WaitForExit(DWORD ms = INFINITE) { m_pimpl->WaitForExit(ms); }
+
+	bool get_HasExited() { return m_pimpl->get_HasExited(); }
+	DEFPROP_GET(bool, HasExited);
+
+	String get_ProcessName();
+	DEFPROP_GET(String, ProcessName);
+
+	static std::vector<Process> AFXAPI GetProcesses();
+	static std::vector<Process> AFXAPI GetProcessesByName(RCString name);
+
+#if UCFG_WIN32_FULL
+	DWORD get_PriorityClass() { return m_pimpl->get_PriorityClass(); }
+	void put_PriorityClass(DWORD pc) { m_pimpl->put_PriorityClass(pc); }
+	DEFPROP(DWORD, PriorityClass);
+
+	void GenerateConsoleCtrlEvent(DWORD dwCtrlEvent = 1);		// CTRL_BREAK_EVENT==1
+#endif
+
+};
 
 
 } // Ext::
