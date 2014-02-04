@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -21,10 +13,74 @@ static struct CCoinutilInit {
 	}
 } s_coinutilInit;
 
+HashAlgo StringToAlgo(RCString s) {
+	String ua = s.ToUpper();
+   	if (ua == "SHA256")
+   		return HashAlgo::Sha256;
+   	else if (ua == "SCRYPT")
+		return HashAlgo::SCrypt;
+   	else if (ua == "PRIME")
+   		return HashAlgo::Prime;
+   	else if (ua == "MOMENTUM")
+   		return HashAlgo::Momentum;
+   	else if (ua == "SOLID")
+   		return HashAlgo::Solid;
+   	else if (ua == "METIS")
+   		return HashAlgo::Metis;
+   	else
+   		throw Exception(E_INVALIDARG, "Unknown hashing algorithm "+s);
+}
+
+void BitsToTargetBE(UInt32 bits, byte target[32]) {
+	memset(target, 0, 32);
+	int off = byte(bits>>24)-3;
+	if (off < 30 && off >= -2)
+		target[29-off] = byte(bits>>16);
+	if (off < 31 && off >= -1)
+		target[30-off] = byte(bits>>8);
+	if (off < 32 && off >= 0)
+		target[31-off] = byte(bits);
+}
+
 HashValue::HashValue(const ConstBuf& mb) {
 	if (mb.Size != 32)
 		Throw(E_INVALIDARG);
 	memcpy(data(), mb.P, mb.Size);
+}
+
+HashValue HashValue::FromDifficultyBits(UInt32 bits) {
+	HashValue r;
+	BitsToTargetBE(bits, r.data());
+	std::reverse(r.data(), r.data()+32);
+	return r;
+}
+
+UInt32 HashValue::ToDifficultyBits() const {
+	int i = 31;
+	for (; i>=3; --i) {
+		if (data()[i] || (data()[i-1] & 0x80))
+			break;
+	}
+	return UInt32(((i+1) << 24) | (int(data()[i]) << 16) | (int(data()[i-1]) << 8) | int(data()[i-2]));
+}
+
+HashValue HashValue::FromShareDifficulty(double difficulty, HashAlgo algo) {
+	UInt64 leTarget;
+	HashValue r;
+	switch (algo) {
+	case HashAlgo::Momentum:
+		memcpy(r.data()+24, &(leTarget = htole(UInt64(0x00000000FFFF0000ULL / difficulty))), 8);
+		break;
+	case HashAlgo::SCrypt:
+		memcpy(r.data()+23, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+		break;
+	case HashAlgo::Metis:
+		memcpy(r.data()+22, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+		break;
+	default:
+		memcpy(r.data()+21, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+	}
+	return r;
 }
 
 BlockHashValue::BlockHashValue(const ConstBuf& mb) {
@@ -132,7 +188,13 @@ Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
 }
 
 void BlockBase::WriteHeader(BinaryWriter& wr) const {
-	wr << Ver << PrevBlockHash << MerkleRoot() << UInt32(Timestamp.UnixEpoch) << DifficultyTargetBits << Nonce;
+	wr << Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << DifficultyTargetBits << Nonce;
+}
+
+HashValue BlockBase::GetHash() const {
+	MemoryStream ms;
+	WriteHeader(BinaryWriter(ms).Ref());
+	return Coin::Hash(ms);
 }
 
 Blob Swab32(const ConstBuf& buf) {
@@ -213,17 +275,14 @@ ShaConstants GetShaConstants() {
 	return r;
 }
 
-void BitsToTargetBE(UInt32 bits, byte target[32]) {
-	memset(target, 0, 32);
-	int off = byte(bits>>24)-3;
-	if (off < 30 && off >= -2)
-		target[29-off] = byte(bits>>16);
-	if (off < 31 && off >= -1)
-		target[30-off] = byte(bits>>8);
-	if (off < 32 && off >= 0)
-		target[31-off] = byte(bits);
+pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json) {
+	if (VarValue vNonceRange = json["noncerange"]) {
+		Blob blob = Blob::FromHexString(vNonceRange.ToString());
+		if (blob.Size == 8)
+			return make_pair(betoh(*(UInt32*)blob.constData()), betoh(*(UInt32*)(blob.constData()+4)));
+	}
+	return pair<UInt32, UInt32>(0, 0xFFFFFFFF);
 }
-
 
 
 } // Coin::

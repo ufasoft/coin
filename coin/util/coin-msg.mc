@@ -364,7 +364,7 @@ the previous-block is no longer the one the server intends to build on
 MessageId=
 SymbolicName= E_COIN_MINER_STALE_WORK
 Language=E
-the work this block was based on is no longer accepted
+Stale share, the work this block was based on is no longer accepted
 .
 
 MessageId=
@@ -467,6 +467,146 @@ MessageId=
 SymbolicName= E_COIN_MINER_FPGA_PROTOCOL
 Language=E
 FPGA hardware protocol violation, try to RESET the device
+.
+
+MessageId=
+SymbolicName= E_COIN_BlockNotFound
+Language=E
+Block Not Found
+.
+
+MessageId=
+SymbolicName= E_COIN_AllowedErrorDuringInitialDownload
+Language=E
+Allowed Error during Initial Download
+.
+
+
+MessageId=1001
+SymbolicName= E_COIN_RPC_MISC_ERROR
+Language=E
+Exception thrown in command handling
+.
+
+MessageId=1002
+SymbolicName= E_COIN_RPC_FORBIDDEN_BY_SAFE_MODE
+Language=E
+Server is in safe mode, and command is not allowed in safe mode
+.
+
+MessageId=1003
+SymbolicName= E_COIN_RPC_TYPE_ERROR
+Language=E
+Unexpected type was passed as parameter
+.
+
+
+MessageId=1004
+SymbolicName= E_COIN_RPC_WALLET_ERROR
+Language=E
+Unspecified problem with wallet (key not found etc.)
+.
+
+MessageId=1005
+SymbolicName= E_COIN_RPC_INVALID_ADDRESS_OR_KEY
+Language=E
+Invalid address or key
+.
+
+MessageId=1006
+SymbolicName= E_COIN_RPC_WALLET_INSUFFICIENT_FUNDS
+Language=E
+Not enough funds in wallet or account
+.
+
+MessageId=1007
+SymbolicName= E_COIN_RPC_OUT_OF_MEMORY
+Language=E
+Ran out of memory during operation
+.
+
+MessageId=1008
+SymbolicName= E_COIN_RPC_INVALID_PARAMETER
+Language=E
+Invalid, missing or duplicate parameter
+.
+
+MessageId=1009
+SymbolicName= E_COIN_RPC_CLIENT_NOT_CONNECTED
+Language=E
+Bitcoin is not connected
+.
+
+MessageId=1010
+SymbolicName= E_COIN_RPC_CLIENT_IN_INITIAL_DOWNLOAD
+Language=E
+Still downloading initial blocks
+.
+
+MessageId=1011
+SymbolicName= E_COIN_RPC_WALLET_INVALID_ACCOUNT_NAME
+Language=E
+Invalid account name
+.
+
+MessageId=1012
+SymbolicName= E_COIN_RPC_WALLET_KEYPOOL_RAN_OUT
+Language=E
+Keypool ran out, call keypoolrefill first
+.
+
+MessageId=1013
+SymbolicName= E_COIN_RPC_WALLET_UNLOCK_NEEDED
+Language=E
+Enter the wallet passphrase with walletpassphrase first
+.
+
+MessageId=1014
+SymbolicName= E_COIN_RPC_WALLET_PASSPHRASE_INCORRECT
+Language=E
+The wallet passphrase entered was incorrect
+.
+
+MessageId=1015
+SymbolicName= E_COIN_RPC_WALLET_WRONG_ENC_STATE
+Language=E
+Command given in wrong wallet encryption state (encrypting an encrypted wallet etc.)
+.
+
+MessageId=1016
+SymbolicName= E_COIN_RPC_WALLET_ENCRYPTION_FAILED
+Language=E
+Failed to encrypt the wallet
+.
+
+MessageId=1017
+SymbolicName= E_COIN_RPC_WALLET_ALREADY_UNLOCKED
+Language=E
+Wallet is already unlocked
+.
+
+MessageId=1020
+SymbolicName= E_COIN_RPC_DATABASE_ERROR
+Language=E
+Database error
+.
+
+MessageId=1022
+SymbolicName= E_COIN_RPC_DESERIALIZATION_ERROR
+Language=E
+Error parsing or validating structure in raw format
+.
+
+MessageId=1100
+SymbolicName= E_COIN_UNAUTHORIZED_WORKER
+Language=E
+Unauthorized worker
+.
+
+MessageId=
+SymbolicName= E_COIN_CURRENCY_NOT_SUPPORTED
+Language=E
+This currency not supported
 .
 
 MessageId=

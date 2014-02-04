@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/crypto/hash.h>
@@ -40,7 +32,7 @@ using namespace Ext::Crypto;
 
 #if UCFG_COIN_LIB_DECLS
 #	ifdef UCFG_EXPORT_COIN
-#		define COIN_CLASS AFX_CLASS_EXPORT
+#		define COIN_CLASS // AFX_CLASS_EXPORT
 #		define COIN_EXPORT DECLSPEC_DLLEXPORT
 #	else
 #		define COIN_CLASS
@@ -61,9 +53,12 @@ ENUM_CLASS(HashAlgo) {
 	Sha256,
 	SCrypt,
 	Prime,
-	Solid
+	Momentum,
+	Solid,
+	Metis
 } END_ENUM_CLASS(HashAlgo);
 
+HashAlgo StringToAlgo(RCString s);
 
 class HashValue : public std::array<byte, 32> {
 public:
@@ -77,8 +72,14 @@ public:
 
 	HashValue(const ConstBuf& mb);
 	explicit HashValue(RCString s);
+	static HashValue FromDifficultyBits(UInt32 bits);
+	UInt32 ToDifficultyBits() const;
+	static HashValue FromShareDifficulty(double difficulty, HashAlgo algo);
 
 	bool operator<(const HashValue& v) const;
+	bool operator>(const HashValue& v) const { return v < *this; }
+	bool operator<=(const HashValue& v) const { return !(v < *this); }
+	bool operator>=(const HashValue& v) const { return !operator<(v); }
 
 	static HashValue Combine(const HashValue& h1, const HashValue& h2);
 
@@ -90,6 +91,9 @@ public:
 		rd.Read(&_self[0], size());
 	}
 };
+
+
+COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
 
 class BlockHashValue : public HashValue {
 	typedef HashValue base;
@@ -110,12 +114,6 @@ public:
 
 	explicit HashValue160(RCString s);
 };
-
-} namespace std { template<> struct hash<Coin::HashValue160> {
-	size_t operator()(const Coin::HashValue160& v) const {
-		return *(const size_t*)v.data();
-	}
-}; } namespace Coin {
 
 
 class ReducedHashValue {
@@ -173,16 +171,6 @@ private:
 };
 
 
-} namespace std { template<> struct hash<Coin::HashValue> {
-	size_t operator()(const Coin::HashValue& v) const {
-		return *(const size_t*)v.data();
-	}
-}; } namespace Coin {
-
-
-COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
-
-
 class ReducedBlockHash {
 public:
 	ReducedBlockHash(const HashValue& hash)
@@ -207,6 +195,9 @@ COIN_UTIL_EXPORT Blob CalcSha256Midstate(const ConstBuf& mb);
 
 COIN_UTIL_EXPORT  HashValue ScryptHash(const ConstBuf& mb);
 HashValue SolidcoinHash(const ConstBuf& cbuf);
+HashValue MetisHash(const ConstBuf& cbuf);
+
+bool MomentumVerify(const HashValue& hash, UInt32 a, UInt32 b);
 
 struct SCoinMessageHeader {
 	UInt32 Magic;
@@ -282,7 +273,8 @@ public:
 	{}
 
 	virtual void WriteHeader(BinaryWriter& wr) const;
-	virtual Coin::HashValue MerkleRoot(bool bSave=true) const =0;
+	virtual Coin::HashValue MerkleRoot(bool bSave = true) const =0;
+	virtual Coin::HashValue GetHash() const;
 };
 
 COIN_UTIL_EXPORT Blob Swab32(const ConstBuf& buf);
@@ -296,32 +288,6 @@ typedef MerkleTree<HashValue, PFN_Combine> CCoinMerkleTree;
 BinaryWriter& operator<<(BinaryWriter& wr, const CCoinMerkleBranch& branch);
 const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch);
 
-/*!!!R
-class COIN_UTIL_CLASS MerkleBranch {
-public:
-	vector<HashValue> Vec;
-	Int32 Index;
-
-	MerkleBranch()
-		:	Index(-1)
-	{}
-
-	void Write(BinaryWriter& wr) const;
-	void Read(const BinaryReader& rd);
-	HashValue Apply(HashValue hash) const;
-};
-
-class MerkleTree : public vector<Coin::HashValue> {
-	typedef vector<Coin::HashValue> base;
-public:
-	MerkleTree(const vector<Coin::HashValue>& v)
-		:	base(v)
-	{}
-
-	MerkleBranch GetBranch(int idx);
-};
-*/
-
 struct ShaConstants {
 	const UInt32 *pg_sha256_hinit,
 		*pg_sha256_k;
@@ -332,5 +298,31 @@ ShaConstants GetShaConstants();
 
 void BitsToTargetBE(UInt32 bits, byte target[32]);
 
+pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json);
+
+static const int PASSWORD_ENCRYPT_ROUNDS_A = 1000,
+			PASSWORD_ENCRYPT_ROUNDS_B = 100*1000;
+
 } // Coin::
+
+namespace std {
+
+template<> struct hash<Coin::HashValue> {
+	size_t operator()(const Coin::HashValue& v) const {
+		return *(size_t*)v.data();
+//		return hash<std::array<byte, 32>>()(v);
+	}
+};
+
+template<> struct hash<Coin::HashValue160> {
+	size_t operator()(const Coin::HashValue160& v) const {
+		return *(size_t*)v.data();
+//		return hash<std::array<byte, 20>>()(v);
+	}
+};
+
+} // std::
+
+
+
 
