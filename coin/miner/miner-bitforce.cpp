@@ -26,11 +26,10 @@ static regex s_reTemparature("TEMP:(.+)");
 class BitforceThread : public SerialDeviceThread {
 	typedef SerialDeviceThread base;
 public:
-	BitforceThread(BitcoinMiner& miner, CThreadRef *tr)
+	BitforceThread(BitcoinMiner& miner, thread_group *tr)
 		:	base(miner, tr)
 	{
 		MsTimeout = DEVICE_TIMEOUT*1000;
-		m_bSleeping = true;
 	}
 
 	void CreateDeviceObject();
@@ -114,7 +113,7 @@ protected:
 				if (reply.Left(12) == "NONCE-FOUND:") {
 					vector<String> nn = reply.Substring(12).Split(",");
 					for (int i=0; i<nn.size(); ++i)
-						Miner.TestAndSubmit(_self, wd, Convert::ToUInt32(nn[i], 16));
+						Miner.TestAndSubmit(wd, Convert::ToUInt32(nn[i], 16));
 				} else if (reply != "NO-NONCE") {
 					*Miner.m_pTraceStream << Name << " Unexpected reply: " << reply << endl;
 					break;
@@ -130,7 +129,7 @@ class BitforceDevice : public ComputationDevice {
 public:
 	CPointer<BitforceThread> m_thread;
 
-	void Start(BitcoinMiner& miner, CThreadRef *tr) override {
+	void Start(BitcoinMiner& miner, thread_group *tr) override {
 		m_thread->m_owner = tr;
 		miner.Threads.push_back(m_thread.get());
 		m_thread->m_evStartMining.Set();
@@ -148,7 +147,7 @@ void BitforceThread::CreateDeviceObject() {
 		Miner.WorkingDevices.insert(m_devpath);
 		Miner.TestedDevices.erase(m_devpath);
 		if (AutoStart) {
-			*Miner.m_pTraceStream << "\rAttached device: " << dev->Description << endl;
+			*Miner.m_pTraceStream << "Attached device: " << dev->Description << endl;
 			dev->Start(Miner, Miner.m_tr);
 		}
 	}

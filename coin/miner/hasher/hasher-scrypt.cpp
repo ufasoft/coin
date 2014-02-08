@@ -6,48 +6,40 @@
 # General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
 ##########################################################################################################################################################################*/
 
-#pragma once
+#include <el/ext.h>
 
 #include "miner.h"
 
 namespace Coin {
 
-class StopException : public Exception {
-};
-
-class SerialDeviceThread : public WorkerThreadBase {
-	typedef WorkerThreadBase base;
+class ScryptHasher : public Hasher {
 public:
-	String m_devpath;
-	CBool Detected;
-	CBool AutoStart;
-	AutoResetEvent m_evDetected, m_evStartMining;
-	int MsTimeout;
+	ScryptHasher()
+		:	Hasher("scrypt", HashAlgo::SCrypt)
+	{}
 
-	SerialDeviceThread(BitcoinMiner& miner, thread_group *tr)
-		:	base(miner, tr)
-		,	m_file(0)
-		,	MsTimeout(1000)
-	{
+	HashValue CalcHash(const ConstBuf& cbuf) override {
+		array<UInt32, 8> res = CalcSCryptHash(cbuf);
+		return HashValue(ConstBuf(res.data(), 32));
 	}
 
-	void Write(const ConstBuf& cbuf);
-	Blob Command(const ConstBuf cmd, size_t replySize);
-	void Stop() override;
-protected:
-	FILE *m_file;
-
-	void CloseFile() {
-		if (FILE *file = exchange(m_file, nullptr))
-			fclose(file);
+#if UCFG_PLATFORM_X64 && UCFG_BITCOIN_ASM
+	void MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, UInt32 *buf, UInt32 nonce) override {
+		for (int i=0; i<UCFG_BITCOIN_NPAR; i+=3, nonce+=3) {
+			SetNonce(buf, nonce);
+			array<array<UInt32, 8>, 3> res3 = CalcSCryptHash_80_3way(buf);
+			for (int j=0; j<3; ++j) {
+				if (HashValue(ConstBuf(res3[j].data(), 32)) <= wd.HashTarget) {
+					if (!miner.TestAndSubmit(&wd, htobe(nonce+j)))
+						*miner.m_pTraceStream << "Found NONCE not accepted by Target" << endl;
+				}
+			}
+		}
 	}
+#endif // UCFG_PLATFORM_X64 && UCFG_BITCOIN_ASM
 
-	virtual void CommunicateDevice() =0;
-	void Execute() override;
-};
-
+} g_scryptHasher;
 
 
 
 } // Coin::
-

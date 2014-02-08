@@ -45,7 +45,7 @@ protected:
 	}
 
 	void OnProcessBlock(const Block& block) override {
-		cerr << "\r " << Eng.ChainParams.Name << " Block " << block.Height << flush;
+		cerr << Eng.ChainParams.Name << " Block " << block.Height << flush;
 	}
 	
 	void OnProcessTx(const Tx& tx) override {}
@@ -113,7 +113,7 @@ public:
 
 class CMinerApp : public CConApp, public BitcoinMiner {
 public:
-	CThreadRef m_tr;		
+	thread_group m_tr;		
 
 	CMinerApp() {
 		FileDescription = VER_FILEDESCRIPTION_STR;
@@ -129,24 +129,23 @@ public:
 	}
 
 	void PrintUsage() {
-		cerr << "Usage: " << Path::GetFileNameWithoutExtension(System.ExeFilePath) << " {-options}"
+		cout << "Usage: " << Path::GetFileNameWithoutExtension(System.ExeFilePath) << " {-options}"
 #if UCFG_BITCOIN_SOLO_MINING
 			" [bitcoin-address | {bitcoin-address chainname}]"
 #endif
 			    "\nOptions:\n"
-#if UCFG_BITCOIN_SOLIDCOIN
-				"  -a scrypt|sha256|prime|solid|<seconds>   hashing algorithm (scrypt, sha256, prime or solid), or time between getwork requests 1..60, default 15\n"
-#else
-				"  -a scrypt|sha256|prime|<seconds>   hashing algorithm (scrypt, sha256 or prime), or time between getwork requests 1..60, default 15\n"
-#endif
+				"  -a ";
+		int nHasher = 0;
+		for (Hasher *p=Hasher::GetRoot(); p; p=p->Next, ++nHasher) {
+			cout << (nHasher ? "|" : "") << p->Name;
+		}
+		cout <<	" |<seconds>   hashing algorithm or time between getwork requests 1..60, default 15\n"
 				"  -A user-agent       Set custom User-agent string in HTTP header, default: Ufasoft bitcoin miner \n"
 				"  -g yes|no           set \'no\' to disable GPU, default \'yes\'\n"
 				"  -h                  this help\n"
 				"  -i index|name       select device from Device List, can be used multiple times, default - all devices\n"
 				"  -I intensity        Intensity of GPU usage [-10..10], default 0\n"
-#if  UCFG_BITCOIN_LONG_POLLING
 				"  -l yes|no           set \'no\' to disable Long-Polling, default \'yes\'\n"
-#endif
 				"  -o url              in form http://user:password@server.tld:port/path, stratum+tcp://server.tld:port, by default http://127.0.0.1:8332\n"
 				"  -t threads          Number of threads for CPU mining, 0..256, by default is number of CPUs (Cores), 0 - disable CPU mining\n"
 #if UCFG_BITCOIN_THERMAL_CONTROL
@@ -174,10 +173,7 @@ public:
 
 		vector<String> selectedDevs;
 
-		for (int arg; (arg = getopt(Argc, Argv, "a:A:g:hi:I:"
-#if  UCFG_BITCOIN_LONG_POLLING
-			"l:"
-#endif
+		for (int arg; (arg = getopt(Argc, Argv, "a:A:g:hi:I:l:"
 #if UCFG_BITCOIN_THERMAL_CONTROL
 			"T:"
 #endif
@@ -194,25 +190,8 @@ public:
 						PrintUsage();
 						return;
 					}
-				} else if (String(optarg) == "scrypt")
-					HashAlgo = Coin::HashAlgo::SCrypt;
-				else if (String(optarg) == "sha256")
-					HashAlgo = Coin::HashAlgo::Sha256;
-				else if (String(optarg) == "prime")
-					HashAlgo = Coin::HashAlgo::Prime;
-#if UCFG_BITCOIN_SOLIDCOIN
-				else if (String(optarg) == "solid")
-					HashAlgo = Coin::HashAlgo::Solid;
-#endif
-				else {
-#if UCFG_BITCOIN_SOLIDCOIN
-					cerr << "\nERROR: Unknown hashing algorithm, should be scrypt, sha256 or solid\n" << endl;
-#else
-					cerr << "\nERROR: Unknown hashing algorithm, should be scrypt or sha256\n" << endl;
-#endif
-					PrintUsage();
-					return;
-				}
+				} else
+					HashAlgo = StringToAlgo(optarg);
 				break;
 			case 'A':
 				UserAgentString = optarg;
@@ -231,12 +210,10 @@ public:
 			case 'I':
 				SetIntensity(atoi(optarg));
 				break;
-#if  UCFG_BITCOIN_LONG_POLLING
 			case 'l':
 				if (String(optarg) == "no")
 					m_bLongPolling = false;
 				break;
-#endif
 			case 'o':
 				MainBitcoinUrl = optarg;
 				bMine = true;
@@ -281,10 +258,17 @@ public:
 		}
 #endif
 
-		if (Coin::HashAlgo::Prime == HashAlgo)
+		switch (HashAlgo) {
+		case Coin::HashAlgo::Sha3:
+		case Coin::HashAlgo::Prime:
+		case Coin::HashAlgo::Momentum:
+		case Coin::HashAlgo::Metis:
+		case Coin::HashAlgo::Solid:
 			m_bTryGpu = false;
-		if (Coin::HashAlgo::Sha256 != HashAlgo)
+		case Coin::HashAlgo::SCrypt:
 			m_bTryFpga = false;
+			break;
+		}
 
 		BitcoinMiner *miner = this;
 
@@ -335,7 +319,7 @@ public:
 				String s = selectedDevs[i];
 				if (int idx = atoi(s)) {
 					if (idx > Devices.size())
-						Throw(E_FAIL);
+						Throw(E_INVALIDARG);
 					devices.push_back(Devices[idx-1]);
 				} else {
 					for (int j=0; j<Devices.size(); ++j) {
@@ -349,6 +333,12 @@ public:
 			Devices = devices;
 		}
 
+#if UCFG_TRC
+		static ofstream s_log("/var/log/miner.log");
+		CTrace::s_pOstream = &s_log;
+		CTrace::s_nLevel = 0x30000;
+#endif
+
 #if UCFG_COIN_MINER_SERVICE
 		try {
 			DBG_LOCAL_IGNORE_WIN32(ERROR_ACCESS_DENIED);
@@ -356,9 +346,9 @@ public:
 
 			RunMinerAsService(*miner);
 			return;
-		} catch (AccessDeniedExc) {
+		} catch (AccessDeniedException) {
 		} catch (RCExc ex) {
-			if (ex.HResult != HRESULT_FROM_WIN32(ERROR_FAILED_SERVICE_CONTROLLER_CONNECT))
+			if (HResultInCatch(ex) != HRESULT_FROM_WIN32(ERROR_FAILED_SERVICE_CONTROLLER_CONNECT))
 				throw;
 		}		
 #endif
@@ -381,16 +371,19 @@ public:
 		while (!s_bSigBreak) {
 			Thread::Sleep(2000);			
 			ostringstream os;
-			os << "\r" << setprecision(4);
+			os << setprecision(4);
 			if (miner->HashAlgo == Coin::HashAlgo::Prime)
-				os << (int)Speed << " Prime";
+				os << left << setw(4) << (int)Speed << " Prime";
 			else if (Speed < 100000)
-				os << Speed/1000 << " kHash";
+				os << Speed/1000 << " kH";
 			else if (Speed < 100000000)
-				os << Speed/1000000 << " MHash";
+				os << Speed/1000000 << " MH";
 			else
-				os << Speed/1000000000 << " GHash";
-			os << "/s " << String(' ' , 20 - int(os.tellp()));
+				os << Speed/1000000000 << " GH";
+			os << "/s ";
+			if (miner->HashAlgo == Coin::HashAlgo::Prime)
+				os << "  " << setprecision(2) << CPD << " CPD ";			
+			os << String(' ' , max(0, 35 - int(os.tellp())));
 
 			struct NTemp {
 				int N;
@@ -406,7 +399,7 @@ public:
 				for (int i=0; i<miner->Devices.size(); ++i) {
 					String name = miner->Devices[i]->Name;
 					if (name == "CPU" && miner->ThreadCount > 0)
-						m["CPU thread"].N = miner->ThreadCount;
+						m["CPU"].N = miner->ThreadCount;
 					else {
 						NTemp& ntemp = m[name];
 						ntemp.N++;
@@ -427,6 +420,7 @@ public:
 			int pos = int(os.tellp());
 			if (pos < 79)
 				os << String(' ' , 79-pos);
+			os << "\r";
 			cerr << os.str() << flush;
 		}
 		miner->Stop();		//!!! we can't stop LongPolling with easy libcurl

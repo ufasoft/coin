@@ -94,11 +94,12 @@ public:
 
 	void SetDevicePortion() override {
 		if (Miner.HashAlgo == HashAlgo::SCrypt) {
-			size_t size = (size_t)min(UInt64(numeric_limits<size_t>::max()), Device.MaxMemAllocSize);
-			DevicePortion = (size >> 17) / UCFG_BITCOIN_NPAR;
-
-			for (UInt64 sizeToUse = Device.GlobalMemSize*2/3; sizeToUse > size; sizeToUse-=size)
-				ScratchBuffers.push_back(cl::Buffer(Ctx, 0, size_t(DevicePortion) * UCFG_BITCOIN_NPAR * 128*1024));
+			size_t size = (size_t)std::min(UInt64(numeric_limits<size_t>::max()), (UInt64)Device.get_MaxMemAllocSize());
+			UInt64 sizeToUse = Device.GlobalMemSize*2/3;
+			DevicePortion = std::max(size_t(std::min(sizeToUse, UInt64(size)) >> 17), size_t(512)) / UCFG_BITCOIN_NPAR;		// Test Data has size 512
+			size_t bufSize = size_t(DevicePortion) * UCFG_BITCOIN_NPAR * 128*1024;
+			for (; sizeToUse >= bufSize; sizeToUse-=bufSize)
+				ScratchBuffers.push_back(cl::Buffer(Ctx, 0, bufSize));
 		} else
 			base::SetDevicePortion();				
 	}
@@ -198,7 +199,7 @@ int OpenclTask::ParseResults() {
 			if (UInt32 nonce = m_bufTest[i]) {
 				++r;
 				if (m_pwt)
-					m_pwt->Miner.TestAndSubmit(*m_pwt, WorkData, nonce);
+					m_pwt->Miner.TestAndSubmit(WorkData, nonce);
 			}
 		}
 		ZeroStruct(m_bufTest);
@@ -242,7 +243,7 @@ ScryptOpenclTask::ScryptOpenclTask(OpenclMiner& clMiner)
 
 {
 	cl_command_queue_properties prop = 0;
-#ifdef _DEBUG
+#ifdef X_DEBUG
 	prop |= CL_QUEUE_PROFILING_ENABLE;
 #endif
 	Queue = cl::CommandQueue(m_clMiner.Ctx, m_clMiner.Device, prop);
@@ -266,7 +267,7 @@ void ScryptOpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt)
 
 		ConstBuf password(data, sizeof data);
 		SHA256 sha;
-		Blob ihash = sha.ComputeHash(password);
+		Blob ihash(sha.ComputeHash(password));
 		const UInt32 *pIhash = (UInt32*)ihash.constData();
 		memcpy(m_ihashes.data()+32*n, pIhash, 32);
 
@@ -303,12 +304,12 @@ int ScryptOpenclTask::ParseResults() {
 	for (int n=0; n<m_npar; ++n) {
 		UInt32 tmp[32];
 		UnShuffleForSalsa(tmp, (UInt32*)(m_iodata.data() + n*128));
-		Blob blob = CalcPbkdf2Hash((UInt32*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1);
+		Blob blob(CalcPbkdf2Hash((UInt32*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1));
 		const UInt32 *p = (const UInt32*)blob.constData();
 		if (p[7] < 0x10000) {
 			++r;
 			if (m_pwt)
-				m_pwt->Miner.TestAndSubmit(*m_pwt, WorkData, _byteswap_ulong(WorkData->FirstNonce + n));
+				m_pwt->Miner.TestAndSubmit(WorkData, _byteswap_ulong(WorkData->FirstNonce + n));
 		}	
 	}
 
@@ -346,7 +347,7 @@ void CL_CALLBACK ScryptOpenclTask::Callback(cl_event ev, cl_int st, void *ctx) {
 		cl::ClCheck(st);
 }
 
-#ifdef _DEBUG
+#ifdef X_DEBUG
 
 void CL_CALLBACK OclProfileCallback(cl_event ev, cl_int st, void *ctx) {
 	cl::Event evObj;

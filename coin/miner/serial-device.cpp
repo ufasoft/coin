@@ -141,15 +141,15 @@ void SerialDeviceThread::Execute() {
 #endif
 			CommunicateDevice();
 		} catch (StopException&) {
-		} catch (RCExc e) {
-			if (e.HResult != E_EXT_InvalidUTF8String) {
-				*Miner.m_pWTraceStream << "\r" << e.Message << endl;
+		} catch (RCExc ex) {
+			if (HResultInCatch(ex) != E_EXT_InvalidUTF8String) {
+				*Miner.m_pTraceStream << ex.what() << endl;
 			}
 		} catch (...) {
-			*Miner.m_pTraceStream << "\rUnknown exception detected" << endl;
+			*Miner.m_pTraceStream << "Unknown exception detected" << endl;
 		}
 		if (Detected && !m_bStop) {
-			*Miner.m_pTraceStream << "\rdevice detached" << endl;
+			*Miner.m_pTraceStream << "device detached" << endl;
 		}
 	}
 	m_evDetected.Set();

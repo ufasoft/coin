@@ -6,48 +6,21 @@
 # General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
 ##########################################################################################################################################################################*/
 
-#pragma once
+#include <el/ext.h>
 
 #include "miner.h"
 
 namespace Coin {
 
-class StopException : public Exception {
-};
-
-class SerialDeviceThread : public WorkerThreadBase {
-	typedef WorkerThreadBase base;
+class Sha3Hasher : public Hasher {
 public:
-	String m_devpath;
-	CBool Detected;
-	CBool AutoStart;
-	AutoResetEvent m_evDetected, m_evStartMining;
-	int MsTimeout;
+	Sha3Hasher()
+		:	Hasher("keccak", HashAlgo::Sha3)
+	{}
 
-	SerialDeviceThread(BitcoinMiner& miner, thread_group *tr)
-		:	base(miner, tr)
-		,	m_file(0)
-		,	MsTimeout(1000)
-	{
+	HashValue CalcHash(const ConstBuf& cbuf) override {
+		return HashValue(SHA3<256>().ComputeHash(cbuf));
 	}
-
-	void Write(const ConstBuf& cbuf);
-	Blob Command(const ConstBuf cmd, size_t replySize);
-	void Stop() override;
-protected:
-	FILE *m_file;
-
-	void CloseFile() {
-		if (FILE *file = exchange(m_file, nullptr))
-			fclose(file);
-	}
-
-	virtual void CommunicateDevice() =0;
-	void Execute() override;
-};
-
-
-
+} g_sha3Hasher;
 
 } // Coin::
-

@@ -66,7 +66,7 @@ public:
 	String PortName;
 	Ext::Temperature TemperatureLimit;
 
-	void Start(BitcoinMiner& miner, CThreadRef *tr) override;
+	void Start(BitcoinMiner& miner, thread_group *tr) override;
 };
 
 class MmqThread : public SerialDeviceThread {
@@ -74,7 +74,7 @@ class MmqThread : public SerialDeviceThread {
 public:
 	MmqDevice& Dev;
 
-	MmqThread(MmqDevice& dev, BitcoinMiner& miner, CThreadRef *tr);
+	MmqThread(MmqDevice& dev, BitcoinMiner& miner, thread_group *tr);
 
 	void CommunicateDevice() override;
 
@@ -146,14 +146,14 @@ public:
 			Write(ConstBuf(bitstream.P+i, len));
 			StatusRead();
 			if (!(i & 0xFFF))
-				*Miner.m_pTraceStream << "\rProgramming FPGA" << (devid==DEVID_ALL ? String("") : " "+Dev.Chips[devid]->Name) << ", please DONT'T EXIT until complete: " << i*100/bitstream.Size << "%                      " << flush;
+				*Miner.m_pTraceStream << "Programming FPGA" << (devid==DEVID_ALL ? String("") : " "+Dev.Chips[devid]->Name) << ", please DONT'T EXIT until complete: " << i*100/bitstream.Size << "%                      \r" << flush;
 		}
 		if (m_bStop)
-			Throw(E_EXT_ThreadStopped);
+			Throw(E_EXT_ThreadInterrupted);
 			
 		StatusRead();
 
-		*Miner.m_pTraceStream << "\rProgramming FPGA complete                                                     " << endl;
+		*Miner.m_pTraceStream << "Programming FPGA complete                                                     " << endl;
 	}
 
 	void SendWorkData(byte devid, const BitcoinWorkData& wd) {
@@ -290,7 +290,7 @@ private:
 
 } g_mmqArchitecture;
 
-MmqThread::MmqThread(MmqDevice& dev, BitcoinMiner& miner, CThreadRef *tr)
+MmqThread::MmqThread(MmqDevice& dev, BitcoinMiner& miner, thread_group *tr)
 	:	base(miner, tr)
 	,	Dev(dev)
 {
@@ -364,9 +364,9 @@ void MmqThread::CommunicateDevice() {
 
 					++nTotal;
 					if (chip.WorkData && chip.WorkData->TestNonceGivesZeroH(nonce))
-						Miner.TestAndSubmit(_self, chip.WorkData, nonce);
+						Miner.TestAndSubmit(chip.WorkData, nonce);
 					else if (chip.PrevWorkData && chip.PrevWorkData->TestNonceGivesZeroH(nonce))
-						Miner.TestAndSubmit(_self, chip.PrevWorkData, nonce);
+						Miner.TestAndSubmit(chip.PrevWorkData, nonce);
 					else {
 						++nErr;
 						Interlocked::Increment(Dev.HwErrors);
@@ -411,7 +411,7 @@ void MmqThread::CommunicateDevice() {
 	}
 }
 
-void MmqDevice::Start(BitcoinMiner& miner, CThreadRef *tr) {
+void MmqDevice::Start(BitcoinMiner& miner, thread_group *tr) {
 	m_thread->m_evStartMining.Set();
 }
 

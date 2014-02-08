@@ -55,7 +55,7 @@ public:
 
   	static ptr<BitcoinSha256> CreateObject();
 
-#ifdef _DEBUG//!!!D
+#ifdef X_DEBUG//!!!D
 	template <typename T>
 	T CalcRoundsTest(T *w, const T init[8], T v[8], int startCalc, int nFrom, int n) {
 		for (int j=startCalc; j<n; ++j)

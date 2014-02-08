@@ -17,8 +17,6 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 	ptr<MinerBlock> r = new MinerBlock;
 	r->JobId = json[0];
 
-	r->MyExpireTime = DateTime::UtcNow() + TimeSpan::FromDays(1000);
-
 	Blob blob = Swab32(Blob::FromHexString(json[5].ToString()));
 	if (blob.Size != 4)
 		Throw(E_EXT_Protocol_Violation);
@@ -42,7 +40,7 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 
 	if ((blob = Swab32(Blob::FromHexString(json[7].ToString()))).Size != 4)
 		Throw(E_EXT_Protocol_Violation);
-	r->SetTimestamps(DateTime::FromUnix(letoh(*(UInt32*)blob.constData())));
+	r->SetTimestamps(DateTime::from_time_t(letoh(*(UInt32*)blob.constData())));
 
 	return r;
 }
@@ -51,8 +49,8 @@ StratumClient::StratumClient(Coin::BitcoinMiner& miner)
 	:	ConnectionClient(miner)
 	,	State(0)
 {
+	W.NewLine = "\n";
 	m_owner = miner.m_tr;
-	m_bSleeping = true;
 	StackSize = 128*1024;
 }
 
@@ -62,9 +60,9 @@ void StratumClient::Call(RCString method, const vector<VarValue>& params, ptr<St
 	Send(JsonRpc.Request(method, params, task));
 }
 
-void StratumClient::Submit(const BitcoinWorkData& wd) {
-	HashValue merkle = HashValue(ConstBuf(wd.Data.constData()+36, 32));
-	Coin::MinerBlock& mblock = *wd.MinerBlock;
+void StratumClient::Submit(BitcoinWorkData *wd) {
+	HashValue merkle = HashValue(ConstBuf(wd->Data.constData()+36, 32));
+	Coin::MinerBlock& mblock = *wd->MinerBlock;
 	/*!!!R
 	BitcoinMiner::CLastBlockCache::iterator it = Miner.m_lastBlockCache.find(merkle);
 	if (it == Miner.m_lastBlockCache.end())
@@ -75,19 +73,20 @@ void StratumClient::Submit(const BitcoinWorkData& wd) {
 	vector<VarValue> params;
 	params.push_back(Miner.Login);
 	params.push_back(mblock.JobId);
-	params.push_back(String(EXT_STR(mblock.Extranonce2)));
-	params.push_back(Convert::ToString(Int64(mblock.Timestamp.UnixEpoch), "X8"));
-	UInt32 nonce = wd.Nonce;
-	params.push_back(String(EXT_STR(ConstBuf(&nonce, sizeof nonce))));
+	params.push_back(String(EXT_STR(mblock.ExtraNonce2)));
+	params.push_back(Convert::ToString(to_time_t(mblock.Timestamp), "X8"));
+	params.push_back(Convert::ToString(wd->Nonce, "X8"));
 	ptr<StratumTask> task = new StratumTask(State);
 	task->m_wd = wd;
+#ifdef X_DEBUG//!!!D
+	UInt32 ts = to_time_t(mblock.Timestamp);
+	UInt32 nonce = wd->Nonce;
+#endif
 	Call("mining.submit", params, task);
 }
 
-void StratumClient::SetDifficulty(double difficulty) {	
-	ZeroStruct(TargetBE);
-	UInt64 beTarget = htobe(UInt64(0x00FFFF0000000000ULL / difficulty));		// starting with Target's byte 3 because difficulty can be < 1
-	memcpy(TargetBE + (Miner.HashAlgo == HashAlgo::SCrypt ? 1 : 3), &beTarget, 8);
+void StratumClient::SetDifficulty(double difficulty) {
+	HashTarget = HashValue::FromShareDifficulty(difficulty, Miner.HashAlgo);
 }
 
 void StratumClient::OnLine(RCString line) {
@@ -102,14 +101,17 @@ void StratumClient::OnLine(RCString line) {
 			if (req.Method == "mining.notify") {
 				EXT_LOCK (MtxData) {
 					MinerBlock = MinerBlock::FromStratumJson(req.Params);
-					memcpy(MinerBlock->TargetBE, TargetBE, sizeof TargetBE);
-					MinerBlock->Extranonce1 = Extranonce1;
-					MinerBlock->Extranonce2 = Extranonce2;
+					MinerBlock->Algo = Miner.HashAlgo;
+					MinerBlock->HashTarget = HashTarget;
+					MinerBlock->ExtraNonce1 = ExtraNonce1;
+					MinerBlock->ExtraNonce2 = ExtraNonce2;
 
 					if (req.Params[8].ToBool()) {
-						Miner.TaskQueue.clear();
-						Miner.WorksToSubmit.clear();
-						*Miner.m_pTraceStream << "\rNew Stratum data with Clean                    " << endl;
+						EXT_LOCK (Miner.m_csCurrentData) {
+							Miner.TaskQueue.clear();
+							Miner.WorksToSubmit.clear();
+						}
+						*Miner.m_pTraceStream << "New Stratum data with Clean                    " << endl;
 					}
 				}
 				Miner.m_evGetWork.Set();
@@ -120,18 +122,18 @@ void StratumClient::OnLine(RCString line) {
 		JsonResponse resp = JsonRpc.Response(v);
 		String method = resp.Request->Method;
 		if (method == "mining.subscribe") {
-			Extranonce1 = Blob::FromHexString(resp.Result[1].ToString());
-			int cbExtranonce2 = (int)resp.Result[2].ToInt64();
-			if (cbExtranonce2 == 0)
+			ExtraNonce1 = Blob::FromHexString(resp.Result[1].ToString());
+			int cbExtraNonce2 = (int)resp.Result[2].ToInt64();
+			if (cbExtraNonce2 == 0)
 				Throw(E_EXT_Protocol_Violation);
-			Extranonce2 = Blob(0, cbExtranonce2);
+			ExtraNonce2 = Blob(0, cbExtraNonce2);
 			++State;
 			vector<VarValue> params;
 			params.push_back(Miner.Login);
 			params.push_back(Miner.Password);
 			Call("mining.authorize", params);
 		} else if (method == "mining.authorize") {
-			if (resp.Result != true) {
+			if (resp.Result != VarValue(true)) {
 				m_bStop = true;
 				Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
 			}
@@ -141,9 +143,7 @@ void StratumClient::OnLine(RCString line) {
 			if (msg.IsEmpty() && resp.ErrorVal.type()==VarType::Array && resp.ErrorVal.size()>=2 && resp.ErrorVal[1].type()==VarType::String)
 				msg = resp.ErrorVal[1].ToString();
 			Interlocked::Increment(Miner.SubmittedCount);
-			if (resp.Success)
-				Interlocked::Increment(Miner.AcceptedCount);
-			Miner.Print(task->m_wd, resp.Success, msg);
+			Miner.Print(*task->m_wd, resp.Success, msg);
 		} else {
 			TRC(2, "Unknown JSON-RPC method: " << method);
 		}
@@ -160,26 +160,16 @@ void StratumClient::Execute() {
 			TRC(1, "EpServer = " << EpServer);
 			Tcp.Client.Connect(EpServer);
 			Miner.m_msWait = NORMAL_WAIT;
-			Call("mining.subscribe", vector<VarValue>());
+			vector<VarValue> args;
+//!!!			args.push_back(Miner.UserAgentString);
+			Call("mining.subscribe", args);
 			base::Execute();
 		} catch (RCExc ex) {
-			*Miner.m_pWTraceStream << "\r" << ex.Message << endl;
+			*Miner.m_pTraceStream << ex.what() << endl;
 			if (!m_bStop)
-				Sleep(exchange(Miner.m_msWait, std::min(100000, Miner.m_msWait*2)));
+				Sleep(exchange(Miner.m_msWait, std::min(MAX_WAIT, Miner.m_msWait*2)));
 		}
 	}
-}
-
-ptr<BitcoinWorkData> StratumClient::GetWork() {
-	DateTime now = DateTime::UtcNow();
-	EXT_LOCK (MtxData) {
-		if (MinerBlock) {
-			if (now < MinerBlock->MyExpireTime)
-				return Miner.GetWorkFromMinerBlock(now, MinerBlock.get());
-			MinerBlock = nullptr;
-		}
-	}
-	return nullptr;
 }
 
 } // Coin::

@@ -119,7 +119,7 @@ class GpuThread : public GpuThreadBase {
 public:
 	vector<ptr<GpuDevice>> Devices;
 
-	GpuThread(BitcoinMiner& miner, CThreadRef *tr)
+	GpuThread(BitcoinMiner& miner, thread_group *tr)
 		:	base(miner, tr)
 	{
 		for (int i=0; i<miner.Devices.size(); ++i) {
@@ -215,10 +215,10 @@ public:
 				}
 
 				//m_gpuMiner->Run(wd, this);				
-			} catch (ThreadAbortException&) {
+			} catch (thread_interrupted&) {
 				break;
 			} catch (RCExc ex) {
-				*Miner.m_pWTraceStream << "\r" << ex << endl;
+				*Miner.m_pTraceStream << ex.what() << endl;
 				break;
 			}
 
@@ -231,14 +231,14 @@ public:
 					if (t > Miner.MaxGpuTemperature) {
 						int ms = std::min(Miner.GpuIdleMilliseconds + int(t - Miner.MaxGpuTemperature), 2000);
 						if (ms != Miner.GpuIdleMilliseconds && DateTime::UtcNow() > s_dtNext) {
-							*Miner.m_pTraceStream << "\rThermal control decreases speed, T=" << (int)t << " C, delay=" << ms << endl;
+							*Miner.m_pTraceStream << "Thermal control decreases speed, T=" << (int)t << " C, delay=" << ms << endl;
 							s_dtNext = DateTime::UtcNow()+TimeSpan::FromSeconds(10);
 						}
 						Miner.GpuIdleMilliseconds = ms;
 					} else if (t < Miner.MaxGpuTemperature*2/3) {
 						int ms = std::max(Miner.GpuIdleMilliseconds-1, 1);
 						if (ms != Miner.GpuIdleMilliseconds && DateTime::UtcNow() > s_dtNext) {
-							*Miner.m_pTraceStream << "\rThermal control increases speed, T=" << (int)t << " C" << endl;
+							*Miner.m_pTraceStream << "Thermal control increases speed, T=" << (int)t << " C" << endl;
 							s_dtNext = DateTime::UtcNow()+TimeSpan::FromSeconds(10);
 						}
 						Miner.GpuIdleMilliseconds = ms;
@@ -431,7 +431,7 @@ vector<GDevice> GDevice::GetAll() {
 }
 
 
-void AmdGpuDevice::Start(BitcoinMiner& miner, CThreadRef *tr) {
+void AmdGpuDevice::Start(BitcoinMiner& miner, thread_group *tr) {
 	if (!miner.GpuThread) {
 		ptr<GpuThreadBase> t = new GpuThread(miner, tr);
 		t->Device = this;				//!!! right thing only when 1 device
@@ -493,9 +493,11 @@ class OpenClArchitecture : public GpuArchitecture {
 							binary = ExtractImageFromCl(dev.m_clDevice, miner.GetOpenclCode(), bEvergreen);
 
 //!!!							PersistentCache::Set(key, binary);
-						} catch (FileNotFoundExc&) {
+						} catch (FileNotFoundException&) {
 							throw;
-						} catch (RCExc) {
+						} catch (RCExc ex) {
+							*miner.m_pTraceStream << ex.what() << endl;
+							throw;
 						}
 					}
 				}
@@ -534,9 +536,10 @@ class OpenClArchitecture : public GpuArchitecture {
 					miner.Devices.push_back(gdev.get());
 				}
 
-			} catch (FileNotFoundExc&) {
+			} catch (FileNotFoundException&) {
 				throw;
-			} catch (RCExc) {
+			} catch (RCExc& ex) {
+				*miner.m_pTraceStream << ex.what() << endl;
 			}
 		}
 

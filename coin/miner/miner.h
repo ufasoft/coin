@@ -25,8 +25,9 @@ using namespace Ext::Gpu;
 
 #include "bitcoin-sha256.h"
 
-#include "util.h"
-#include "miner-interface.h"
+#include "../util/util.h"
+#include "../util/block-template.h"
+#include "../util/miner-interface.h"
 
 namespace Ext {
 	namespace cl {
@@ -47,44 +48,8 @@ const UInt32 FULL_TASK = UInt32(0x100000000ULL / UCFG_BITCOIN_NPAR);
 const int MIN_GETWORK_QUEUE = 3,
 			MAX_GETWORK_QUEUE = 5;
 
-const int NORMAL_WAIT = 2000;
+const int NORMAL_WAIT = 2000, MAX_WAIT = 200000;
 
-struct MinerTx {
-	Blob Data;
-	HashValue Hash;
-};
-
-class MinerBlock : public BlockBase {
-	typedef BlockBase base;
-public:
-	VarValue JobId;
-	mutable vector<MinerTx> Txes;
-	String WorkId;
-	Blob ConBaseAux;
-	DateTime CurTime;
-	TimeSpan ServerTimeOffset;
-	DateTime MyExpireTime;
-	Int64 CoinbaseValue;
-	Blob Coinb1, Extranonce1, Extranonce2, CoinbaseAux, Coinb2;
-	CCoinMerkleBranch MerkleBranch;
-
-	byte TargetBE[32];
-
-	MinerBlock()
-		:	WorkId(nullptr)
-		,	CoinbaseValue(-1)		
-	{}
-
-	static MinerBlock FromJson(const VarValue& json);
-	static ptr<MinerBlock> FromStratumJson(const VarValue& json);
-	Coin::HashValue MerkleRoot(bool bSave=true) const override;
-protected:
-	void SetTimestamps(const DateTime& dt) {
-		ServerTimeOffset = (CurTime = dt) - DateTime::UtcNow();
-	}
-};
-
-BinaryWriter& operator<<(BinaryWriter& wr, const MinerBlock& minerBlock);
 
 class BitcoinWorkData : public Object {
 	typedef BitcoinWorkData class_type;
@@ -95,8 +60,9 @@ public:
 
 	DateTime Timestamp;
 	Blob Midstate, Data, Hash1;
-	byte TargetBE[32];
+	HashValue HashTarget;
 	UInt32 FirstNonce, LastNonce;
+	UInt32 Height;
 	UInt16 RollNTime;
 	Coin::HashAlgo HashAlgo;
 
@@ -104,6 +70,8 @@ public:
 		:	FirstNonce(0)
 		,	LastNonce(UInt32(-1))
 		,	RollNTime(0)
+		,	HashAlgo(Coin::HashAlgo::Sha256)
+		,	Height(UInt32(-1))
 	{}
 
 	bool IsFull() const {
@@ -127,21 +95,17 @@ public:
 	void put_MerkleRoot(const HashValue& v);
 	DEFPROP(HashValue, MerkleRoot);
 
-	DateTime get_BlockTimestamp() const { return DateTime::FromUnix(htobe(*(UInt32*)(Data.constData()+68))); }
-	void put_BlockTimestamp(const DateTime& dt) { *(UInt32*)(Data.constData()+68) = betoh((UInt32)dt.UnixEpoch); }
+	DateTime get_BlockTimestamp() const { return DateTime::from_time_t(htobe(*(UInt32*)(Data.constData()+68))); }
+	void put_BlockTimestamp(const DateTime& dt) { *(UInt32*)(Data.constData()+68) = betoh((UInt32)to_time_t(dt)); }
 	DEFPROP(DateTime, BlockTimestamp);
 
 	UInt32 get_Bits() const { return htobe(*(UInt32*)(Data.constData()+72)); }
 	void put_Bits(UInt32 v) { *(UInt32*)(Data.data()+72) = betoh(v); }
 	DEFPROP(UInt32, Bits);
 
-	UInt32 get_Nonce() const;
-	void put_Nonce(UInt32 v);
+	UInt32 get_Nonce() const { return htobe(*(UInt32*)(Data.constData() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76))); }
+	void put_Nonce(UInt32 v) { *(UInt32*)(Data.data() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76)) = betoh(v); }
 	DEFPROP(UInt32, Nonce);
-
-	UInt32 get_HostNonce() const { return htobe(*(UInt32*)(Data.constData()+76)); }
-	void put_HostNonce(UInt32 v) { *(UInt32*)(Data.data()+76) = betoh(v); }
-	DEFPROP(UInt32, HostNonce);
 
 	bool TestNonceGivesZeroH(UInt32 nonce);
 
@@ -162,7 +126,7 @@ public:
 		:	HwErrors(0)
 	{}
 
-	virtual void Start(BitcoinMiner& miner, CThreadRef *tr) =0;
+	virtual void Start(BitcoinMiner& miner, thread_group *tr) =0;
 
 	virtual Ext::Temperature GetTemperature() { return Temperature; }
 };
@@ -209,7 +173,7 @@ public:
 	UInt32 DevicePortion;
 	ptr<ComputationDevice> Device;
 
-	WorkerThreadBase(BitcoinMiner& miner, CThreadRef *tr)
+	WorkerThreadBase(BitcoinMiner& miner, thread_group *tr)
 		:	base(tr)
 		,	Miner(miner)
 		,	CurrentWebClient(0)
@@ -217,7 +181,6 @@ public:
 		,	m_prevTsc(0)
 		,	DevicePortion(128)
 	{
-		m_bSleeping = true;
 	}
 
 	virtual String GetDeviceName() { return nullptr; };
@@ -252,7 +215,7 @@ class XptWorkData;
 class WorkerThread : public WorkerThreadBase {
 	typedef WorkerThreadBase base;
 public:
-	WorkerThread(BitcoinMiner& miner, CThreadRef *tr)
+	WorkerThread(BitcoinMiner& miner, thread_group *tr)
 		:	base(miner, tr)
 	{}
 
@@ -266,18 +229,13 @@ public:
 protected:
 	void Execute() override;
 
-	void MineSha256(BitcoinWorkData& wd);
-	void MineScrypt(BitcoinWorkData& wd);
-	void MinePrime(XptWorkData& wd);
-	void MineSolid(BitcoinWorkData& wd);
-
 	friend class BitcoinMiner;
 };
 
 
 class CpuDevice : public ComputationDevice {
 public:
-	void Start(BitcoinMiner& miner, CThreadRef *tr) override;
+	void Start(BitcoinMiner& miner, thread_group *tr) override;
 };
 
 class GpuDevice : public ComputationDevice {
@@ -289,13 +247,13 @@ public:
 		IsAmdGpu = true;
 	}
 
-	void Start(BitcoinMiner& miner, CThreadRef *tr) override;
+	void Start(BitcoinMiner& miner, thread_group *tr) override;
 };
 
 class GpuThreadBase : public WorkerThreadBase {
 	typedef WorkerThreadBase base;
 public:
-	GpuThreadBase(BitcoinMiner& miner, CThreadRef *tr)
+	GpuThreadBase(BitcoinMiner& miner, thread_group *tr)
 		:	base(miner, tr)
 	{}
 };
@@ -336,7 +294,7 @@ void ThrowRejectionError(RCString reason);
 class StratumTask : public JsonRpcRequest {
 public:
 	int State;
-	BitcoinWorkData m_wd;
+	ptr<BitcoinWorkData> m_wd;
 
 	StratumTask(int state)
 		:	State(0)
@@ -347,15 +305,18 @@ class ConnectionClient {
 public:
 	BitcoinMiner& Miner;
 
+	mutex MtxData;
+	ptr<Coin::MinerBlock> MinerBlock;
+
 	ConnectionClient(BitcoinMiner& miner)
 		:	Miner(miner)
 	{}
 
 	virtual ~ConnectionClient() {}
-	virtual void Submit(const BitcoinWorkData& wd) =0;
+	virtual void Submit(BitcoinWorkData *wd) =0;
 	virtual void SetEpServer(const IPEndPoint& epServer) =0;
-	virtual bool HasWorkData() =0;
-	virtual ptr<BitcoinWorkData> GetWork() =0;
+	virtual bool HasWorkData() { return MinerBlock; }
+	virtual ptr<BitcoinWorkData> GetWork();
 	virtual void OnPeriodic() {}
 };
 
@@ -364,36 +325,28 @@ class StratumClient : public AsyncTextClient, public ConnectionClient {
 public:
 	int State;
 	Ext::Inet::JsonRpc JsonRpc;
-	byte TargetBE[32];
-	Blob Extranonce1, Extranonce2;
-
-	mutex MtxData;
-	ptr<Coin::MinerBlock> MinerBlock;
+	HashValue HashTarget;
+	Blob ExtraNonce1, ExtraNonce2;
 
 	StratumClient(Coin::BitcoinMiner& miner);
 	void Call(RCString method, const vector<VarValue>& params, ptr<StratumTask> task = nullptr);
-	void Submit(const BitcoinWorkData& wd) override;
+	void Submit(BitcoinWorkData *wd) override;
 protected:
 	void SetEpServer(const IPEndPoint& epServer) override { EpServer = epServer; }
 
 	void SetDifficulty(double difficulty);
 	void OnLine(RCString line) override;
 	void Execute() override;
-	ptr<BitcoinWorkData> GetWork() override;
-
-	bool HasWorkData() override {
-		return MinerBlock;
-	}
 };
 
 class MINER_CLASS BitcoinMiner : public IMiner {
 public:
-//	static const Int32 NONCE_STEP = 128*1024*1024; //!!! was 8
-	
 	int GetworkPeriod;
-	float Speed;		// float to be atomary
+	float Speed;		// float to be atomic
 	Int64 EntireHashCount;
+	float CPD; //!!! should be atomic
 	DateTime DtStart;
+	volatile UInt32 MaxHeight;
 
 	mutex m_csGetWork;
 	ManualResetEvent m_evDataReady;
@@ -403,7 +356,7 @@ public:
 	CBool m_bTryGpu, m_bTryFpga, m_bLongPolling;
 	Coin::HashAlgo HashAlgo;
 
-	byte BestHashBE[32];
+	HashValue HashBest;
 
 	mutex MtxDevices;
 	vector<ptr<ComputationDevice>> Devices;
@@ -414,8 +367,9 @@ public:
 
 	int m_msWait;
 	int NPAR;
+	
 	volatile Int32 HashCount;
-
+	volatile float ChainsExpectedCount;
 	volatile Int32 SubmittedCount, AcceptedCount;
 
 	CInt<int> Intensity;
@@ -440,7 +394,7 @@ public:
 	String ProxyString;
 
 	int ThreadCount;
-	CPointer<CThreadRef> m_tr;
+	CPointer<thread_group> m_tr;
 	vector<ptr<Thread> > Threads;
 	ptr<Thread> GetWorkThread;
 	ptr<Thread> GpuThread;
@@ -478,8 +432,7 @@ public:
 		Intensity = v;
 	}
 
-	Blob CalcHash(const BitcoinWorkData& wd);
-	bool TestAndSubmit(WorkerThreadBase& wt, BitcoinWorkData *wd, UInt32 nonce);
+	bool TestAndSubmit(BitcoinWorkData *wd, UInt32 nonce);
 	virtual String GetCalIlCode(bool bEvergreen);
 	virtual String GetOpenclCode();
 	virtual String GetCudaCode();
@@ -495,7 +448,7 @@ public:
 
 	void CreateConnectionClient(RCString s);
 
-	void Start(CThreadRef *tr);
+	void Start(thread_group *tr);
 	void Start() override { Start(nullptr); }
 
 	virtual void OnRoundComplete() {}
@@ -606,6 +559,30 @@ struct CalEngineWrap {
 
 
 #endif // UCFG_BITCOIN_USE_CAL
+
+class Hasher : public StaticList<Hasher> {
+	typedef StaticList<Hasher> base;
+public:
+	String Name;
+	HashAlgo Algo;
+
+	Hasher(RCString name, HashAlgo algo)
+		:	base(true)
+		,	Name(name)
+		,	Algo(algo)
+	{}
+
+	static MINER_CLASS Hasher *GetRoot();
+	static Hasher& Find(HashAlgo algo);
+
+	virtual HashValue CalcHash(const ConstBuf& cbuf) { Throw(E_NOTIMPL); }
+	virtual HashValue CalcWorkDataHash(const BitcoinWorkData& wd);
+	virtual UInt32 MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd);
+protected:
+	virtual size_t GetDataSize() noexcept { return 80; }
+	virtual void SetNonce(UInt32 *buf, UInt32 nonce) noexcept;
+	virtual void MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, UInt32 *buf, UInt32 nonce);
+};
 
 
 } // Coin::

@@ -30,7 +30,7 @@ class CudaDevice : public GpuDevice {
 public:
 	CuDevice m_cdev;
 
-	void Start(BitcoinMiner& miner, CThreadRef *tr) override;
+	void Start(BitcoinMiner& miner, thread_group *tr) override;
 };
 
 class CudaTask : public GpuTask {
@@ -182,7 +182,7 @@ public:
 class CudaThread : public GpuThreadBase {
 	typedef GpuThreadBase base;
 public:
-	CudaThread(BitcoinMiner& miner, CThreadRef *tr)
+	CudaThread(BitcoinMiner& miner, thread_group *tr)
 		:	base(miner, tr)
 	{
 	}
@@ -203,7 +203,7 @@ public:
 	}
 };
 
-void CudaDevice::Start(BitcoinMiner& miner, CThreadRef *tr) {
+void CudaDevice::Start(BitcoinMiner& miner, thread_group *tr) {
 	ptr<GpuThreadBase> t = new CudaThread(miner, tr);
 	t->Device = this;				//!!! right thing only when 1 device
 	miner.Threads.push_back(t.get());
