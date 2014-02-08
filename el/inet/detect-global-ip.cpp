@@ -8,42 +8,58 @@
 
 #include <el/ext.h>
 
-#include "async-text-client.h"
+#include <el/libext/ext-http.h>
 
-namespace Ext { namespace Inet { 
+#include "detect-global-ip.h"
 
-void AsyncTextClient::Execute() {
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNREFUSED);
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNABORTED);
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNRESET);
-	DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, ignE_EXT_EndOfStream);
+namespace Ext { namespace Inet { namespace P2P {
 
-	for (pair<String, bool> pp; !m_bStop && (pp=R.ReadLineEx()).first!=nullptr;) {
-		if (FirstByte != -1)
-			pp.first = String((char)std::exchange(FirstByte, -1), 1) + pp.first;
-		if (pp.second)
-			OnLine(pp.first);
-		else
-			OnLastLine(pp.first);										// last line can be broken
+static wregex s_reCurrentIp(L"IP Address:\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)");
+
+DetectIpThread::~DetectIpThread() {
+}
+
+void DetectIpThread::Execute() {
+	Name = "DetectIpThread";
+
+	try {
+		while (!m_bStop) {
+			try {
+				DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_NAME_NOT_RESOLVED);
+				DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_TIMEOUT);
+				DBG_LOCAL_IGNORE_WIN32(ERROR_HTTP_INVALID_SERVER_RESPONSE);
+
+				String s = WebClient().DownloadString("http://checkip.dyndns.org");
+				Smatch m;
+				if (regex_search(s, m, s_reCurrentIp)) {
+					IPAddress ip = IPAddress::Parse(m[1]);
+					if (ip.IsGlobal())
+						DetectGlobalIp.OnIpDetected(ip);
+					break;
+				}
+			} catch (RCExc) {
+			}
+			Sleep(60000);
+		}
+	} catch (RCExc) {
+	}
+	EXT_LOCK (DetectGlobalIp.m_mtx) {
+		DetectGlobalIp.Thread = nullptr;
 	}
 }
 
-void AsyncTextClient::SendPendingData() {
-	EXT_LOCK (MtxSend) {
-		if (!DataToSend.IsEmpty())
-			Tcp.Stream.WriteBuf(W.Encoding.GetBytes(exchange(DataToSend, String())));
-	}
-}
+DetectGlobalIp::~DetectGlobalIp() {
+	ptr<DetectIpThread> t;
 
-void AsyncTextClient::Send(RCString cmd) {
-	EXT_LOCK (MtxSend) {
-		if (Tcp.Client.Valid())
-			W.WriteLine(cmd);
-		else
-			DataToSend += cmd+W.NewLine;
+	EXT_LOCK (m_mtx) {
+		t = Thread;
+	}
+	if (t) {
+		t->interrupt();
+		t->Join();
 	}
 }
 
 
-}} // Ext::Inet::
+}}} // Ext::Inet::P2P::
 

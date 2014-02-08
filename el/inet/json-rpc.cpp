@@ -22,6 +22,23 @@ String JsonRpcRequest::ToString() const {
 	return os.str();
 }
 
+String JsonResponse::ToString() const {
+	VarValue resp;
+	resp.Set("id", Id);
+	if (Success) {
+		resp.Set("result", Result);
+	} else {
+		VarValue verr;
+		verr.Set("code", Code);
+		verr.Set("message", JsonMessage);
+		verr.Set("data", Data);
+		resp.Set("error", verr);
+	}
+	ostringstream os;
+	MarkupParser::CreateJsonParser()->Print(os, resp);
+	return os.str();
+}
+
 bool JsonRpc::TryAsRequest(const VarValue& v, JsonRpcRequest& req) {
 	if (!v.HasKey("method"))
 		return false;
@@ -32,9 +49,9 @@ bool JsonRpc::TryAsRequest(const VarValue& v, JsonRpcRequest& req) {
 }
 
 void JsonRpc::PrepareRequest(JsonRpcRequest *req) {
-	int id = m_nextId++;
+	int id = Interlocked::Increment(m_nextId);
 	req->Id = VarValue(id);
-	m_requests[id] = req;
+	EXT_LOCKED(MtxReqs, m_reqs.insert(make_pair(id, req)));
 }
 
 String JsonRpc::Request(RCString method, const vector<VarValue>& params, ptr<JsonRpcRequest> req) {
@@ -59,14 +76,26 @@ String JsonRpc::Request(RCString method, const CJsonNamedParams& params, ptr<Jso
 	return req->ToString();
 }
 
+String JsonRpc::Notification(RCString method, const vector<VarValue>& params, ptr<JsonRpcRequest> req) {
+	if (!req)
+		req = new JsonRpcRequest;
+	req->Method = method;
+	req->Params.SetType(VarType::Array);
+	for (int i=0; i<params.size(); ++i)
+		req->Params.Set(i, params[i]);
+	return req->ToString();
+}
+
 JsonResponse JsonRpc::Response(const VarValue& v) {
 	JsonResponse r;
 	r.Id = v["id"];
 	if (r.Id.type() == VarType::Int) {
-		CRequests::iterator it = m_requests.find((int)r.Id.ToInt64());
-		if (it != m_requests.end()) {
-			r.Request = it->second;
-			m_requests.erase(it);
+		EXT_LOCK (MtxReqs) {
+			CRequests::iterator it = m_reqs.find((int)r.Id.ToInt64());
+			if (it != m_reqs.end()) {
+				r.Request = it->second.first;
+				m_reqs.erase(it);
+			}
 		}
 	}
 

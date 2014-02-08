@@ -13,23 +13,22 @@ using namespace Ext;
 
 typedef unordered_map<String, VarValue> CJsonNamedParams;
 
-class JsonRpcExc : public Exc {
-	typedef Exc base;
+class JsonRpcExc : public Exception {
+	typedef Exception base;
 public:
 	int Code;
-	String JsonMessage;
 	VarValue Data;
 
 	JsonRpcExc(int code)
 		:	base(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_JSON_RPC, UInt16(code)))
 		,	Code(code)
 	{}
-
-	String get_Message() const override { return JsonMessage; }
 };
 
 class JsonRpcRequest : public Object {
 public:
+	typedef Interlocked interlocked_policy;
+
 	VarValue Id;
 	String Method;
 	VarValue Params;
@@ -39,29 +38,27 @@ public:
 
 class JsonResponse {
 public:
+	ptr<JsonRpcRequest> Request;
+
 	VarValue Id;
-	bool Success;
 	VarValue Result;
 	VarValue ErrorVal;
-
-	int Code;
-	String JsonMessage;
 	VarValue Data;
 
-	ptr<JsonRpcRequest> Request;
+	String JsonMessage;
+	int Code;
+	bool Success;
 
 	JsonResponse()
 		:	Success(true)
 		,	Code(0)
 	{}
+
+	String ToString() const;
 };
 
 class JsonRpc {
-	typedef unordered_map<int, ptr<JsonRpcRequest>> CRequests;
-	CRequests m_requests;
 public:
-	int m_nextId;
-
 	JsonRpc()
 		:	m_nextId(1)
 	{}
@@ -69,8 +66,16 @@ public:
 	static bool TryAsRequest(const VarValue& v, JsonRpcRequest& req);
 	String Request(RCString method, const vector<VarValue>& params = vector<VarValue>(), ptr<JsonRpcRequest> req = nullptr);
 	String Request(RCString method, const CJsonNamedParams& params, ptr<JsonRpcRequest> req = nullptr);
+	String Notification(RCString method, const vector<VarValue>& params = vector<VarValue>(), ptr<JsonRpcRequest> req = nullptr);
 	JsonResponse Response(const VarValue& v);
 private:
+	std::mutex MtxReqs;
+
+	typedef LruMap<int, ptr<JsonRpcRequest>> CRequests;
+	CRequests m_reqs;
+
+	volatile Int32 m_nextId;
+
 	void PrepareRequest(JsonRpcRequest *req);
 };
 

@@ -26,12 +26,14 @@ public:
 		:	base(0)
 		,	W(Tcp.Stream)
 		,	R(Tcp.Stream)
+		,	FirstByte(-1)
 	{}
 
 	void Send(RCString cmd);
 protected:
 	mutex MtxSend;
 	String DataToSend;
+	int FirstByte;
 	
 	void SendPendingData();
 	void Execute() override;

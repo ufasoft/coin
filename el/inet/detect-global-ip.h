@@ -6,44 +6,46 @@
 # General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
 ##########################################################################################################################################################################*/
 
-#include <el/ext.h>
+#pragma once
 
-#include "async-text-client.h"
+namespace Ext { namespace Inet { namespace P2P {
 
-namespace Ext { namespace Inet { 
+class DetectGlobalIp;
 
-void AsyncTextClient::Execute() {
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNREFUSED);
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNABORTED);
-	DBG_LOCAL_IGNORE_WIN32(WSAECONNRESET);
-	DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, ignE_EXT_EndOfStream);
+class DetectIpThread : public Thread {
+	typedef Thread base;
+public:
+	P2P::DetectGlobalIp& DetectGlobalIp;
 
-	for (pair<String, bool> pp; !m_bStop && (pp=R.ReadLineEx()).first!=nullptr;) {
-		if (FirstByte != -1)
-			pp.first = String((char)std::exchange(FirstByte, -1), 1) + pp.first;
-		if (pp.second)
-			OnLine(pp.first);
-		else
-			OnLastLine(pp.first);										// last line can be broken
+	DetectIpThread(P2P::DetectGlobalIp& dgi, thread_group *tr)
+		:	base(tr)
+		,	DetectGlobalIp(dgi)
+	{
 	}
-}
 
-void AsyncTextClient::SendPendingData() {
-	EXT_LOCK (MtxSend) {
-		if (!DataToSend.IsEmpty())
-			Tcp.Stream.WriteBuf(W.Encoding.GetBytes(exchange(DataToSend, String())));
+	~DetectIpThread();
+	void Execute() override;
+};
+
+class DetectGlobalIp {
+public:
+    ptr<DetectIpThread> Thread;
+
+	~DetectGlobalIp();
+	
+	void Start(thread_group *tr) {
+		Thread = new DetectIpThread(_self, tr);
+		Thread->Start();	
 	}
-}
+protected:	
+	virtual void OnIpDetected(const IPAddress& ip) {}
 
-void AsyncTextClient::Send(RCString cmd) {
-	EXT_LOCK (MtxSend) {
-		if (Tcp.Client.Valid())
-			W.WriteLine(cmd);
-		else
-			DataToSend += cmd+W.NewLine;
-	}
-}
+private:
+	mutex m_mtx;
+
+friend class DetectIpThread;
+};
 
 
-}} // Ext::Inet::
+}}} // Ext::Inet::P2P::
 
