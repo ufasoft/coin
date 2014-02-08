@@ -28,15 +28,7 @@ using namespace std;
 
 #if UCFG_EXTENDED
 
-int CWinThread::ExitInstance() {
-#if UCFG_WIN_MSG
-	return (int)AfxGetCurrentMessage()->wParam;
-#else
-	return true;
-#endif
-}
-
-#if UCFG_WIN_MSG
+#	if UCFG_WIN_MSG
 
 class CWndAttachKeeper {
 	CWnd& m_wnd;
@@ -368,7 +360,7 @@ BOOL CWinThread::ProcessMessageFilter(int code, MSG *lpMsg) {
 			lpMsg->message >= WM_KEYFIRST && lpMsg->message <= WM_KEYLAST)
 		{
 			// need to translate messages for the in-place container
-			_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+			_AFX_THREAD_STATE* pThreadState = AfxGetThreadState();
 			if (pThreadState->m_bInMsgFilter)
 				return FALSE;
 			pThreadState->m_bInMsgFilter = TRUE;    // avoid reentering this code

@@ -40,6 +40,9 @@ __forceinline UInt32 Rotr32(UInt32 v, int n) {
 	return _rotr(v, n);
 }
 
+__forceinline UInt64 Rotr64(UInt64 v, int n) {
+	return _rotr64(v, n);
+}
 
 
 class SHA1 : public HashAlgorithm {
@@ -53,7 +56,36 @@ public:
 	static void Init4Way(UInt32 state[8][4]);
 
 	void InitHash(void *dst) override;
-	void HashBlock(void *dst, const byte *src, UInt64 counter) override;
+	void HashBlock(void *dst, const byte *src, UInt64 counter) noexcept override;
+};
+
+class SHA512 : public HashAlgorithm {
+public:
+	SHA512() {
+		Is64Bit = true;
+	}
+protected:
+	void InitHash(void *dst) override;
+	void HashBlock(void *dst, const byte *src, UInt64 counter) noexcept override;
+};
+
+#ifndef UCFG_IMP_SHA3
+#	define UCFG_IMP_SHA3 'S'		// shplib
+#endif
+
+template <int n>
+class SHA3 : public HashAlgorithm {
+};
+
+template<> class SHA3<256> : HashAlgorithm {
+public:
+	hashval ComputeHash(const ConstBuf& mb) override;
+	hashval ComputeHash(Stream& stm) override;
+};
+
+template<> class SHA3<512> : HashAlgorithm {
+	hashval ComputeHash(const ConstBuf& mb) override;
+	hashval ComputeHash(Stream& stm) override;
 };
 
 class Blake256 : public HashAlgorithm {
@@ -66,7 +98,7 @@ public:
 	}
 protected:
 	void InitHash(void *dst) override;
-	void HashBlock(void *dst, const byte *src, UInt64 counter) override;
+	void HashBlock(void *dst, const byte *src, UInt64 counter) noexcept override;
 };
 
 class Blake512 : public HashAlgorithm {
@@ -80,7 +112,7 @@ public:
 	}
 protected:
 	void InitHash(void *dst) override;
-	void HashBlock(void *dst, const byte *src, UInt64 counter) override;
+	void HashBlock(void *dst, const byte *src, UInt64 counter) noexcept override;
 };
 
 class RIPEMD160 : public HashAlgorithm {

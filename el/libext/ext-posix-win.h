@@ -1,4 +1,4 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
 #                                                                                                                                                                          #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
 # either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
@@ -105,6 +105,7 @@ typedef __success(return >= 0) long HRESULT;
 #define ERROR_WRONG_PASSWORD             1323L
 #define ERROR_PASSWORD_RESTRICTION       1325L
 #define ERROR_LOGON_FAILURE              1326L
+#define ERROR_NO_SYSTEM_RESOURCES        1450L
 #define ERROR_INVALID_COMMAND_LINE       1639L
 
 #define DNS_ERROR_INVALID_IP_ADDRESS     9552L

@@ -38,18 +38,6 @@ namespace std {
 
 #endif
 
-/*!!!R
-#if !UCFG_STDSTL || !UCFG_CPP11_HAVE_THREAD
-#	include <el/stl/thread>
-
-namespace std {
-	using ExtSTL::thread;
-}
-
-#endif
-*/
-
-
 namespace Ext {
 
 #if UCFG_USE_PTHREADS
@@ -57,10 +45,8 @@ int PthreadCheck(int code, int allowableError = 0);
 #endif
 
 #ifdef _WIN32
-NTSTATUS AFXAPI NtCheck(NTSTATUS status, NTSTATUS allowableError = 0);		// 0 == STATUS_SUCCESS
+	NTSTATUS AFXAPI NtCheck(NTSTATUS status, NTSTATUS allowableError = 0);		// 0 == STATUS_SUCCESS
 #endif
-
-
 
 class AFX_CLASS CSyncObject : public SafeHandle {
 	typedef CSyncObject class_type;
@@ -93,7 +79,7 @@ public:
 
 	CCriticalSection();
 	//  CCriticalSection(DWORD dwSpinCount);
-	~CCriticalSection();
+	~CCriticalSection() noexcept;
 
 	void lock() {
 #if UCFG_USE_PTHREADS
@@ -116,7 +102,7 @@ public:
 #endif
 	}
 
-	void unlock() {
+	void unlock() noexcept {
 #if UCFG_USE_PTHREADS
 		PthreadCheck(::pthread_mutex_unlock(&m_mutex));
 #elif defined(WDM_DRIVER)

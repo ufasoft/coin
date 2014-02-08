@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #pragma warning(disable: 4073)
@@ -207,7 +215,7 @@ Int64 DateTime::SimpleUtc() {
 #if UCFG_USE_POSIX
 	timespec ts;
 	CCheck(::clock_gettime(CLOCK_REALTIME, &ts));
-	return FromUnix(ts.tv_sec).m_ticks+ts.tv_nsec/100;
+	return from_time_t(ts.tv_sec).m_ticks + ts.tv_nsec/100;
 
 //!!!O	timeval tv;
 //!!!O	CCheck(::gettimeofday(&tv, 0));
@@ -375,7 +383,7 @@ public:
 			AddToList();
 	}
 
-	Int64 GetTicks() override {
+	Int64 GetTicks() noexcept override {
 		return __rdtsc();
 	}
 } s_tscPreciseTime;
@@ -431,7 +439,7 @@ inline DateTime DateTime::PreciseCorrect(Int64 ticks) {
 	return ticks;
 }*/
 
-DateTime DateTime::UtcNow() {
+DateTime DateTime::UtcNow() noexcept {
 #if !UCFG_USE_POSIX
 	if (!s_cntDisablePreciseTime) {
 		if (CPreciseTimeBase *preciser = CPreciseTimeBase::s_pCurrent)		// get pointer to avoid Race Condition

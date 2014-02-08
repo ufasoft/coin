@@ -25,7 +25,7 @@ unsigned int MurmurHashAligned2(const ConstBuf& cbuf, UInt32 seed) {
 
 	unsigned int h = seed ^ len;
 
-	int align = (int)(UInt64)data & 3;
+	const size_t align = (int)(UInt64)data & 3;
 
 	if (align && (len >= 4)) {
 		// Pre-load the temp registers
@@ -82,8 +82,7 @@ unsigned int MurmurHashAligned2(const ConstBuf& cbuf, UInt32 seed) {
 			//----------
 			// Handle tail bytes
 
-			switch(len)
-			{
+			switch(len) {
 			case 3: h ^= data[2] << 16;
 			case 2: h ^= data[1] << 8;
 			case 1: h ^= data[0];

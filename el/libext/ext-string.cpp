@@ -129,7 +129,7 @@ String::String(const std::wstring& s)
 {
 	Init((const Char*)0, s.size());				//!!! not correct for UTF-32
 	Char *p = (Char*)m_blob.data();
-	for (int i=0; i<s.size(); ++i)
+	for (size_t i=0; i<s.size(); ++i)
 		p[i] = Char(s[i]);
 }
 
@@ -168,24 +168,25 @@ void String::Init(Encoding *enc, const char *lpch, ssize_t nLength) {
 }
 
 const char *String::c_str() const {  //!!! optimize
-	if (!m_blob.m_pData)
-		return 0;
-	char * volatile &pChar = m_blob.m_pData->AsStringBlobBuf()->m_pChar;
-	if (!pChar) {
-		Encoding& enc = Encoding::Default();
-		for (size_t n=(m_blob.Size/sizeof(Char))+1, len=n+1;; len<<=1) {
-			Array<char> p(len);
-			size_t r;
-			if ((r=enc.GetBytes((const Char*)m_blob.m_pData->GetBSTR(), n, (byte*)p.get(), len)) < len) {
-				p.get()[r] = 0; //!!!R
-				char *pch = p.release();
-				if (Interlocked::CompareExchange(pChar, pch, (char*)nullptr))
-					Free(pch);
-				break;
+	if (Blob::impl_class *pData = m_blob.m_pData) {
+		char * volatile &pChar = pData->AsStringBlobBuf()->m_pChar;
+		if (!pChar) {
+			Encoding& enc = Encoding::Default();
+			for (size_t n=(pData->GetSize()/sizeof(Char))+1, len=n+1;; len<<=1) {
+				Array<char> p(len);
+				size_t r;
+				if ((r=enc.GetBytes((const Char*)pData->GetBSTR(), n, (byte*)p.get(), len)) < len) {
+					char *pch = p.release();
+					pch[r] = 0; //!!!? R
+					if (Interlocked::CompareExchange(pChar, pch, (char*)nullptr))
+						Free(pch);
+					break;
+				}
 			}
 		}
+		return pChar;
 	}
-	return pChar;
+	return 0;
 }
 
 String::operator explicit_cast<std::string>() const {
@@ -432,7 +433,7 @@ int String::CompareNoCase(const String& s) const {
 	}
 }
 
-bool String::IsEmpty() const {
+bool String::IsEmpty() const noexcept {
 	return !m_blob.m_pData || m_blob.Size==0;
 }
 
@@ -456,7 +457,7 @@ int String::LastIndexOf(Char c) const {
 }
 
 int String::Find(RCString s, int nStart) const {
-	if (nStart > Length)
+	if (nStart > (ssize_t)Length)
 		return -1;
 	const Char *p = _self;
 	const Char *lpsz = StrStr<Char>(p+nStart, s);
@@ -472,11 +473,11 @@ String String::Mid(int nFirst, int nCount) const {
 
 	if ((DWORD)nFirst + (DWORD)nCount > (DWORD)Length)
 		nCount = int(Length - nFirst);
-	if (nFirst > Length)
+	if (nFirst > (ssize_t)Length)
 		nCount = 0;
 
 	// optimize case of returning entire string
-	if (nFirst == 0 && nFirst + nCount == Length)
+	if (nFirst == 0 && nFirst + nCount == (ssize_t)Length)
 		return _self;
 
 	String dest;
@@ -550,7 +551,7 @@ vector<String> String::Split(RCString separator, size_t count) const {
 
 String String::Join(RCString separator, const std::vector<String>& value) {
 	String r;
-	for (int i=0; i<value.size(); ++i)
+	for (size_t i=0; i<value.size(); ++i)
 		r += (i ? separator : "") + value[i];
 	return r;
 }

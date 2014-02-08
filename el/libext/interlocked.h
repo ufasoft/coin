@@ -209,11 +209,11 @@ public:
 class Interlocked {
 public:
 #	if UCFG_WCE
-	template <class T> static T Increment(volatile T& v) { return T(_InterlockedIncrement((LONG*)(&v))); }
-	template <class T> static T Decrement(volatile T& v) { return T(_InterlockedDecrement((LONG*)(&v))); }
+	template <class T> static T Increment(volatile T& v) noexcept { return T(_InterlockedIncrement((LONG*)(&v))); }
+	template <class T> static T Decrement(volatile T& v) noexcept { return T(_InterlockedDecrement((LONG*)(&v))); }
 #	else
-	template <class T> static T Increment(volatile T& v) { return T(_InterlockedIncrement((volatile LONG*)(&v))); }
-	template <class T> static T Decrement(volatile T& v) { return T(_InterlockedDecrement((volatile LONG*)(&v))); }
+	template <class T> static T Increment(volatile T& v) noexcept { return T(_InterlockedIncrement((volatile LONG*)(&v))); }
+	template <class T> static T Decrement(volatile T& v) noexcept { return T(_InterlockedDecrement((volatile LONG*)(&v))); }
 #	endif
 
 /*!!!R	template <class T> static T Exchange(T &d, T e)
@@ -221,7 +221,7 @@ public:
 		return (T)INTERLOCKED_FUN(InterlockedExchange)((PVLONG)(&d),e);
 	}*/
 
-	template <class T> static T *Exchange(T * volatile &d, void *e) {
+	template <class T> static T *Exchange(T * volatile &d, void *e) noexcept {
 #ifdef WDM_DRIVER
 		return (T*)InterlockedExchangePointer((void * volatile *)(&d), e);
 #elif defined(_M_IX86)
@@ -231,16 +231,16 @@ public:
 #endif
 	}
 
-	static Int32 Exchange(volatile Int32& d, Int32 e) {
+	static Int32 Exchange(volatile Int32& d, Int32 e) noexcept {
 		return _InterlockedExchange(reinterpret_cast<long*>(const_cast<Int32*>(&d)), e);
 	}
 	
-	static Int32 CompareExchange(volatile Int32& d, Int32 e, Int32 c) {
+	static Int32 CompareExchange(volatile Int32& d, Int32 e, Int32 c) noexcept {
 		return _InterlockedCompareExchange(reinterpret_cast<long*>(const_cast<Int32*>(&d)), e, c);
 	}
 
 	template <typename T>
-	static T *CompareExchange(T *volatile & d, T *e, T *c) {
+	static T *CompareExchange(T *volatile & d, T *e, T *c) noexcept {
 #	if _MSC_VER >= 1700 || defined(_M_X64)
 		return static_cast<T*>(_InterlockedCompareExchangePointer((void* volatile *)&d, e, c));
 #else
@@ -248,7 +248,7 @@ public:
 #endif
 	}
 
-	static Int32 ExchangeAdd(volatile Int32& d, Int32 v) {
+	static Int32 ExchangeAdd(volatile Int32& d, Int32 v) noexcept {
 		return _InterlockedExchangeAdd(reinterpret_cast<long*>(const_cast<Int32*>(&d)), v);
 	}
 

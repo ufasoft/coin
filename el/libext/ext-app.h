@@ -238,15 +238,15 @@ public:
 	void AddDocTemplate(CDocTemplate* pTemplate);
 	virtual void DoWaitCursor(int nCode);
 	HICON LoadIcon(const CResID& resID) const;
-#if !UCFG_WCE
+#	if !UCFG_WCE
 	virtual void AddToRecentFileList(RCString pathName);  // add to MRU
-#endif
-#if UCFG_WIN32_FULL
+#	endif
+#	if UCFG_WIN32_FULL
 	virtual CDocument* OpenDocumentFile(RCString lpszFileName);
-#endif
+#	endif
 	virtual bool Register();
 	virtual bool Unregister();
-#endif
+#endif	// UCFG_GUI
 	void RegisterShellFileTypes(BOOL bCompat);
 	void UnregisterShellFileTypes();
 	virtual void OnAbort() {}
@@ -300,14 +300,14 @@ class CStreamHookThread : public Thread, public CConsoleStreamHook {
 
 	void Execute();
 public:
-	CStreamHookThread(CThreadRef *tr, FILE *file)
+	CStreamHookThread(thread_group *tr, FILE *file)
 		:	Thread(tr)
 		,	CConsoleStreamHook(file)
 	{}
 };
 
 class CConsoleStreamsCodepageConverter {
-	CThreadRef m_tr;
+	thread_group m_tr;
 public:
 	CConsoleStreamsCodepageConverter();
 	~CConsoleStreamsCodepageConverter();

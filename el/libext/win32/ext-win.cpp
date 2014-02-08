@@ -90,10 +90,10 @@ void CSyncObject::AttachCreated(HANDLE h) {
 }
 
 ProcessModule::ProcessModule(class Process& process, HMODULE hModule)
-	:	Process(&process)
+	:	Process(process)
 	,	HModule(hModule)
 {
-	Win32Check(::GetModuleInformation(Handle(process), hModule, &m_mi, sizeof m_mi));
+	Win32Check(::GetModuleInformation(Handle(*process.m_pimpl), hModule, &m_mi, sizeof m_mi));
 }
 
 #if !UCFG_WCE
@@ -116,34 +116,34 @@ vector<String> COperatingSystem::get_LogicalDriveStrings() {
 
 String ProcessModule::get_FileName() const {
 	TCHAR buf[MAX_PATH];
-	Win32Check(::GetModuleFileNameEx(Handle(*Process), HModule, buf, _countof(buf)));
+	Win32Check(::GetModuleFileNameEx(Handle(*Process.m_pimpl), HModule, buf, _countof(buf)));
 	return buf;
 }
 
 String ProcessModule::get_ModuleName() const {
 	TCHAR buf[MAX_PATH];
-	Win32Check(::GetModuleBaseName(Handle(*Process), HModule, buf, _countof(buf)));
+	Win32Check(::GetModuleBaseName(Handle(*Process.m_pimpl), HModule, buf, _countof(buf)));
 	return buf;
 }
 
-vector<ProcessModule> Process::get_Modules() {
+vector<ProcessModule> GetProcessModules(Process& process) {
 	vector<HMODULE> ar(5);
 	for (bool bContinue=true; bContinue;) {
 		DWORD cbNeeded;
-		BOOL r = ::EnumProcessModules(HandleAccess(_self), &ar[0], ar.size()*sizeof(HMODULE), &cbNeeded);
+		BOOL r = ::EnumProcessModules(Handle(*process.m_pimpl), &ar[0], ar.size()*sizeof(HMODULE), &cbNeeded);
 		Win32Check(r);
 		bContinue = cbNeeded > ar.size()*sizeof(HMODULE);
 		ar.resize(cbNeeded/sizeof(HMODULE));
 	}
 	vector<ProcessModule> arm;
-	for (int i=0; i<ar.size(); ++i)
-		arm.push_back(ProcessModule(_self, ar[i]));
+	for (size_t i=0; i<ar.size(); ++i)
+		arm.push_back(ProcessModule(process, ar[i]));
 	return arm;
 }
 
 static String ToDosPath(RCString lpath) {
 	vector<String> lds = System.LogicalDriveStrings;
-	for (int i=0; i<lds.size(); ++i) {
+	for (size_t i=0; i<lds.size(); ++i) {
 		String ld = lds[i];
 		String dd = ld.Right(1)=="\\" ? ld.Left(ld.Length-1) : ld;
 		vector<String> v = System.QueryDosDevice(dd);
@@ -162,7 +162,7 @@ typedef DWORD (WINAPI *PFN_GetProcessImageFileName)(HANDLE hProcess, LPTSTR lpIm
 
 static CDynamicLibrary s_dllPsapi("psapi.dll");
 
-String Process::get_MainModuleFileName() {
+String ProcessObj::get_MainModuleFileName() {
 	TCHAR buf[MAX_PATH];
 	try {
 		DBG_LOCAL_IGNORE_NAME(HRESULT_FROM_WIN32(ERROR_PARTIAL_COPY), ignERROR_PARTIAL_COPY);	
@@ -182,27 +182,13 @@ String Process::get_MainModuleFileName() {
 
 #endif // !UCFG_WCE
 
-Process::Process()
+ProcessObj::ProcessObj(pid_t pid, DWORD dwAccess, bool bInherit)
 	:	SafeHandle(0, false)
+	,	m_pid(pid)
 {
 	CommonInit();
-}
-
-Process::Process(ProcessEnum current)
-	:	SafeHandle(0, false)
-{
-	CommonInit();
-	Attach(::GetCurrentProcess(), false);
-	m_pid = GetCurrentProcessId();
-}
-
-Process::Process(DWORD id, DWORD dwAccess, bool bInherit)
-	:	SafeHandle(0, false)
-	,	m_pid(id)
-{
-	CommonInit();
-	if (id)
-		Attach(::OpenProcess(dwAccess, bInherit, id));
+	if (pid)
+		Attach(::OpenProcess(dwAccess, bInherit, pid));
 	/*!!!
 	else
 	{
@@ -210,14 +196,6 @@ Process::Process(DWORD id, DWORD dwAccess, bool bInherit)
 		m_bOwn = false;
 		m_ID = GetCurrentProcessId();
 	}*/
-}
-
-void Process::CommonInit() {
-#if UCFG_EXTENDED && !UCFG_WCE
-	StandardInput.m_pFile = &m_fileIn;
-	StandardOutput.m_pFile = &m_fileOut;
-	StandardError.m_pFile = &m_fileErr;
-#endif
 }
 
 void COperatingSystem::MessageBeep(UINT uType) {
@@ -287,48 +265,22 @@ DWORD File::DeviceIoControlAndWait(int code, LPCVOID bufIn, size_t nIn, LPVOID b
 	AFX_MODULE_STATE _afxBaseModuleState(true); //!!!
 #endif
 
-EXT_DATA CThreadLocal<_AFX_THREAD_STATE> _afxThreadState;
-
 _AFX_THREAD_STATE * AFXAPI AfxGetThreadState() {
-	return _afxThreadState.GetData();
+	return &ThreadBase::get_CurrentThread()->AfxThreadState();
 }
 
 AFX_MODULE_THREAD_STATE::AFX_MODULE_THREAD_STATE()
 	:	m_pfnNewHandler(0)
-#if UCFG_COM_IMPLOBJ
-	,	m_comClass(new CComClass)
-#endif
 {
 }
 
 AFX_MODULE_THREAD_STATE::~AFX_MODULE_THREAD_STATE() {
-#if UCFG_COM_IMPLOBJ
-	delete m_comClass;
-	m_comClass = 0;
-#endif
 }
 
 CThreadHandleMaps& AFX_MODULE_THREAD_STATE::GetHandleMaps() {
 	if (!m_handleMaps.get())
 		m_handleMaps.reset(new CThreadHandleMaps);
 	return *m_handleMaps.get();
-}
-
-AFX_MAINTAIN_STATE2::AFX_MAINTAIN_STATE2(AFX_MODULE_STATE* pNewState) {
-	m_pThreadState = _afxThreadState;
-	m_pPrevModuleState = m_pThreadState->m_pModuleState;
-	m_pThreadState->m_pModuleState = pNewState;
-}
-
-AFX_MAINTAIN_STATE2::~AFX_MAINTAIN_STATE2() {
-	m_pThreadState->m_pModuleState = m_pPrevModuleState;
-}
-
-AFX_MODULE_STATE * AFXAPI AfxGetModuleState() {
-	AFX_MODULE_STATE *r;
-	if (!(r=_afxThreadState->m_pModuleState))
-		r = &_afxBaseModuleState;
-	return r;
 }
 
 AFX_MODULE_THREAD_STATE * AFXAPI AfxGetModuleThreadState() {
@@ -603,6 +555,118 @@ HRESULT CDllServer::OnUnregister() {
 #else
 	return S_OK;
 #endif
+}
+
+CWinThread * AFXAPI AfxGetThread() {
+	ThreadBase *t = Thread::TryGetCurrentThread();
+	CWinThread *pThread = t ? t->AsWinThread() : 0;
+	return pThread ? pThread : AfxGetApp();
+}
+
+
+int AFXAPI AfxMessageBox(RCString text, UINT nType, UINT nIDHelp) {
+#if UCFG_WND
+	if (CWinApp *pApp = AfxGetApp())
+		return pApp->DoMessageBox(text, nType, nIDHelp);
+	else
+		return pApp->CWinApp::DoMessageBox(text, nType, nIDHelp);
+#else
+	return ::MessageBox(0, text, _T("Message Box"), nType);
+#endif
+}
+
+int AFXAPI AfxMessageBox(UINT nIDPrompt, UINT nType, UINT nIDHelp) {
+	String string;
+	string.Load(nIDPrompt);
+	if (nIDHelp == (UINT)-1)
+		nIDHelp = nIDPrompt;
+	return AfxMessageBox(string, nType, nIDHelp);
+}
+
+
+void AfxWinTerm()
+{
+	//!!!  ::CoFreeUnusedLibraries();
+	_AFX_THREAD_STATE *pTS = AfxGetThreadState();
+	if (!AfxGetModuleState()->m_bDLL) {
+#if !UCFG_WCE && UCFG_EXTENDED
+		pTS->m_hookCbt.Unhook();
+		pTS->m_hookMsg.Unhook();
+#endif
+	}
+}
+
+static int AfxWinMainEx(HINSTANCE hInstance, HINSTANCE hPrevInstance, RCString lpCmdLine, int nCmdShow) {
+	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+	pModuleState->m_bDLL = false;
+	int nReturnCode = 1;
+	try {
+		AfxWinInit(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
+		CWinThread* pThread = AfxGetThread(); 
+		bool rc = pThread->InitInstance();
+#if UCFG_WIN_MSG
+		if (rc)
+			nReturnCode = pThread->RunLoop();
+		else {
+			if (pThread->m_pMainWnd) {
+				TRACE0("Warning: Destroying non-NULL m_pMainWnd\n");
+				pThread->m_pMainWnd->Destroy();
+			}
+			nReturnCode = pThread->ExitInstance();
+		}
+#else
+		nReturnCode = pThread->ExitInstance();
+#endif
+	} catch (RCExc ex) {
+		AfxMessageBox(ex.what(), MB_ICONSTOP | MB_OK);
+	}
+	return nReturnCode;
+}
+
+static int AbortFilter() {
+	AfxGetApp()->OnAbort();
+	return EXCEPTION_CONTINUE_SEARCH ;
+}
+
+int AFXAPI AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, RCString lpCmdLine, int nCmdShow) {
+	int nReturnCode = 0;
+	__try {
+		nReturnCode = AfxWinMainEx(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
+	} __except(AbortFilter()) {
+	}
+	AfxWinTerm();
+	return nReturnCode;
+}
+
+
+static EXT_THREAD_PTR(AFX_MODULE_STATE, t_pModuleState);
+static EXT_THREAD_PTR(AFX_MODULE_STATE, t_pPrevModuleState);
+
+AFX_MODULE_STATE * AFXAPI AfxGetModuleState() {
+	AFX_MODULE_STATE *r;
+	if (!(r = t_pModuleState))
+		r = &_afxBaseModuleState;
+	return r;
+}
+
+void AFXAPI AfxSetModuleState(AFX_MODULE_STATE *pNewState) {
+	t_pPrevModuleState = t_pModuleState;						// std::exchange() does not work with EXT_THREAD_PTR
+	t_pModuleState = pNewState;
+}
+
+void AFXAPI AfxRestoreModuleState() {
+	t_pModuleState = t_pPrevModuleState;
+	t_pPrevModuleState = nullptr;
+}
+
+AFX_MAINTAIN_STATE2::AFX_MAINTAIN_STATE2(AFX_MODULE_STATE* pNewState)
+	:	m_pPrevModuleState(t_pModuleState)
+{
+	t_pModuleState = pNewState;
+}
+
+AFX_MAINTAIN_STATE2::~AFX_MAINTAIN_STATE2() {
+	t_pModuleState = m_pPrevModuleState;
 }
 
 

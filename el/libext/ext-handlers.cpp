@@ -6,9 +6,11 @@
 # General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
 ##########################################################################################################################################################################*/
 
+#define UCFG_DEFINE_OLD_NAMES 1
+
 #include <el/ext.h>
 
-#if UCFG_WIN32
+#if UCFG_WIN32 && !UCFG_MINISTL
 #	include <shlwapi.h>
 
 #	include <el/libext/win32/ext-win.h>
@@ -16,12 +18,21 @@
 
 //#include <el/libext/ext-os-api.h>
 
+#ifdef _WIN32
+extern "C" {
+	int __cdecl API_close(int fh) {
+		return _close(fh);
+	}
+}
+#endif
+
 #if UCFG_ALLOCATOR == UCFG_ALLOCATOR_TC_MALLOC
 
 #	ifndef _M_ARM
 #		define set_new_handler my_set_new_handler
 #	endif
 
+#	define close API_close
 #	define open _open
 #	define read _read
 #	define write _write
@@ -81,7 +92,7 @@ void *CAlloc::Malloc(size_t size) {
 	Throw(E_OUTOFMEMORY);
 }
 
-void CAlloc::Free(void *p) {
+void CAlloc::Free(void *p) noexcept {
 #ifdef WDM_DRIVER
 	if (!p)
 		return;
@@ -124,6 +135,7 @@ void *CAlloc::Realloc(void *p, size_t size) {
 #endif
 }
 
+#if !UCFG_MINISTL
 void *CAlloc::AlignedMalloc(size_t size, size_t align) {
 #if UCFG_ALLOCATOR == UCFG_ALLOCATOR_TC_MALLOC
 	if (void *p = do_memalign(align, size)) 
@@ -154,6 +166,7 @@ void CAlloc::AlignedFree(void *p) {
 	Throw(E_NOTIMPL);
 #endif
 }
+#endif // !UCFG_MINISTL
 
 #if !defined(WDM_DRIVER) && !UCFG_MINISTL
 
@@ -179,12 +192,12 @@ void AFXAPI ProcessExceptionInExcept() {
 void AFXAPI ProcessExceptionInCatch() {
 	try {
 		throw;
-	} catch (RCExc e) {
-		TRC(0, e);
-		wcerr << e.Message << endl;
+	} catch (const Exception& ex) {
+		TRC(0, ex);
+		wcerr << ex.Message << endl;
 #if UCFG_GUI
 		if (!IsConsole())
-			MessageBox::Show(e.Message);
+			MessageBox::Show(ex.Message);
 #endif
 #if !UCFG_CATCH_UNHANDLED_EXC
 		throw;
@@ -302,6 +315,11 @@ void __cdecl __crtCapturePreviousContext
 
 }
 
+
+APIT_lldiv_t __cdecl API_lldiv(long long numer, long long denom) {
+	APIT_lldiv_t result = { numer / denom, numer % denom };
+	return result;
+}
 
 
 } // "C"

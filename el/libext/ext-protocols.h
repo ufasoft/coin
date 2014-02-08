@@ -12,7 +12,7 @@ namespace Ext {
 
 UInt16 AFXAPI CalculateWordSum(const ConstBuf& mb, UInt32 sum = 0, bool bComplement = false);
 
-class EXT_API CHttpHeader {
+class /*!!!R EXT_API*/ CHttpHeader {
 	typedef CHttpHeader class_type;
 public:
 	NameValueCollection Headers;
@@ -32,7 +32,7 @@ public:
 
 std::ostream& AFXAPI operator<<(std::ostream& os, const CHttpHeader& header);
 
-class EXT_API CHttpRequest : public CHttpHeader {
+class /*!!!R EXT_API*/ CHttpRequest : public CHttpHeader {
 	typedef CHttpRequest class_type;
 public:
 	String Method;
@@ -52,7 +52,7 @@ protected:
 	void ParseParams(RCString s);
 };
 
-class EXT_API CHttpResponse : public CHttpHeader {
+class /*!!!R EXT_API*/ CHttpResponse : public CHttpHeader {
 public:
 	DWORD Code;
 

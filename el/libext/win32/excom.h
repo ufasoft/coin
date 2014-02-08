@@ -636,7 +636,7 @@ public:
 		UINT nID, Stream *pStream = 0, BOOL bStorage=FALSE, BSTR bstrLicKey=NULL);
 	COleControlSite *FindItem(UINT nID) const;
 	void GetDlgItem(int nID, HWND* phWnd) const;
-	void AttachControlSite(CWnd *pWnd);
+	virtual void AttachControlSite(CWnd *pWnd);
 	void OnFinalRelease();
 };
 
@@ -677,22 +677,8 @@ public:
 };
 
 
-class AFX_CLASS AFX_MAINTAIN_STATE_COM {
-protected:
-	AFX_MODULE_STATE*& m_refModuleState;
-	AFX_MODULE_STATE* m_pPrevModuleState;
-	//!!!	_AFX_THREAD_STATE* m_pThreadState;
-public:
-	HRESULT HResult;
-	String Description;	
 
-	AFX_MAINTAIN_STATE_COM(CComObjectRootBase *pBase);
-	AFX_MAINTAIN_STATE_COM(CComClass *pComClass);
-	~AFX_MAINTAIN_STATE_COM();
-	void SetFromExc(const Exc& e);
-};
-
-#endif
+#endif // UCFG_COM_IMPLOBJ
 
 AFX_API String AFXAPI StringFromIID(const IID& iid);
 AFX_API String AFXAPI StringFromCLSID(const CLSID& clsid);

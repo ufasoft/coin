@@ -24,29 +24,30 @@ bool Stream::Eof() const {
 }
 
 int Stream::ReadByte() const {
-	if (Eof())
-		return -1;
+	//!!!R	if (Eof())
+	//!!!	return -1;
 	byte b;
-	ReadBuffer(&b, 1);
-	return b;
+	return Read(&b, 1) ? int(b) : -1;
+}
+
+void Stream::ReadBuffer(void *buf, size_t count) const {
+	byte *p = (byte*)buf;
+	for (size_t cb; count; count-=cb, p+=cb) {
+		if (!(cb = Read(p, count)))
+			Throw(E_EXT_EndOfStream);
+	}
 }
 
 void Stream::CopyTo(Stream& dest, size_t bufsize) const {
 	vector<byte> buf(bufsize);
-	while (true) {
-		int i = 0;
-		for (int b; i<buf.size() && (b = ReadByte()) != -1; ++i)
-			buf[i] = (byte)b;
-		if (!i)
-			break;
-		dest.WriteBuffer(&buf[0], i);
-	}
+	for (size_t cb; cb = Read(&buf[0], buf.size());)
+		dest.WriteBuffer(&buf[0], cb);
 }
 
 void MemoryStream::WriteBuffer(const void *buf, size_t count) {
-	size_t size = m_blob.Size;
-	if (size-m_pos < count) {
-		m_blob.Size = (size_t)max(max(Int64(32), Int64(size*2)), Int64(m_pos+count));
+	size_t capacity = Capacity;
+	if (capacity-m_pos < count) {
+		m_blob.Size = (size_t)max(max(Int64(32), Int64(capacity*2)), Int64(m_pos+count));
 	}
 	memcpy(m_blob.data()+m_pos, buf, count);
 	m_pos += count;
@@ -56,8 +57,8 @@ bool MemoryStream::Eof() const {
 	Throw(E_NOTIMPL);
 }
 
-void MemoryStream::Reset(size_t len) {
-	m_blob.Size = len;
+void MemoryStream::Reset(size_t cap) {
+	m_blob.Size = cap;
 	m_pos = 0;
 }
 
@@ -72,6 +73,14 @@ void CMemReadStream::ReadBufferAhead(void *buf, size_t count) const {
 		Throw(E_EXT_EndOfStream);
 	if (buf)
 		memcpy(buf, m_mb.P+m_pos, count);
+}
+
+size_t CMemReadStream::Read(void *buf, size_t count) const {
+	size_t r = std::min(count, m_mb.Size-m_pos);
+	if (r)
+		memcpy(buf, m_mb.P+m_pos, r);
+	m_pos += r;
+	return r;
 }
 
 void CMemReadStream::ReadBuffer(void *buf, size_t count) const {

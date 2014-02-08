@@ -45,7 +45,6 @@
 #	define WM_NCDESTROY            (WM_APP - 1)
 #endif
 
-
 namespace Ext {
 
 #ifdef GetNextWindow
@@ -515,7 +514,7 @@ public:
 
 class ProcessModule {
 public:
-	CPointer<Process> Process;
+	Process Process;
 	CInt<HMODULE> HModule;
 
 	ProcessModule() {
@@ -546,107 +545,7 @@ private:
 	MODULEINFO m_mi;
 };
 
-struct ProcessStartInfo {
-	String FileName,
-		Arguments,
-		WorkingDirectory;
-	CBool CreateNewWindow,
-		CreateNoWindow,
-		RedirectStandardInput,
-		RedirectStandardOutput,
-		RedirectStandardError;
-	DWORD Flags;
-
-	ProcessStartInfo()
-		:	Flags(0)
-	{}
-};
-
-class Process : public SafeHandle { //!!!
-public:
-	ProcessStartInfo StartInfo;
-
-#if UCFG_EXTENDED && !UCFG_WCE
-protected:
-	File m_fileIn, m_fileOut, m_fileErr;
-public:
-	FileStream StandardInput,
-		StandardOutput,
-		StandardError;
-#endif
-public:
-	Process(HANDLE handle) {
-		Attach(handle, false);
-		CommonInit();
-	}
-
-	enum ProcessEnum {
-		Current
-	};
-
-	AFX_API Process();
-	AFX_API Process(ProcessEnum current);
-	AFX_API Process(DWORD id, DWORD dwAccess = MAXIMUM_ALLOWED, bool bInherit = false);
-
-	bool Start();
-	static EXT_API std::unique_ptr<Process> AFXAPI Start(ProcessStartInfo psi);
-
-	EXT_API std::unique_ptr<CWinThread> Create(RCString commandLine, DWORD dwFlags = 0, const char *dir = 0, bool bInherit = false, STARTUPINFO *psi = 0);
-
-	void Terminate(DWORD dwExitCode)  {	Win32Check(::TerminateProcess(HandleAccess(*this), dwExitCode)); }
-
-	void WaitForExit(DWORD ms = INFINITE) { WaitWithMS(ms, HandleAccess(*this)); }
-
-	DWORD get_ExitCode() const {
-		DWORD r;
-		Win32Check(::GetExitCodeProcess(HandleAccess(*this), &r));
-		return r;
-	}
-	DEFPROP_GET(DWORD, ExitCode);
-
-	AFX_API CTimesInfo get_Times() const;
-	DEFPROP_GET(CTimesInfo, Times);
-
-	DWORD get_ID() const;
-	DEFPROP_GET(DWORD, ID);
-
-	HWND get_MainWindowHandle() const;
-	DEFPROP_GET(HWND, MainWindowHandle);
-
-#if !UCFG_WCE
-	AFX_API DWORD get_Version() const;
-	DEFPROP_GET(DWORD, Version);
-
-	bool get_IsWow64();
-	DEFPROP_GET(bool, IsWow64);
-
-	DWORD get_PriorityClass() { return Win32Check(::GetPriorityClass(HandleAccess(*this))); }
-	void put_PriorityClass(DWORD pc) { Win32Check(::SetPriorityClass(HandleAccess(*this), pc)); }
-	DEFPROP(DWORD, PriorityClass);
-	void GenerateConsoleCtrlEvent(DWORD dwCtrlEvent = CTRL_BREAK_EVENT);
-
-	String get_MainModuleFileName();
-	DEFPROP_GET(String, MainModuleFileName);
-#endif
-
-	void FlushInstructionCache(LPCVOID base = 0, SIZE_T size = 0) { Win32Check(::FlushInstructionCache(HandleAccess(*this), base, size)); }
-
-	DWORD VirtualProtect(void *addr, size_t size, DWORD flNewProtect);
-	MEMORY_BASIC_INFORMATION VirtualQuery(const void *addr);
-	SIZE_T ReadMemory(LPCVOID base, LPVOID buf, SIZE_T size);
-	SIZE_T WriteMemory(LPVOID base, LPCVOID buf, SIZE_T size); 
-	
-	EXT_API std::vector<ProcessModule> get_Modules();
-	DEFPROP_GET(std::vector<ProcessModule>, Modules);
-protected:
-	bool Valid() const {
-		return DangerousGetHandleEx() != 0;
-	}
-
-	void CommonInit();
-private:
-	mutable CInt<DWORD> m_pid;
-};
+std::vector<ProcessModule> GetProcessModules(Process& process);
 
 class Wow64FsRedirectionKeeper {
 	typedef Wow64FsRedirectionKeeper class_type;
@@ -823,7 +722,7 @@ class AFX_MODULE_THREAD_STATE : public CNoTrackObject {
 public:
 	_PNH m_pfnNewHandler;
 	//!!!  COwnerArray<CComTypeLibHolder> m_tlList;
-	CPointer<ThreadBase> m_pCurrentThread;
+//!!!R	CPointer<ThreadBase> m_pCurrentThread;
 
 #if UCFG_COM_IMPLOBJ
 	typedef std::vector<std::unique_ptr<CComClassFactoryImpl>> CFactories;
@@ -831,7 +730,7 @@ public:
 
 	typedef std::vector<std::unique_ptr<CComClass>> CClassList;
 	CClassList m_classList;
-	CComClass *m_comClass;
+	std::unique_ptr<CComClass> m_comClass;
 #endif
 	AFX_MODULE_THREAD_STATE();
 	~AFX_MODULE_THREAD_STATE();
@@ -915,10 +814,10 @@ extern AFX_MODULE_STATE _afxBaseModuleState;
 
 //!!!extern AFX_MODULE_STATE afxModuleState;
 
-class _AFX_THREAD_STATE : public CNoTrackObject {
+class _AFX_THREAD_STATE {
 public:
-	AFX_MODULE_STATE *m_pModuleState;
-	AFX_MODULE_STATE *m_pPrevModuleState;
+//!!!?	AFX_MODULE_STATE *m_pModuleState;
+//!!!?	AFX_MODULE_STATE *m_pPrevModuleState;
 	const MSG *m_pLastSentMsg;
 	CPointer<CWnd> m_pWndInit;
 #if UCFG_EXTENDED && UCFG_GUI
@@ -948,15 +847,24 @@ public:
 	~_AFX_THREAD_STATE();
 };
 
-extern EXT_DATA CThreadLocal<_AFX_THREAD_STATE> _afxThreadState;
 
-struct AFX_CLASS AFX_MAINTAIN_STATE2
-{
+struct AFX_CLASS AFX_MAINTAIN_STATE2 {
 	AFX_MAINTAIN_STATE2(AFX_MODULE_STATE* pModuleState);
 	~AFX_MAINTAIN_STATE2();
 protected:
 	AFX_MODULE_STATE* m_pPrevModuleState;
-	_AFX_THREAD_STATE* m_pThreadState;
+};
+
+class AFX_CLASS AFX_MAINTAIN_STATE_COM : public AFX_MAINTAIN_STATE2 {
+	typedef AFX_MAINTAIN_STATE2 base;
+public:
+	HRESULT HResult;
+	String Description;	
+
+	AFX_MAINTAIN_STATE_COM(CComObjectRootBase *pBase);
+	AFX_MAINTAIN_STATE_COM(CComClass *pComClass);
+	~AFX_MAINTAIN_STATE_COM();
+	void SetFromExc(RCExc e);
 };
 
 
@@ -991,7 +899,8 @@ struct CResource {
 };*/
 
 #ifdef _AFXDLL
-	AFX_MODULE_STATE* AFXAPI AfxSetModuleState(AFX_MODULE_STATE* pNewState);
+	void AFXAPI AfxSetModuleState(AFX_MODULE_STATE* pNewState);
+	void AFXAPI AfxRestoreModuleState();
 	AFX_API HINSTANCE AFXAPI AfxTryFindResourceHandle(const CResID& lpszName, const CResID& lpszType);
 	AFX_API HINSTANCE AFXAPI AfxFindResourceHandle(const CResID& lpszName, const CResID& lpszType);
 #else
@@ -1026,6 +935,9 @@ private:
 
 AFX_API void AFXAPI AfxCoreInitModule();
 void AFXAPI AfxInitRichEdit();
+
+AFX_API int AFXAPI AfxMessageBox(RCString text, UINT nType = MB_OK, UINT nIDHelp = 0);
+AFX_API int AFXAPI AfxMessageBox(UINT nIDPrompt, UINT nType = MB_OK, UINT nIDHelp = (UINT)-1);
 
 
 } // Ext::

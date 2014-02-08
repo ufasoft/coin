@@ -213,7 +213,7 @@ DirectoryInfo Directory::CreateDirectory(RCString path) {
 	vector<String> ar = path.Split(String(Path::DirectorySeparatorChar)+String(Path::AltDirectorySeparatorChar));
 	String dir;
 	bool b = true;
-	for (int i=0; i<ar.size(); i++) {
+	for (size_t i=0; i<ar.size(); i++) {
 		dir = AddDirSeparator(dir+ar[i]);
 #if UCFG_USE_POSIX
 		if (::mkdir(dir, 0777) < 00 && errno!=EEXIST && errno!=EISDIR)
@@ -505,7 +505,12 @@ void File::CreateForMapping(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwS
 }
 
 bool File::Read(void *buf, UInt32 len, UInt32 *read, OVERLAPPED *pov) {
-	return CheckPending(::ReadFile(HandleAccess(_self), buf, len, (DWORD*)read, pov));
+	bool b = ::ReadFile(HandleAccess(_self), buf, len, (DWORD*)read, pov);
+	if (!b && ::GetLastError()==ERROR_BROKEN_PIPE) {
+		*read = 0;
+		return true;
+	}
+	return CheckPending(b);
 }
 
 bool File::Write(const void *buf, UInt32 len, UInt32 *written, OVERLAPPED *pov) {
@@ -639,7 +644,7 @@ UInt32 File::Read(void *lpBuf, UInt32 nCount) {
 	return CCheck(::read((int)(LONG_PTR)(HANDLE)HandleAccess(_self), lpBuf, nCount));
 #else
 	DWORD dwRead;
-	Win32Check(::ReadFile(HandleAccess(_self), lpBuf, nCount, &dwRead, 0));
+	Win32Check(::ReadFile(HandleAccess(_self), lpBuf, nCount, &dwRead, 0), ERROR_BROKEN_PIPE);
 	return dwRead;
 #endif
 }
@@ -870,6 +875,35 @@ bool FileStream::Eof() const {
 		Throw(E_FAIL);
 }
 
+size_t FileStream::Read(void *buf, size_t count) const {
+	if (m_fstm)
+		return fread(buf, 1, count, m_fstm);
+		
+#if UCFG_WIN32_FULL
+	if (m_ovl) {
+		UInt32 n;
+		Win32Check(::ResetEvent(m_ovl->hEvent));
+		if (!m_pFile->Read(buf, count, &n, m_ovl)) {
+			int r = ::WaitForSingleObjectEx(m_ovl->hEvent, INFINITE, TRUE);
+			if (r == WAIT_IO_COMPLETION)
+				Throw(E_EXT_ThreadInterrupted);
+			if (r != 0)
+				Throw(E_FAIL);
+			try {
+				DBG_LOCAL_IGNORE_WIN32(ERROR_BROKEN_PIPE);
+				n = m_pFile->GetOverlappedResult(*m_ovl);
+			} catch (const Exception& ex) {
+				if (ex.HResult != HRESULT_FROM_WIN32(ERROR_BROKEN_PIPE))
+					throw;
+				n = 0;
+			}
+		}
+		return n;
+	}
+#endif
+	return m_pFile->Read(buf, (UINT)count);
+}
+
 void FileStream::ReadBuffer(void *buf, size_t count) const {
 	if (m_fstm) {
 		size_t r = fread(buf, 1, count, m_fstm);
@@ -893,7 +927,7 @@ void FileStream::ReadBuffer(void *buf, size_t count) const {
 			if (!b) {
 				int r = ::WaitForSingleObjectEx(m_ovl->hEvent, INFINITE, TRUE);
 				if (r == WAIT_IO_COMPLETION)
-					Throw(E_EXT_ThreadStopped);
+					Throw(E_EXT_ThreadInterrupted);
 				if (r != 0)
 					Throw(E_FAIL);
 				n = m_pFile->GetOverlappedResult(*m_ovl);
@@ -926,7 +960,7 @@ void FileStream::WriteBuffer(const void *buf, size_t count) {
 		if (!b) {
 				int r = ::WaitForSingleObjectEx(m_ovl->hEvent, INFINITE, TRUE);
 			if (r == WAIT_IO_COMPLETION)
-				Throw(E_EXT_ThreadStopped);
+				Throw(E_EXT_ThreadInterrupted);
 			if (r != 0)
 				Throw(E_FAIL);
 			n = m_pFile->GetOverlappedResult(*m_ovl);
@@ -975,7 +1009,7 @@ DateTime FileSystemInfo::get_CreationTime() const {
 #if UCFG_USE_POSIX
 	struct stat st;
 	CCheck(::stat(FullPath, &st));
-	return DateTime::FromUnix(st.st_ctime);
+	return DateTime::from_time_t(st.st_ctime);
 #else
 	return GetData().ftCreationTime;
 #endif
@@ -996,7 +1030,7 @@ DateTime FileSystemInfo::get_LastAccessTime() const {
 #if UCFG_USE_POSIX
 	struct stat st;
 	CCheck(::stat(FullPath, &st));
-	return DateTime::FromUnix(st.st_atime);
+	return DateTime::from_time_t(st.st_atime);
 #else
 	return GetData().ftLastAccessTime;
 #endif
@@ -1023,7 +1057,7 @@ DateTime FileSystemInfo::get_LastWriteTime() const {
 #if UCFG_USE_POSIX
 	struct stat st;
 	CCheck(::stat(FullPath, &st));
-	return DateTime::FromUnix(st.st_mtime);
+	return DateTime::from_time_t(st.st_mtime);
 #else
 	return GetData().ftLastWriteTime;
 #endif

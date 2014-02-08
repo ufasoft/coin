@@ -300,7 +300,7 @@ void *ListIteratorToPtr(LI li) {
 //!!!R #endif
 
 template <typename T>
-class IntrusiveList : NonCopiable {
+class IntrusiveList : noncopyable {
 	typedef IntrusiveList class_type;
 public:
 	typedef T value_type;
@@ -643,6 +643,10 @@ T clamp(const T& v, const T& lo, const T& hi) {
 	return clamp<T, std::less<T>>(v, lo, hi, std::less<T>());
 }
 
+template <typename T>
+T RoundUpToMultiple(const T& x, const T& mul) {
+	return (x + mul - 1) / mul * mul;
+}
 
 
 } // Ext::

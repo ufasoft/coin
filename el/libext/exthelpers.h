@@ -11,6 +11,7 @@
 #pragma once
 
 #if !UCFG_STD_EXCHANGE
+
 namespace std {
 inline char exchange(char& obj, char new_val) {
 	char old_val = obj;
@@ -112,10 +113,18 @@ private:
 	T m_v;
 };
 
+class noncopyable {
+protected:
+	noncopyable() {}
+private:
+	noncopyable(const noncopyable&);	
+	noncopyable& operator=(const noncopyable&);
+};
+
 template <typename T>
-class Keeper {
+class Keeper : noncopyable {
 public:
-	T& m_t; 
+	volatile T& m_t; 
 	T m_prev;
 
 	Keeper(T& t, const T& v)
@@ -125,17 +134,26 @@ public:
 		t = v;
 	}
 
+	Keeper(volatile T& t, const T& v)
+		:	m_t(t)
+		,	m_prev(m_t)
+	{
+		t = v;
+	}
+
 	~Keeper() {
 		m_t = m_prev;
 	}
-private:
-	Keeper(const Keeper&);
 };
 
 class CBoolKeeper : public Keeper<bool> {
 	typedef Keeper<bool> base;
 public:
 	CBoolKeeper(bool& b, bool n = true)
+		:	base(b, n)
+	{}
+
+	CBoolKeeper(volatile bool& b, bool n = true)
 		:	base(b, n)
 	{}
 };
@@ -636,37 +654,6 @@ public: \
 	IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, 0xFFFF, \
 	class_name::CreateObject, NULL)
 
-/*!!!R
-#define DECLARE_DYNAMIC(class_name) \
-protected: \
-static CRuntimeClass* _GetBaseClass(); \
-public: \
-static const AFX_DATA CRuntimeClass class##class_name; \
-virtual CRuntimeClass* GetRuntimeClass() const; \
-
-#define DECLARE_DYNCREATE(class_name) \
-DECLARE_DYNAMIC(class_name) \
-static Object *CreateObject();
-
-#define IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
-CRuntimeClass* class_name::_GetBaseClass() \
-{ return RUNTIME_CLASS(base_class_name); } \
-AFX_COMDAT const AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
-#class_name, sizeof(class class_name), wSchema, pfnNew, \
-&class_name::_GetBaseClass, NULL }; \
-CRuntimeClass* class_name::GetRuntimeClass() const \
-{ return RUNTIME_CLASS(class_name); } \
-
-#define IMPLEMENT_DYNAMIC(class_name, base_class_name) \
-IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, 0xFFFF, NULL)
-
-#define IMPLEMENT_DYNCREATE(class_name, base_class_name) \
-Object* class_name::CreateObject() \
-{ return new class_name; } \
-IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, 0xFFFF, \
-class_name::CreateObject)
-*/
-
 template <typename T> class SelfCountPtr {
 	T *m_p;
 	RefCounter *m_pRef;
@@ -749,10 +736,10 @@ public:
 		:	m_p(p)
 	{}
 
-	T *get() const { return m_p; }
-	T *operator->() const { return m_p; }
+	T *get() const noexcept { return m_p; }
+	T *operator->() const noexcept { return m_p; }
 
-	void swap(PtrBase& p) {
+	void swap(PtrBase& p) noexcept {
 		std::swap(m_p, p.m_p);
 	}
 protected:
@@ -1087,7 +1074,8 @@ public:
 
 	EXT_DATA static bool s_bShowCategoryNames;
 	EXT_DATA static int s_nLevel;
-	EXT_DATA static void *s_pOstream;
+	EXT_DATA static void *s_pOstream, *s_pSecondStream;
+	EXT_DATA static bool s_bPrintDate;
 
 	static void AFXAPI InitTraceLog(RCString regKey);
 };
@@ -1162,11 +1150,14 @@ private:
 	const char *m_funName;
 };
 
+inline HRESULT HResult(HRESULT err) { return err; }
+inline HRESULT HResult(unsigned int err) { return (HRESULT)err; }
+inline HRESULT HResult(unsigned long err) { return (HRESULT)err; }
 
 #if UCFG_EH_SUPPORT_IGNORE
-#	define DBG_LOCAL_IGNORE(hr) CLocalIgnore _localIgnore(hr);
+#	define DBG_LOCAL_IGNORE(hr) CLocalIgnore _localIgnore(HResult(hr));
 #	define DBG_LOCAL_IGNORE_WIN32(name) CLocalIgnore _localIgnore##name(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_WIN32, name));
-#	define DBG_LOCAL_IGNORE_NAME(hr, name) CLocalIgnore _localIgnore##name(hr);
+#	define DBG_LOCAL_IGNORE_NAME(hr, name) CLocalIgnore _localIgnore##name(HResult(hr));
 #else
 #	define DBG_LOCAL_IGNORE(hr)
 #	define DBG_LOCAL_IGNORE_WIN32(name)

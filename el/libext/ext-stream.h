@@ -22,12 +22,13 @@ public:
 	typedef Stream class_type;
 
 	virtual ~Stream();
-	virtual void ReadBuffer(void *buf, size_t count) const { Throw(E_NOTIMPL); }
 	virtual void WriteBuffer(const void *buf, size_t count) { Throw(E_NOTIMPL); }
 
 	void WriteBuf(const ConstBuf& mb) { WriteBuffer(mb.P, mb.Size); }
 
 	virtual bool Eof() const;
+	virtual size_t Read(void *buf, size_t count) const { Throw(E_NOTIMPL); }
+	virtual void ReadBuffer(void *buf, size_t count) const;
 	virtual int ReadByte() const;
 	virtual Int64 Seek(Int64 offset, SeekOrigin origin) const { Throw(E_NOTIMPL); }		// mandatory to implement where put_Position implemented
 	
@@ -71,7 +72,7 @@ public:
 	EXT_API CompressStream(Stream& stm, CompressionMode mode);
 	~CompressStream();
 
-	void ReadBuffer(void *buf, size_t count) const override;
+	size_t Read(void *buf, size_t count) const override;
 	void WriteBuffer(const void *buf, size_t count) override;
 	bool Eof() const override;
 	void SetByByteMode(bool v);

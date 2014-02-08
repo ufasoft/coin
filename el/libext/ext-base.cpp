@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #pragma warning(disable: 4073)
@@ -270,7 +278,7 @@ String Exception::get_Message() const {
 #endif
 }
 
-const char *Exception::what() const {
+const char *Exception::what() const noexcept {
 	if (m_message.IsEmpty())
 		m_message = get_Message();
 	return m_message.c_str();
@@ -287,13 +295,13 @@ String Exception::ToString() const {
 	return r;
 }
 
-static class HResultCategrory : public error_category {
-	const char *name() const override {
+static class HResultCategory : public error_category {
+	const char *name() const noexcept override {
 		return "HResult";		
 	}
 
 	string message(int eval) const override {
-		return AfxProcessError(eval);		
+		return explicit_cast<string>(AfxProcessError(eval));
 	}
 } s_hresultCategory;
 
@@ -302,9 +310,9 @@ const std::error_category& hresult_category() {
 }
 
 Exception::Exception(HRESULT hr, RCString message)
-	:	base(hr, hresult_category(), message.IsEmpty() ? string() : message)
+	:	base(hr, hresult_category(), message.IsEmpty() ? string() : string(explicit_cast<string>(message)))
 	,	HResult(hr)
-	,	m_message(message)		
+	,	m_message(message)
 {
 #if !UCFG_WCE
 	if (CStackTrace::Use)
@@ -396,8 +404,8 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 #endif
 }
 
-DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr, const char *funname) {
-	TRC(1, funname <<  ": " << AfxProcessError(hr)); 
+DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr, const char *funname, int nLine) {
+	TRC(1, funname <<  "(Ln" << nLine << "): " << AfxProcessError(hr)); 
 
 	ThrowImp(hr);
 }
@@ -673,7 +681,7 @@ inline int AFXAPI GetThreadNumber() {
 #endif
 }
 
-CTraceWriter::CTraceWriter(int level, const char* funname)
+CTraceWriter::CTraceWriter(int level, const char* funname) noexcept
 	:	m_pos(level & CTrace::s_nLevel ? (ostream*)CTrace::s_pOstream : 0)
 {
 	if (m_pos) {
@@ -682,7 +690,7 @@ CTraceWriter::CTraceWriter(int level, const char* funname)
 	}
 }
 
-CTraceWriter::CTraceWriter(ostream *pos)
+CTraceWriter::CTraceWriter(ostream *pos) noexcept
 	:	m_pos(pos)
 	,	m_bPrintDate(true)
 {
@@ -732,7 +740,7 @@ CTraceWriter::~CTraceWriter() {
 	}
 }
 
-ostream& CTraceWriter::Stream() {
+ostream& CTraceWriter::Stream() noexcept {
 	return m_pos ? static_cast<ostream&>(m_os) : s_nullStream;
 }
 

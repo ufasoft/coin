@@ -16,10 +16,15 @@
 #	include <el/libext/win32/ext-win.h>
 #endif
 
+#if UCFG_WIN32_FULL
+#	include <el/libext/win32/ext-full-win.h>
+#endif
+
 
 #if UCFG_USE_POSIX
 #	include <pwd.h>
 #	include <sys/utsname.h>
+#	include <sys/wait.h>
 #endif
 
 #pragma warning(disable: 4073)
@@ -627,7 +632,7 @@ String NameValueCollection::ToString() const {
 String HttpUtility::UrlEncode(RCString s, Encoding& enc) {
 	Blob blob = enc.GetBytes(s);
 	ostringstream os;
-	for (int i=0; i<blob.Size; ++i)	{
+	for (size_t i=0; i<blob.Size; ++i)	{
 		char ch = blob.constData()[i];
 		if (ch == ' ')
 			os << '+';
@@ -642,11 +647,9 @@ String HttpUtility::UrlEncode(RCString s, Encoding& enc) {
 String HttpUtility::UrlDecode(RCString s, Encoding& enc) {
 	Blob blob = enc.GetBytes(s);
 	ostringstream os;
-	for (int i=0; i<blob.Size; ++i)	
-	{
+	for (size_t i=0; i<blob.Size; ++i)	 {
 		char ch = blob.constData()[i];
-		switch (ch)
-		{
+		switch (ch) {
 		case '+':
 			os << ' ';
 			break;
@@ -672,7 +675,7 @@ static StaticRegex s_reNameValue("([^=]+)=(.*)");
 NameValueCollection HttpUtility::ParseQueryString(RCString query) {
 	vector<String> params = query.Split("&");
 	NameValueCollection r;
-	for (int i=0; i<params.size(); ++i) {
+	for (size_t i=0; i<params.size(); ++i) {
 		cmatch m;
 		if (!regex_search(params[i].c_str(), m, *s_reNameValue))
 			Throw(E_FAIL);
@@ -955,7 +958,7 @@ UInt16 Random::NextWord() {
 }
 
 void Random::NextBytes(const Buf& mb) {
-	for (int i=0; i<mb.Size; i++)
+	for (size_t i=0; i<mb.Size; i++)
 		mb.P[i] = (byte)NextWord();
 }
 
@@ -1006,15 +1009,12 @@ hashval ComputeHashImp(HashAlgorithm& algo, Stream& stm) {
 			counter = 0;
 			break;
 		}
-		for (int i=0; i<_countof(buf); ++i) {
-			int v = stm.ReadByte();
-			if (bLast = (-1 == v)) {
-				buf[i] = 0x80;
-				break;
-			}
-			buf[i] = (byte)v;
-			++len;
+		size_t cb = stm.Read(buf, sizeof buf);
+		if (cb < sizeof buf) {
+			buf[cb] = 0x80;
+			bLast = true;
 		}
+		len += cb;
 		counter = len << 3;
 		if (bLast && (len & (sizeof buf - 1)) < sizeof buf - int(bool(algo.IsHaifa)) - sizeof(W)*2) {
 			if (!(len & (sizeof buf - 1)))
@@ -1180,7 +1180,7 @@ String CMessageProcessor::ProcessInst(HRESULT hr) {
 #if UCFG_WIN32
 	if (::FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_ARGUMENT_ARRAY, 0, hr, 0, buf, sizeof buf, p))
 		return String(hex)+":  "+buf;
-	for (int i=0; i<m_ranges.size(); i++) {
+	for (size_t i=0; i<m_ranges.size(); i++) {
 		String msg = m_ranges[i]->CheckMessage(hr);
 		if (!msg.IsEmpty())
 			return String(hex)+L":  "+msg;
@@ -1361,6 +1361,293 @@ void AFXAPI LogObjectCounters(bool fFull) {
 #endif
 }
 
+ProcessStartInfo::ProcessStartInfo(RCString fileName, RCString arguments)
+	:	Flags(0)
+	,	FileName(fileName)
+	,	Arguments(arguments)
+#if !UCFG_WCE
+	,	EnvironmentVariables(Environment::GetEnvironmentVariables())
+#endif
+{}
+
+ProcessObj::ProcessObj()
+	:	SafeHandle(0, false)
+	,	m_stat_loc(0)
+{
+	CommonInit();
+}
+
+ProcessObj::ProcessObj(HANDLE handle, bool bOwn)
+	:	SafeHandle(0, false)
+	,	m_stat_loc(0)
+{
+	Attach(handle, bOwn);
+	CommonInit();
+}
+
+void ProcessObj::CommonInit() {
+#if UCFG_EXTENDED && !UCFG_WCE
+	StandardInput.m_pFile = &m_fileIn;
+	StandardOutput.m_pFile = &m_fileOut;
+	StandardError.m_pFile = &m_fileErr;
+#endif
+}
+
+DWORD ProcessObj::get_ID() const {
+#if UCFG_WIN32
+	if (!m_pid) {
+#if UCFG_WCE
+		Throw(E_FAIL);
+#else
+		typedef DWORD (WINAPI *PFN_GetProcessId)(HANDLE);
+		DlProcWrap<PFN_GetProcessId> pfn("KERNEL32.DLL", "GetProcessId");
+		if (pfn)
+			m_pid = pfn(Handle(_self));
+		else {
+			/*!!!R
+			typedef enum _PROCESSINFOCLASS {
+				ProcessBasicInformation = 0,
+				ProcessWow64Information = 26
+			} PROCESSINFOCLASS;
+
+			typedef void *PPEB;
+
+			typedef struct _PROCESS_BASIC_INFORMATION {
+				PVOID Reserved1;
+				PPEB PebBaseAddress;
+				PVOID Reserved2[2];
+				ULONG_PTR UniqueProcessId;
+				PVOID Reserved3;
+			} PROCESS_BASIC_INFORMATION;
+			typedef PROCESS_BASIC_INFORMATION *PPROCESS_BASIC_INFORMATION;
+*/
+			typedef NTSTATUS (WINAPI * PFN_QueryInformationProcess)(
+				HANDLE ProcessHandle,
+				PROCESSINFOCLASS ProcessInformationClass,
+				PVOID ProcessInformation,
+				ULONG ProcessInformationLength,
+				PULONG ReturnLength);
+
+			DlProcWrap<PFN_QueryInformationProcess> ntQIP("NTDLL.DLL", "NtQueryInformationProcess");
+			if (!ntQIP)
+				Throw(E_FAIL);
+
+			PROCESS_BASIC_INFORMATION info;
+			ULONG returnSize;
+			ntQIP(Handle(_self), ProcessBasicInformation, &info, sizeof(info), &returnSize);  // Get basic information.
+			m_pid = (DWORD)info.UniqueProcessId;		
+		}
+#endif
+	}
+#endif
+	return m_pid;
+}
+
+DWORD ProcessObj::get_ExitCode() const {
+#if UCFG_WIN32
+	DWORD r;
+	Win32Check(::GetExitCodeProcess(HandleAccess(*this), &r));
+	return r;
+#else
+	return m_stat_loc;
+#endif
+}
+
+
+void ProcessObj::Kill() {
+#if UCFG_WIN32
+	Win32Check(::TerminateProcess(HandleAccess(*this), 1));
+#else
+	CCheck(::kill(m_pid, SIGKILL));
+#endif
+}
+
+void ProcessObj::WaitForExit(DWORD ms) {
+#if UCFG_WIN32
+	WaitWithMS(ms, HandleAccess(*this));
+#else
+	::waitpid(m_pid, &m_stat_loc, 0);
+#endif
+}
+
+bool ProcessObj::get_HasExited() {
+#if UCFG_WIN32
+	return get_ExitCode() != STILL_ACTIVE;
+#else
+	int stat_loc = 0;
+	::waitpid(m_pid, &stat_loc, WUNTRACED);
+	return WIFEXITED(stat_loc);
+#endif
+}
+
+bool ProcessObj::Start() {
+#if UCFG_WIN32_FULL
+
+	STARTUPINFO si = {sizeof si};
+	StaticAssert(SW_SHOWNORMAL == 1, Invalid_SW_SHOWNORMAL);
+	si.wShowWindow = SW_SHOWNORMAL; // same as SW_NORMAL Critical for running iexplore
+	SafeHandle hI, hO, hE;
+#if UCFG_WCE
+	STARTUPINFO *psi = 0;
+	bool bInheritHandles = false;
+	LPCTSTR pCurrentDirectory = 0;
+#else
+	if (StartInfo.RedirectStandardInput || StartInfo.RedirectStandardOutput || StartInfo.RedirectStandardError) {
+		si.hStdInput = StdHandle::Get(STD_INPUT_HANDLE);
+		si.hStdOutput = StdHandle::Get(STD_OUTPUT_HANDLE);
+		si.hStdError = StdHandle::Get(STD_ERROR_HANDLE);
+		si.dwFlags |= STARTF_USESTDHANDLES;
+#if	 UCFG_EXTENDED
+		HANDLE hRead, hWrite;
+		SECURITY_ATTRIBUTES sattr = { sizeof(sattr), 0, TRUE };
+		if (StartInfo.RedirectStandardInput) {
+			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
+			si.hStdInput = hRead;
+			hI.Attach(hRead);
+			StandardInput.m_pFile->Duplicate(hWrite, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
+		}
+		if (StartInfo.RedirectStandardOutput) {
+			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
+			si.hStdOutput = hWrite;
+			hO.Attach(hWrite);
+			StandardOutput.m_pFile->Duplicate(hRead, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
+		}
+		if (StartInfo.RedirectStandardError) {
+			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
+			si.hStdError = hWrite;
+			hE.Attach(hWrite);
+			StandardError.m_pFile->Duplicate(hRead, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
+		}
+#	endif
+	}
+	STARTUPINFO *psi = &si;
+	bool bInheritHandles = bool(si.dwFlags & STARTF_USESTDHANDLES);
+	String dir = StartInfo.WorkingDirectory.IsEmpty() ? nullptr : StartInfo.WorkingDirectory;
+	LPCTSTR pCurrentDirectory = dir;
+#endif
+
+	PROCESS_INFORMATION pi;
+	String cls = StartInfo.FileName;
+	if (!StartInfo.Arguments.IsEmpty())
+		cls += " "+StartInfo.Arguments;
+	size_t len = (cls.Length+1)*sizeof(TCHAR);
+	TCHAR *cl = (TCHAR*)alloca(len);
+	memcpy(cl, (const TCHAR*)cls, len);
+	String fileName = StartInfo.FileName.IsEmpty() ? nullptr : StartInfo.FileName;
+	DWORD flags = StartInfo.Flags;
+	void *pEnvironment = 0;
+#if !UCFG_WCE
+	if (StartInfo.CreateNoWindow)
+		flags |= CREATE_NO_WINDOW;
+	String sEnv;
+	for (map<String, String>::iterator it=StartInfo.EnvironmentVariables.begin(), e=StartInfo.EnvironmentVariables.end(); it!=e; ++it)
+		sEnv += it->first + "=" + it->second + String('\0', 1);
+	pEnvironment = (void*)(const TCHAR*)sEnv;
+#	ifdef _UNICODE
+	flags |= CREATE_UNICODE_ENVIRONMENT;
+#	endif
+#endif
+	Win32Check(::CreateProcess(0, cl, 0, 0, bInheritHandles, flags, pEnvironment, (LPTSTR)pCurrentDirectory, psi, &pi)); //!!! BOOL is not bool
+	Attach(pi.hProcess);
+	m_pid = pi.dwProcessId;
+	ptr<CWinThread> pThread(new CWinThread);
+	pThread->Attach(pi.hThread, pi.dwThreadId);
+	return true;
+#else
+	Throw(E_NOTIMPL);
+#endif // UCFG_WIN32
+}
+
+
+
+Process AFXAPI Process::Start(const ProcessStartInfo& psi) {
+	Process r;
+	r.m_pimpl = new ProcessObj;
+	r.m_pimpl->StartInfo = psi;
+	r.m_pimpl->Start();
+	return r;
+}
+
+String Process::get_ProcessName() {
+#if UCFG_USE_POSIX
+	char szModule[PATH_MAX];
+	memset(szModule, 0, sizeof szModule);
+	CCheck(::readlink(String(EXT_STR("/proc/" << get_ID() << "/exe")), szModule, sizeof(szModule)));
+	return Path::GetFileName(szModule);
+#else
+	TCHAR buf[MAX_PATH];
+	Win32Check(::GetModuleBaseName(Handle(*m_pimpl), 0, buf, _countof(buf)));
+	String r = buf;
+	String ext = r.ToLower().Right(4);
+	if (ext==".exe" || ext==".bat" || ext==".com" || ext==".cmd")
+		r = r.Substring(0, r.Length-4);
+	return r;
+#endif
+}
+
+Process AFXAPI Process::GetProcessById(pid_t pid) {
+	Process r;
+#if UCFG_USE_POSIX
+	Throw(E_NOTIMPL);
+#else
+	r.m_pimpl = new ProcessObj(pid);
+#endif
+	return r;
+}
+
+Process AFXAPI Process::GetCurrentProcess() {
+	return GetProcessById(getpid());
+}
+
+vector<Process> AFXAPI Process::GetProcesses() {
+#if UCFG_USE_POSIX
+	Throw(E_NOTIMPL);
+#else
+	vector<DWORD> pids(10);
+	size_t n = pids.size();
+	for (DWORD cbReturned; n==pids.size(); n=cbReturned/sizeof(DWORD)) {
+		pids.resize(pids.size()*2);
+		Win32Check(::EnumProcesses(&pids[0], pids.size()*sizeof(DWORD), &cbReturned));
+	}
+	vector<Process> r;
+	for (size_t i=0; i<n; ++i) {
+		if (pid_t pid = pids[i]) {
+			if (HANDLE h = ::OpenProcess(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ, false, pid)) {
+				Process p;
+				p.m_pimpl = new ProcessObj(h, true);
+				r.push_back(p);
+			} else
+				Win32Check(false, ERROR_ACCESS_DENIED);
+		}
+	}
+	return r;
+#endif
+}
+
+vector<Process> AFXAPI Process::GetProcessesByName(RCString name) {
+	vector<Process> procs = GetProcesses(),
+		r;
+	DBG_LOCAL_IGNORE_WIN32(ERROR_INVALID_HANDLE);
+	DBG_LOCAL_IGNORE_WIN32(ERROR_PARTIAL_COPY);
+	EXT_FOR (Process& p, procs) {
+		try {
+			if (p.ProcessName == name)
+				r.push_back(p);
+		} catch (Exception& ex) {
+			switch (ex.HResult) {
+#ifdef WIN32
+			case HRESULT_OF_WIN32(ERROR_INVALID_HANDLE):
+			case HRESULT_OF_WIN32(ERROR_PARTIAL_COPY):
+#endif
+			case E_ACCESSDENIED:
+				break;
+			default:
+				throw;
+			}
+		}
+	}
+	return r;
+}
 
 
 } // Ext::
@@ -1389,7 +1676,7 @@ EXT_API bool AFXAPI regex_searchImpl(Ext::String::const_iterator bs,  Ext::Strin
 		m->m_prefix.Init(wm.prefix(), m->m_org, b);
 		m->m_suffix.Init(wm.suffix(), m->m_org, b);
 		m->Resize(wm.size());
-		for (int i=0; i<wm.size(); ++i)
+		for (size_t i=0; i<wm.size(); ++i)
 			m->GetSubMatch(i).Init(wm[i], bs, b);
 	}
 	return r;

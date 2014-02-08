@@ -18,13 +18,22 @@ typedef DelayedStatic2<std::regex, RegexTraits, String , std::regex_constants::s
 typedef DelayedStatic2<std::wregex, RegexTraits, String , std::regex_constants::syntax_option_type> StaticWRegex;
 
 
-class RegexExc : public Exc, public std::regex_error {
-	typedef Exc base;
+class RegexExc : public std::regex_error {
 public:
+	String Message;
+	HRESULT HResult;
+
 	RegexExc(HRESULT hr, RCString msg = nullptr)
-		:	base(hr, msg)
+		:	HResult(hr)
+		,	Message(msg)
 		,	std::regex_error(std::regex_constants::error_escape)				//!!! error_escape is just a stub
 	{}
+
+	/*!!!R
+	RegexExc(const RegexExc& ex)
+		:	base(ex.HResult, ex.m_message)
+		,	std::regex_error(std::regex_constants::error_escape)				//!!! error_escape is just a stub	//!!!
+	{}*/
 
 	~RegexExc() throw() {
 	}
@@ -172,6 +181,10 @@ inline bool regex_match(Ext::String::const_iterator b,  Ext::String::const_itera
 
 inline bool regex_match(Ext::RCString s, Ext::Smatch& m, const wregex& re, regex_constants::match_flag_type flags = regex_constants::match_default) {
 	return regex_match(s.begin(), s.end(), m, re, flags);
+}
+
+inline bool regex_match(Ext::RCString s, const regex& re, regex_constants::match_flag_type flags = regex_constants::match_default) {
+	return regex_match(s.c_str(), re, flags);
 }
 
 inline bool regex_match(Ext::RCString s, const wregex& re, regex_constants::match_flag_type flags = regex_constants::match_default) {

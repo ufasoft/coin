@@ -13,7 +13,9 @@
 namespace Ext {
 
 class CCriticalSection;
-class Exc;
+class Exception;
+
+typedef const std::exception& RCExc;
 
 class CPrintable {
 public:
@@ -39,23 +41,28 @@ public:
 };
 #endif
 
-class Exc : public CPrintable {
+const std::error_category& hresult_category();
+
+class Exception : public std::system_error, public CPrintable {
+	typedef std::system_error base;
 public:
-	typedef Exc class_type;
+	typedef Exception class_type;
 
 	static tls_ptr<String> t_LastStringArg;
 
 	HRESULT HResult;
-	String m_message;
+	mutable String m_message;
 
 	typedef std::map<String, String> CDataMap;
 	CDataMap Data;
 
-	explicit Exc(HRESULT hr = 0, RCString message = "");
+	explicit Exception(HRESULT hr = 0, RCString message = "");
 	String ToString() const;
 
 	virtual String get_Message() const;
 	DEFPROP_VIRTUAL_GET_CONST(String, Message);
+
+	const char *what() const noexcept override;
 private:
 
 #ifdef _WIN64
@@ -65,7 +72,7 @@ private:
 public:
 #if !UCFG_WCE
 	CStackTrace StackTrace;
-#endif
+#endif	
 };
 
 class ExcLastStringArgKeeper {
@@ -74,144 +81,92 @@ public:
 
 	ExcLastStringArgKeeper(RCString s)
 #if !UCFG_WDM
-		:	m_prev(*Exc::t_LastStringArg)
+		:	m_prev(*Exception::t_LastStringArg)
 #endif
 	{
 #if !UCFG_WDM
-		*Exc::t_LastStringArg = s;
+		*Exception::t_LastStringArg = s;
 #endif
 	}
 
 	~ExcLastStringArgKeeper() {
 #if !UCFG_WDM
-		*Exc::t_LastStringArg = m_prev;
+		*Exception::t_LastStringArg = m_prev;
 #endif
 	}
 
 	operator const String&() const {
 #if !UCFG_WDM
-		return *Exc::t_LastStringArg;
+		return *Exception::t_LastStringArg;
 #endif
 	}
 
 	operator const char *() const {
 #if !UCFG_WDM
-		return *Exc::t_LastStringArg;
+		return *Exception::t_LastStringArg;
 #endif
 	}
 
 	operator const String::Char *() const {
 #if !UCFG_WDM
-		return *Exc::t_LastStringArg;
+		return *Exception::t_LastStringArg;
 #endif
 	}
 };
 
-class OutOfMemoryExc : public Exc {
+#define EXT_DEFINE_EXC(c, b, code) class c : public b { public: c(HRESULT hr = code) : b(hr) {} };
+
+EXT_DEFINE_EXC(ArithmeticExc, Exception, E_EXT_Arithmetic)
+EXT_DEFINE_EXC(OverflowExc, ArithmeticExc, E_EXT_Overflow)
+EXT_DEFINE_EXC(ArgumentExc, Exception, E_INVALIDARG)
+EXT_DEFINE_EXC(EndOfStreamException, Exception, E_EXT_EndOfStream)
+EXT_DEFINE_EXC(FileFormatException, Exception, E_EXT_FileFormat)
+EXT_DEFINE_EXC(NotImplementedExc, Exception, E_NOTIMPL)
+EXT_DEFINE_EXC(UnspecifiedException, Exception, E_FAIL)
+EXT_DEFINE_EXC(AccessDeniedException, Exception, E_ACCESSDENIED)
+
+
+class thread_interrupted : public Exception {
 public:
-	OutOfMemoryExc()
-		:	Exc(E_OUTOFMEMORY)
-	{
-	}
+	thread_interrupted()
+		:	Exception(E_EXT_ThreadInterrupted)
+	{}
 };
 
-class SystemException : public Exc {
+class SystemException : public Exception {
 public:
 	SystemException(HRESULT hr = 0, RCString message = "")
-		:	Exc(hr, message)
+		:	Exception(hr, message)
 	{
 	}
 };
 
-class ArithmeticExc : public Exc {
-public:
-	ArithmeticExc(HRESULT hr = E_EXT_Arithmetic)
-		:	Exc(hr)
-	{}
-};
 
-class OverflowExc : public ArithmeticExc {
-public:
-	OverflowExc(HRESULT hr = E_EXT_Overflow)
-		:	ArithmeticExc(hr)
-	{}
-};
-
-class CryptoExc : public Exc {
-	typedef Exc base;
+class CryptoExc : public Exception {
+	typedef Exception base;
 public:
 	explicit CryptoExc(HRESULT hr, RCString message)
 		:	base(hr, message)
 	{}
 };
 
-class ArgumentExc : public Exc {
-public:
-	ArgumentExc()
-		:	Exc(E_INVALIDARG)
-	{}
-};
-
-class EndOfStreamException : public Exc {
-public:
-	EndOfStreamException()
-		:	Exc(E_EXT_EndOfStream)
-	{}
-};
-
-class FileFormatException : public Exc {
-public:
-	FileFormatException()
-		:	Exc(E_EXT_FileFormat)
-	{}
-};
-
-class NotImplementedExc : public Exc {
-public:
-	NotImplementedExc()
-		:	Exc(E_NOTIMPL)
-	{}
-};
-
-class UnspecifiedException : public Exc {
-public:
-	UnspecifiedException()
-		:	Exc(E_FAIL)
-	{}
-};
-
-class ThreadAbortException : public Exc {
-public:
-	ThreadAbortException()
-		:	Exc(E_EXT_ThreadStopped)
-	{}
-};
-
-class StackOverflowExc : public Exc {
-	typedef Exc base;
+class StackOverflowExc : public Exception {
+	typedef Exception base;
 public:
 	StackOverflowExc()
-		:	Exc(HRESULT_FROM_WIN32(ERROR_STACK_OVERFLOW))
+		:	base(HRESULT_FROM_WIN32(ERROR_STACK_OVERFLOW))
 	{}
 
 	CInt<void *> StackAddress;
 };
 
-class AccessDeniedExc : public Exc {
-public:
-	AccessDeniedExc()
-		:	Exc(E_ACCESSDENIED)
-	{
-	}
-};
-
-class ProcNotFoundExc : public Exc {
-	typedef Exc base;
+class ProcNotFoundExc : public Exception {
+	typedef Exception base;
 public:
 	String ProcName;
 
 	ProcNotFoundExc()
-		:	Exc(HRESULT_OF_WIN32(ERROR_PROC_NOT_FOUND))
+		:	base(HRESULT_OF_WIN32(ERROR_PROC_NOT_FOUND))
 	{
 	}
 
@@ -241,13 +196,14 @@ extern "C" AFX_API void _cdecl AfxTestEHsStub(void *prevFrame);
 	static int s_testEHs  = AfxTestEHs(&AfxTestEHs);									\
 
 
-class AssertFailedExc : public Exc {
+class AssertFailedExc : public Exception {
+	typedef Exception base;
 public:
 	String FileName;
 	int LineNumber;
 
 	AssertFailedExc(RCString exp, RCString fileName, int line)
-		:	Exc(HRESULT_FROM_WIN32(ERROR_ASSERTION_FAILURE), "Assertion Failed: "+exp)
+		:	base(HRESULT_FROM_WIN32(ERROR_ASSERTION_FAILURE), "Assertion Failed: "+exp)
 		,	FileName(fileName)
 		,	LineNumber(line)
 	{

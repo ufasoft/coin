@@ -51,7 +51,6 @@ class CControlBarBase;
 #	define _USING_EXT
 #endif
 
-class CThreadRef;
 class Socket;
 class DateTime;
 class COleVariant;

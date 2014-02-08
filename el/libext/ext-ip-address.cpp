@@ -33,8 +33,8 @@ CUsingSockets::~CUsingSockets() {
 	try {
 		DBG_LOCAL_IGNORE_NAME(HRESULT_FROM_WIN32(WSASYSNOTREADY), ignWSASYSNOTREADY);	
 		Close();
-	} catch (RCExc e) {
-		if (e.HResult != HRESULT_FROM_WIN32(WSASYSNOTREADY))
+	} catch (RCExc ex) {
+		if (HResultInCatch(ex) != HRESULT_FROM_WIN32(WSASYSNOTREADY))
 			throw;
 	}
 #endif
@@ -491,8 +491,7 @@ IPHostEntry::IPHostEntry(hostent *phost) {
 		HostName = phost->h_name;
 		for (const char * const *p = phost->h_addr_list; p && *p; ++p) {
 			IPAddress ip;
-			switch (phost->h_addrtype)
-			{
+			switch (phost->h_addrtype) {
 			case AF_INET:
 				ip = IPAddress(*(UInt32*)*p);
 				break;

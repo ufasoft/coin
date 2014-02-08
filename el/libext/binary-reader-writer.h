@@ -37,7 +37,7 @@ public:
 	}
 };
 
-class BinaryReader : public NonCopiable {
+class BinaryReader : noncopyable {
 	typedef BinaryReader class_type;
 public:
 	const Stream& BaseStream;
@@ -138,7 +138,7 @@ public:
 	
 	size_t ReadSize() const {
 		UInt64 v = Read7BitEncoded();
-		if (v > std::numeric_limits<size_t>::max())
+		if (v > (std::numeric_limits<size_t>::max)())
 			Throw(HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW));
 		return (size_t)v;
 	}
@@ -257,7 +257,7 @@ protected:
 
 };
 
-class BinaryWriter : public NonCopiable {
+class BinaryWriter : noncopyable {
 	typedef BinaryWriter class_type;
 public:
 	Stream& BaseStream;

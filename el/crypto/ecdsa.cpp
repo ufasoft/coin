@@ -137,7 +137,7 @@ CngKey& CngKey::operator=(const CngKey& key) {
 	return _self;
 }
 
-Blob CngKey::Export(CngKeyBlobFormat format) {
+Blob CngKey::Export(CngKeyBlobFormat format) const {
 	EVP_PKEY* key = ToKey(_self);
 	Blob r;
 	int size;
@@ -227,6 +227,14 @@ CngKey CngKey::Import(const ConstBuf& mb, CngKeyBlobFormat format) {
 		SslCheck(ec_key = ::EC_KEY_new_by_curve_name(NID_secp256k1));
 		impl->pkey.ec = ec_key;
 		SslCheck(::o2i_ECPublicKey(&impl->pkey.ec, &p, mb.Size));
+		break;
+	case CngKeyBlobFormat::OSslEccPublicCompressedBlob:
+		impl = ::EVP_PKEY_new();
+		SslCheck(::EVP_PKEY_set_type(impl, EVP_PKEY_EC));
+		SslCheck(ec_key = ::EC_KEY_new_by_curve_name(NID_secp256k1));
+		impl->pkey.ec = ec_key;
+		SslCheck(::o2i_ECPublicKey(&impl->pkey.ec, &p, mb.Size));
+		::EC_KEY_set_conv_form(impl->pkey.ec, POINT_CONVERSION_COMPRESSED);
 		break;
 	default:
 		Throw(E_INVALIDARG);

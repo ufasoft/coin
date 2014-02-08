@@ -8,6 +8,7 @@
 
 #pragma once
 
+
 //!!! #include "../eh/ext_eh.h"
 
 #if defined(__cplusplus)
@@ -31,33 +32,54 @@ namespace Ext {
 struct ExcRefs {
 	EHExceptionRecord*& ExceptionRecord;
 	void*& Context;
+	void*& FrameInfoChain;
+	void *& CurExcSpec;
 #if !UCFG_WCE
+	int& CxxReThrow;
 	_se_translator_function& Translator; 
 #endif
 #ifdef _M_X64
 	void *&      _curexception;  /* current exception */
 	void *&      _curcontext;    /* current exception context */
+	UInt64&		ImageBase;
+	UInt64&		ThrowImageBase;
+#endif
+#if defined (_M_X64) || defined (_M_ARM)
+	EHExceptionRecord*& ForeignException;		
 #endif
 
-
-	ExcRefs(EHExceptionRecord*& er, void*& ctx
+	ExcRefs(EHExceptionRecord*& er, void*& ctx, void*& frameInfoChain, void *&curexcspec
 #if !UCFG_WCE
+		, int& cxxReThrow
 		, _se_translator_function& tr
 #endif
 #ifdef _M_X64
 		, void *&      curexception
 		, void *&      curcontext
+		, UInt64&      imageBase
+		, UInt64&      throwImageBase
 #endif		
+#if defined (_M_X64) || defined (_M_ARM)
+		,	EHExceptionRecord*& foreignException
+#endif
 		)
 		:	ExceptionRecord(er)
 		,	Context(ctx)
+		,	FrameInfoChain(frameInfoChain)
+		,	CurExcSpec(curexcspec)
 #if !UCFG_WCE
+		,	CxxReThrow(cxxReThrow)
 		,	Translator(tr)
 #endif
 #ifdef _M_X64
-		, _curexception(curexception)
-		, _curcontext(curcontext)
+		,	_curexception(curexception)
+		,	_curcontext(curcontext)
+		,	ImageBase(imageBase)
+		,	ThrowImageBase(throwImageBase)
 #endif		
+#if defined (_M_X64) || defined (_M_ARM)
+		,	ForeignException(foreignException)
+#endif
 	{
 	}
 
@@ -74,7 +96,13 @@ bool __stdcall InitTls(void *hInst);
 #if defined(__cplusplus)
 
 namespace Ext {
-	bool __stdcall HOOK_SelectFastRaiseException(void* pExceptionObject, void  *_pThrowInfo);
+	bool __stdcall HOOK_SelectFastRaiseException(void* pExceptionObject, void  *_pThrowInfo, void *imageBase);
+
+#ifdef _WIN32
+	typedef BOOLEAN (NTAPI *PFN_RtlDispatchException)(IN PEXCEPTION_RECORD ExceptionRecord, IN PCONTEXT ContextRecord);
+	PFN_RtlDispatchException __stdcall GetProcAddress_RtlDispatchException();
+#endif
+
 } // Ext::
 
 #endif
@@ -82,7 +110,9 @@ namespace Ext {
 
 __BEGIN_DECLS
 
+void _stdcall API_RtlRaiseException(EXCEPTION_RECORD *e);
 void _stdcall API_RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags, DWORD nNumberOfArguments, const ULONG_PTR *lpArguments);
+
 
 void _stdcall IMP_RtlUnwind (void * TargetFrame, void *TargetIp, PEXCEPTION_RECORD ExceptionRecord, void * ReturnValue);
 void _stdcall API_RtlUnwind (void * TargetFrame, void * TargetIp, PEXCEPTION_RECORD ExceptionRecord, void * ReturnValue);

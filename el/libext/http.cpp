@@ -39,8 +39,8 @@ Encoding *CHttpHeader::GetEncoding() {
 
 #if UCFG_USE_LIBCURL
 
-class CurlException : public Exc {
-	typedef Exc base;
+class CurlException : public Exception {
+	typedef Exception base;
 public:
 	CurlException(HRESULT hr, RCString s)
 		:	base(hr, s)
@@ -182,15 +182,17 @@ void InetStream::Attach(ptr<CurlSession> curl) {
 
 #endif // UCFG_USE_LIBCURL
 
-void InetStream::ReadBuffer(void *buf, size_t size) const {
+size_t InetStream::Read(void *buf, size_t size) const {
 #if UCFG_USE_LIBCURL
 	if (!m_io.ReadToUserBuf((byte*)buf, size)) {
 		CurlCheck(::curl_easy_pause(m_curl, CURLPAUSE_SEND));			//!!!bug  can be called only from callback
 	}
+	return m_io.ReceivedSize;	//!!!?
 #else
 	DWORD dw;
 	bool b = ::InternetReadFile(BlockingHandle(*m_pConnection), buf, size, &dw);
-	Win32Check(b && dw==size);
+	Win32Check(b);
+	return dw;
 #endif
 }
 
@@ -702,7 +704,10 @@ Blob WebClient::DoRequest(HttpWebRequest& req, const ConstBuf data) {
 
 	int statusCode = m_response.StatusCode;
 	if (!(statusCode>=200 && statusCode<=299)) {
-		throw WebExc(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_HTTP, statusCode), "HTTP "+Convert::ToString(statusCode)+": "+m_response.StatusDescription);
+		String desc = m_response.StatusDescription;
+		WebException ex(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_HTTP, statusCode), "HTTP "+Convert::ToString(statusCode)+": "+desc);
+		ex.Response = m_response;
+		throw ex;
 	}
 		
 #if UCFG_USE_LIBCURL

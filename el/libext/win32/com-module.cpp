@@ -52,28 +52,25 @@ LONG CComModule::GetLockCount() {
 
 
 AFX_MAINTAIN_STATE_COM::AFX_MAINTAIN_STATE_COM(CComObjectRootBase *pBase)
-	:	m_refModuleState(_afxThreadState->m_pModuleState)
+	:	base(pBase->GetComClass()->m_pModuleState)
 	,	HResult(S_OK)
 {
-	m_pPrevModuleState = exchange(m_refModuleState, pBase->GetComClass()->m_pModuleState);
 }
 
 AFX_MAINTAIN_STATE_COM::AFX_MAINTAIN_STATE_COM(CComClass *pComClass)
-	:	m_refModuleState(_afxThreadState->m_pModuleState)
+	:	base(pComClass->m_pModuleState)
 	,	HResult(S_OK)
 {
-	m_pPrevModuleState = exchange(m_refModuleState, pComClass->m_pModuleState);
 }
 
 AFX_MAINTAIN_STATE_COM::~AFX_MAINTAIN_STATE_COM() {
 	if (FAILED(HResult))
-		HResult = CComModule::ProcessError(HResult, Description);
-	m_refModuleState = m_pPrevModuleState;
+		CComModule::ProcessError(HResult, Description);
 }
 
-void AFX_MAINTAIN_STATE_COM::SetFromExc(const Exc& e) {
-	HResult = e.HResult;
-	Description = e.Message;
+void AFX_MAINTAIN_STATE_COM::SetFromExc(RCExc ex) {
+	Description = ex.what();
+	HResult = HResultInCatch(ex);
 }
 
 void CComTypeLibHolder::Load() {
@@ -391,8 +388,8 @@ void CComClassFactory::OnFinalRelease() {
 HRESULT AFXAPI AfxDllCanUnloadNow() {
 	try {
 		return AfxOleCanExitApp() ? S_OK : S_FALSE;
-	} catch (RCExc e) {
-		return e.HResult;
+	} catch (RCExc ex) {
+		return HResultInCatch(ex);
 	}
 }
 
@@ -580,12 +577,12 @@ HRESULT AFXAPI AfxDllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
 		}
 		}*/
 		if (pModuleState->m_comModule.m_classList.size() != pTS->m_classList.size()) {
-			for (int i=0; i<pModuleState->m_comModule.m_classList.size(); i++)
+			for (size_t i=0; i<pModuleState->m_comModule.m_classList.size(); i++)
 				new CComClass(pModuleState->m_comModule.m_classList[i].get());
 		}
 		{
 			AFX_MODULE_THREAD_STATE::CFactories& fl = pTS->m_factories;
-			for (int i=0; i<fl.size(); i++) {
+			for (size_t i=0; i<fl.size(); i++) {
 				CComClassFactoryImpl *cf = fl[i].get();
 				if (cf->m_pObjClass->m_pGeneralClass->m_clsid == rclsid) {
 					return cf->ExternalQueryInterface(riid, ppv);
@@ -593,19 +590,21 @@ HRESULT AFXAPI AfxDllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
 			}
 		}
 		AFX_MODULE_THREAD_STATE::CClassList& cl = pTS->m_classList;
-		for (int j=0; j<cl.size(); j++) {
+		for (size_t j=0; j<cl.size(); j++) {
 			CComClass *pClass = cl[j].get();
 			if (pClass->m_pGeneralClass->m_clsid == rclsid) {
 				CComClassFactoryImpl *cf = new CComClassFactory;
-				cf->m_pClass = pTS->m_comClass;
+				if (!pTS->m_comClass)
+					pTS->m_comClass.reset(new CComClass);
+				cf->m_pClass = pTS->m_comClass.get();
 				cf->m_pObjClass = pClass;
 				return cf->ExternalQueryInterface(riid, ppv);
 			}
 		}
 		Throw(CLASS_E_CLASSNOTAVAILABLE);
 		return S_OK;
-	} catch (RCExc e) {
-		return e.HResult;
+	} catch (RCExc ex) {
+		return HResultInCatch(ex);
 	}
 }
 
@@ -642,7 +641,7 @@ void CComModule::UnregisterTypeLib() {
 void COleObjectFactory::UnregisterAll() {
 	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
 	vector<ptr<CComGeneralClass>>& cl = pModuleState->m_comModule.m_classList;
-	for (int i=0; i<cl.size(); i++)
+	for (size_t i=0; i<cl.size(); i++)
 		cl[i]->Unregister();
 	pModuleState->m_comModule.UnregisterTypeLib();
 }
@@ -651,7 +650,7 @@ void COleObjectFactory::RegisterAll() {
 	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
 	pModuleState->m_comModule.RegisterTypeLib();
 	vector<ptr<CComGeneralClass>>& cl = pModuleState->m_comModule.m_classList;
-	for (int i=0; i<cl.size(); i++)
+	for (size_t i=0; i<cl.size(); i++)
 		cl[i]->Register();
 }
 
@@ -661,16 +660,13 @@ HRESULT AFXAPI COleObjectFactory::UpdateRegistryAll(bool bRegister) {
 		if (bRegister)
 			pModuleState->m_comModule.RegisterTypeLib();
 		vector<ptr<CComGeneralClass>>& cl = pModuleState->m_comModule.m_classList;
-		for (int i=0; i<cl.size(); i++)
-			if (bRegister)
-				cl[i]->Register();
-			else
-				cl[i]->Unregister();
+		for (size_t i=0; i<cl.size(); i++)
+			bRegister ? cl[i]->Register() : cl[i]->Unregister();
 		if (!bRegister)
 			pModuleState->m_comModule.UnregisterTypeLib();
 		return S_OK;
-	} catch (RCExc e) {
-		return e.HResult;
+	} catch (RCExc ex) {
+		return HResultInCatch(ex);
 	}
 }
 
@@ -685,6 +681,7 @@ void CComModule::RegisterTypeLib() {
 		OleCheck(::RegisterTypeLib(iTL, (OLECHAR*)pFilename, (OLECHAR*)pDirName));
 	}
 }
+
 
 }  // Ext::
 

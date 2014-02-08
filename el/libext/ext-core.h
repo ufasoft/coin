@@ -49,6 +49,11 @@ PTW32_DLLPORT int PTW32_CDECL pthread_create (pthread_t * tid,
 
 namespace Ext {
 
+ENUM_CLASS(Endian) {
+	Big,
+	Little
+} END_ENUM_CLASS(Endian);
+
 inline UInt16 htole(UInt16 v) {
 	return htole16(v);
 }
@@ -313,6 +318,7 @@ public:
 	}
 
 	void ReadBufferAhead(void *buf, size_t count) const override;
+	size_t Read(void *buf, size_t count) const override;
 	void ReadBuffer(void *buf, size_t count) const override;
 	int ReadByte() const override;
 };
@@ -358,15 +364,22 @@ class EXTAPI MemoryStream : public MemStreamWithPosition {
 public:
 	typedef MemoryStream class_type;
 
+	MemoryStream(size_t capacity = 0)
+		:	m_blob(0, capacity)
+	{}
+
 	void WriteBuffer(const void *buf, size_t count) override;
 	bool Eof() const override;
-	void Reset(size_t len = 256);
+	void Reset(size_t cap = 256);
 
 	operator ConstBuf() const { return ConstBuf(m_blob.constData(), (size_t)m_pos); }
 	operator Ext::Blob() const { return Ext::Blob(m_blob.constData(), (size_t)m_pos); }
 
 	class Blob get_Blob();
 	DEFPROP_GET(class Blob, Blob);
+
+	size_t get_Capacity() const { return m_blob.Size; }
+	DEFPROP_GET(size_t, Capacity);
 private:
 	Ext::Blob m_blob;
 };
@@ -378,7 +391,7 @@ inline String AFXAPI operator+(const String& s, unsigned char ch) {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const CStringVector& ar) {
-	for (int i=0; i<ar.size(); i++)
+	for (size_t i=0; i<ar.size(); i++)
 		os << ar[i] << '\n';
 	return os;
 }
@@ -404,6 +417,13 @@ public:
 		:	m_pos(&ofs)
 		,	m_pis(0)
 	{}
+
+	size_t Read(void *buf, size_t count) const override {
+		m_pis->read((char*)buf, (std::streamsize)count);
+		if (!*m_pis)
+			Throw(E_EXT_NoInputStream);
+		return (size_t)m_pis->gcount();
+	}
 
 	void ReadBuffer(void *buf, size_t count) const override {
 		m_pis->read((char*)buf, (std::streamsize)count);
@@ -650,6 +670,9 @@ inline size_t RotlSizeT(size_t v, int shift) {
 #endif
 }
 
+int __cdecl PopCount(unsigned int v);
+int __cdecl PopCount(unsigned long long v);
+
 class BitOps {
 public:
 
@@ -680,6 +703,55 @@ public:
 		return v & mask;
 #endif
 	}
+
+#if !UCFG_WCE
+	static inline int PopCount(UInt32 v) {
+#	ifdef _MSC_VER
+		int r = 0;								// 	__popcnt() is AMD-specific
+		for (int i=0; i<32; ++i)
+			r += (v >> i) & 1;
+		return r;
+#	else
+		return __builtin_popcount(v);
+#	endif
+	}
+
+	static inline int PopCount(UInt64 v) {
+#	ifdef _MSC_VER
+		int r = 0;								// 	__popcnt() is AMD-specific
+		for (int i=0; i<64; ++i)
+			r += (v >> i) & 1;
+		return r;
+#	else
+		return __builtin_popcountll(v);
+#	endif
+	}
+
+	static inline int Scan(UInt32 mask) {
+#	ifdef _MSC_VER
+		unsigned long index;
+		return _BitScanForward(&index, mask) ? index+1 : 0;
+#	else
+		return __builtin_ffs(mask);
+#	endif
+	}
+
+	static inline int Scan(UInt64 mask) {
+#	ifdef _MSC_VER
+#		ifdef _M_X64
+			unsigned long index;
+			return _BitScanForward64(&index, mask) ? index+1 : 0;
+#		else
+			int r;
+			return !mask ? 0
+				: (r = Scan(UInt32(mask))) ? r
+				: 32+Scan(UInt32(mask >> 32));
+#		endif
+#	else
+		return __builtin_ffsll(mask);
+#	endif
+	}
+#endif // !UCFG_WCE
 
 };
 

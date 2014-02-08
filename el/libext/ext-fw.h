@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #pragma once
 
 
@@ -1528,14 +1536,12 @@ public:
 	DWORD get_ID() const;
 	DWORD get_ExitCode() const;
 	bool get_HasExited();
+	bool Start();
 	void Kill();
 	void WaitForExit(DWORD ms = INFINITE);
 
 #if UCFG_WIN32
 	ProcessObj(pid_t pid, DWORD dwAccess = MAXIMUM_ALLOWED, bool bInherit = false);
-
-	bool Start();
-	static EXT_API Process AFXAPI Start(ProcessStartInfo psi);
 
 	EXT_API std::unique_ptr<CWinThread> Create(RCString commandLine, DWORD dwFlags = 0, const char *dir = 0, bool bInherit = false, STARTUPINFO *psi = 0);
 

@@ -234,7 +234,7 @@ public:
 	//!!!  __declspec(property(get=GetStatus, put=SetStatus)) CurrencyStatus Status;
 };
 
-
+#if UCFG_FRAMEWORK
 class EXTAPI COleVariant : public VARIANT {
 public:
 	COleVariant();
@@ -453,6 +453,7 @@ public:
 		return &m_str;
 	}
 };
+#endif // UCFG_FRAMEWORK
 
 class AFX_CLASS CRegisterClassObject {
 	DWORD m_dw;
@@ -571,6 +572,7 @@ public:
 		:	m_stream(stream)
 	{}
 
+	size_t Read(void *buf, size_t count) const override;
 	void ReadBuffer(void *buf, size_t count) const override;
 	void WriteBuffer(const void *buf, size_t count) override;
 	bool Eof() const override;
@@ -928,7 +930,7 @@ public:
 };
 
 #if UCFG_COM_IMPLOBJ
-class EXT_API CIStreamWrap : public CComObjectRootBase, public IStream {
+class /*!!!R EXT_API */ CIStreamWrap : public CComObjectRootBase, public IStream {
 	typedef CComObjectRootBase base;
 public:
 	Stream& m_stm;
@@ -1005,12 +1007,13 @@ public:
 	BSTR Detach();
 };
 
-class ComExc : public Exc {
+class ComExc : public Exception {
+	typedef Exception base;
 protected:
 	_com_error m_comError;
 public:
 	ComExc(HRESULT hr, IErrorInfo* perrinfo = 0)
-		:	Exc(hr)
+		:	base(hr)
 		,	m_comError(hr, perrinfo)
 	{}
 

@@ -15,9 +15,14 @@
 #	pragma comment(lib, "ws2")
 #endif
 
+#if UCFG_USE_POSIX
+#	include <netinet/tcp.h>
+#endif
+
 using namespace std;
 
 #if UCFG_WIN32
+#	include <mstcpip.h>
 #	define WSA(e) WSA##e
 #else
 #	define WSA(e) e
@@ -83,10 +88,19 @@ void Socket::Bind(const IPEndPoint& ep) {
 }
 
 bool Socket::ConnectHelper(const IPEndPoint& ep) {
-	IPEndPoint nep(ep.Normalize());
-	if (::connect(BlockingHandleAccess(_self), nep.c_sockaddr(), nep.sockaddr_len()) != SOCKET_ERROR) {
+	if ((int)ep.get_AddressFamily() == IPAddress::AF_DOMAIN_NAME) {
+		vector<IPAddress> addrs = Dns::GetHostAddresses(ep.Address.m_domainname);
+		EXT_FOR (const IPAddress& ip, addrs) {
+			IPEndPoint nep(ip, ep.Port);
+			if (::connect(BlockingHandleAccess(_self), nep.c_sockaddr(), nep.sockaddr_len()) != SOCKET_ERROR)
+				return true;
+			int r = WSAGetLastError();
+			if (WSAGetLastError() == WSA(EWOULDBLOCK))
+				return false;
+		}
+		Throw(HRESULT_FROM_WIN32(WSA(ETIMEDOUT)));
+	} else if (::connect(BlockingHandleAccess(_self), ep.c_sockaddr(), ep.sockaddr_len()) != SOCKET_ERROR)
 		return true;
-	}
 	if (WSAGetLastError() != WSA(EWOULDBLOCK))
 		ThrowWSALastError();
 	return false;
@@ -188,8 +202,6 @@ CWSAEvent::~CWSAEvent() {
 #endif // UCFG_WIN32
 
 void Socket::Shutdown(int how) {
-	TRC(3, (int)HandleAccess(_self) << "\t" << how);
-
 	SocketCheck(::shutdown(HandleAccess(_self), how));
 }
 
@@ -222,7 +234,7 @@ int Socket::ReceiveFrom(void *buf, int len, IPEndPoint& ep) {
 
 void Socket::Attach(SOCKET s) {
 	Close();
-	SafeHandle::Attach(HANDLE(s));
+	SafeHandle::Attach(HANDLE(uintptr_t(s)));
 	//!!!  m_hSocket = s;
 }
 
@@ -248,6 +260,18 @@ void Socket::IOControl(int code, const Buf& mb) {
 #endif
 }
 
+void Socket::SetKeepAliveTime(int ms) {
+#if UCFG_WIN32
+	if (-1 != ms) {
+		tcp_keepalive ka = { 1, ms, 1000 };
+		Ioctl(SIO_KEEPALIVE_VALS, &ka, sizeof ka);
+	}
+#else
+	SetSocketOption(IPPROTO_TCP, TCP_KEEPIDLE, ms/1000);
+#endif
+	SetSocketOption(SOL_SOCKET, SO_KEEPALIVE, ms != -1);	
+}
+
 IPEndPoint Socket::get_LocalEndPoint() {
 	IPEndPoint ep;
 	socklen_t len = sizeof(sockaddr_in6);
@@ -262,16 +286,11 @@ IPEndPoint Socket::get_RemoteEndPoint() {
 	return ep;
 }
 
-void NetworkStream::ReadBuffer(void *buf, size_t count) const {
-	while (count) {
-		if (int n = m_sock.Receive(buf, (int)count)) {    
-			count -= n;
-			(byte*&)buf += n;
-		} else {
-			m_bEof = true;
-			Throw(E_EXT_EndOfStream);
-		}
-	}
+size_t NetworkStream::Read(void *buf, size_t count) const {
+	int n = m_sock.Receive(buf, (int)count);
+	if (!n)
+		m_bEof = true;
+	return n;
 }
 
 void NetworkStream::WriteBuffer(const void *buf, size_t count) {
@@ -286,6 +305,7 @@ void NetworkStream::WriteBuffer(const void *buf, size_t count) {
 	}
 }
 
+/*!!!R
 int NetworkStream::ReadByte() const {
 	DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, E_EXT_EndOfStream);
 	try {
@@ -297,7 +317,7 @@ int NetworkStream::ReadByte() const {
 			return -1;
 		throw;
 	}
-}
+}*/
 
 bool NetworkStream::Eof() const {
 	return m_bEof;

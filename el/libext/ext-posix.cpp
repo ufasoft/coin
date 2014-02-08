@@ -8,6 +8,8 @@
 
 #include <el/ext.h>
 
+#include <el/inc/crt/crt.h>
+
 //!!! not only getopt
 
 extern "C" {
@@ -38,6 +40,14 @@ extern "C" int __cdecl API_dclass(double d) {
 	default:
 		Ext::ThrowImp(E_EXT_CodeNotReachable);
 	}
+}
+
+extern "C" int __cdecl API_fdclass(float d) {
+	return API_dclass(d);
+}
+
+extern "C" int __cdecl API_ldclass(long double d) {
+	return API_dclass((double)d);
 }
 
 #if !UCFG_WCE
@@ -150,6 +160,9 @@ size_t __cdecl strlcat(char *dst, const char *src, size_t siz) {
     return dlen + (s - src);  // count does not include NUL
 }
 
+unsigned long long __cdecl API_strtoull(const char *str, char **endptr, int base) {
+	return _strtoui64(str, endptr, base);
+}
 
 } // extern "C"
 

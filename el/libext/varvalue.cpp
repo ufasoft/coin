@@ -147,6 +147,18 @@ VarValue::VarValue(RCString v)
 {
 }
 
+VarValue::VarValue(const char *p)
+	:	m_pimpl(new StringVarValueObj(p))
+{
+}
+
+VarValue::VarValue(const vector<VarValue>& ar)
+	:	m_pimpl(new ArrayVarValueObj)
+{
+	for (size_t i=0; i<ar.size(); ++i)
+		Set(i, ar[i]);
+}
+
 bool VarValue::operator==(const VarValue& v) const {
 	if (type() != v.type())
 		return false;

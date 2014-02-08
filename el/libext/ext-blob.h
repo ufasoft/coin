@@ -46,7 +46,7 @@ public:
 		:	m_dwRef(1)
 	{}
 
-	void AddRef() {
+	void AddRef() noexcept {
 		Interlocked::Increment(m_dwRef);
 	}
 
@@ -179,6 +179,10 @@ public:
 #endif
 
 	~Blob();
+
+	void swap(Blob& x) {
+		std::swap(m_pData, x.m_pData);
+	}
 	
 	void AssignIfNull(const Blob& val);
 	Blob& operator=(const Blob& val);
@@ -231,6 +235,10 @@ private:
 //	EXPLICIT_OPERATOR_BOOL() const;												// don't public it. Ambiguous type conversions
 friend class String;
 };
+
+inline void swap(Blob& x, Blob& y) {
+	x.swap(y);
+}
 
 inline Blob operator+(const ConstBuf& mb1, const ConstBuf& mb2) {
 	Blob r(0, mb1.Size+mb2.Size);

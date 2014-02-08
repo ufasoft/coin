@@ -12,18 +12,38 @@ using namespace std;
 using namespace rel_ops;
 
 #if UCFG_BIGNUM=='G'
-#	pragma comment(lib, "gmp")
+#	pragma comment(lib, EXT_GMP_LIB)
 #endif
 
 #include <el/bignum.h>
 
 namespace Ext {
 
+BigInteger::BigInteger()
+#if UCFG_BIGNUM=='A'
+	:	m_blob(nullptr)
+	,	m_count(1)
+#else
+	:	m_zz(0)
+#endif
+{
+#if UCFG_BIGNUM=='A'
+	m_data[0] = 0;
+#endif
+}
+
 BigInteger::BigInteger(UInt32 n)
 #if UCFG_BIGNUM=='A'
 	:	m_blob(nullptr)
 #endif
 {
+#if UCFG_BIGNUM=='A'
+	if (n >= 0) {
+		m_count = 1;
+		m_data[0] = n;
+		return;
+	}
+#endif
 	Int64 v = n;
 	Init((byte*)&v, sizeof(v));			//!!!LE
 }
@@ -35,14 +55,18 @@ BigInteger::BigInteger(Int64 n)
 	:	m_blob(nullptr)
 #endif
 {
-#if UCFG_BIGNUM!='N'
+#if UCFG_BIGNUM=='A' && INTPTR_MAX > 0x7fffffff
+	m_count = 1;
+	m_data[0] = n;
+#elif UCFG_BIGNUM!='N'
 	Init((const byte*)&n, sizeof n);			//!!! Only Little-Endian
 #endif
 }
 
 
 #if UCFG_BIGNUM!='A'
-BigInteger::~BigInteger() {			
+
+BigInteger::~BigInteger() {
 }
 
 BigInteger::BigInteger(const BigInteger& bi)					// here to hide GMP/NTL API from users
@@ -133,7 +157,7 @@ BigInteger::BigInteger(RCString s, int bas)
 	if (s.Length == 0)
 		Throw(E_FAIL);
 	bool bMinus = false;
-	int i=0;
+	size_t i=0;
 	if (s[0] == '-') {
 		bMinus = true;
 		++i;
@@ -278,28 +302,40 @@ BigInteger BigInteger::operator-() const {
 #endif
 }
 
-BigInteger BigInteger::Mul(const BigInteger& x) const {
+BigInteger BigInteger::Mul(const BigInteger& y) const {
 #if UCFG_BIGNUM!='A'
 	BigInteger r;
-	r.m_zz = m_zz*x.m_zz;
+	r.m_zz = m_zz * y.m_zz;
 	return r;
 #else
-	BigInteger nx(_self),
-		ny(x);
-	bool signX = Sign(nx) == -1,
-		signY = Sign(ny) == -1;
+	bool signX = Sign(_self) == -1,
+		signY = Sign(y) == -1;
+	BASEWORD *px = (BASEWORD*)Data,
+		*py = (BASEWORD*)y.Data;
 	if (signX)
-		nx = -nx;
+		ImpNegBignum(Data, m_count, px = (BASEWORD*)alloca((m_count+1)*sizeof(BASEWORD)));
 	if (signY)
-		ny = -ny;
-	size_t size = nx.m_count+ny.m_count;
-	BASEWORD *p = (BASEWORD*)alloca(size*sizeof(BASEWORD));
-	ImpMulBignums(nx.Data, nx.m_count, ny.Data, ny.m_count, p);
-	BigInteger r(p, size);
-	return signX^signY ? -r : r;
+		ImpNegBignum(y.Data, y.m_count, py = (BASEWORD*)alloca((y.m_count+1)*sizeof(BASEWORD)));
+	size_t size = m_count + y.m_count;
+	BASEWORD *p = (BASEWORD*)alloca((size+1)*sizeof(BASEWORD));
+	ImpMulBignums(px, m_count, py, y.m_count, p);
+	if (signX^signY)
+		ImpNegBignum(p, size, p);
+	return BigInteger(p, size);
 #endif
 }
 
+unsigned int BigInteger::NMod(unsigned int d) const {
+	if (Sign(_self) < 0)
+		Throw(E_INVALIDARG);
+#if UCFG_BIGNUM=='G'
+	return ::mpz_fdiv_ui(m_zz.get_mpz_t(), d);
+#elif UCFG_BIGNUM=='N'
+	return m_zz % d;
+#else
+	return (unsigned int)ImpShortDiv(ExtendTo((BASEWORD*)alloca((m_count+1)*sizeof(BASEWORD)), m_count+1), (BASEWORD*)alloca(m_count*sizeof(BASEWORD)), m_count, d);
+#endif
+}
 
 pair<BigInteger, BigInteger> AFXAPI div(const BigInteger& x, const BigInteger& y) {
 	if (!y)
@@ -587,7 +623,7 @@ int BigInteger::Compare(const BigInteger& x) const {
 	} else {
 		const BASEWORD *p = Data,
 			           *px = x.Data;
-		for (int i=m_count; i--;)
+		for (size_t i=m_count; i--;)
 			if (p[i] != px[i])
 				return (i == m_count-1 ? (S_BASEWORD)p[i] < (S_BASEWORD)px[i] : p[i] < px[i]) ? -1 : 1;
 		return 0;
@@ -621,7 +657,7 @@ BigInteger BigInteger::operator~() const {
 	return BigInteger((const byte*)p, (count)*sizeof(BASEWORD));
 #else
 	BASEWORD *p = (BASEWORD*)alloca(m_count*sizeof(BASEWORD));
-	for (int i=0; i<m_count; i++)
+	for (size_t i=0; i<m_count; i++)
 		p[i] = ~get_Data()[i];
 	return BigInteger(p, m_count);
 #endif
@@ -640,7 +676,7 @@ BigInteger BigInteger::Xor(const BigInteger& x) const {
 }
 
 BigInteger AFXAPI operator>>(const BigInteger& x, size_t v) {
-	int len = x.Length;
+	size_t len = x.Length;
 #if UCFG_BIGNUM!='A'
 	int sgn = Sign(x);
 	if (v < len) {
@@ -662,7 +698,7 @@ BigInteger AFXAPI operator>>(const BigInteger& x, size_t v) {
 	if (v < len) {
 		const BASEWORD *p = x.Data+len/BASEWORD_BITS;
 		int off = int(v & (BASEWORD_BITS-1));
-		if (off > (len & (BASEWORD_BITS-1)))
+		if (off > int(len & (BASEWORD_BITS-1)))
 			prev = *p--;
 		ImpShrd(p-size+1, r, size, off, prev);
 
@@ -714,7 +750,7 @@ BigInteger BigInteger::Random(const BigInteger& maxValue, Ext::Random *random) {
 	return BigInteger(p, nbytes);
 }
 
-void BigInteger::ExtendTo(BASEWORD *p, size_t size) const {
+BASEWORD *BigInteger::ExtendTo(BASEWORD *p, size_t size) const {
 	size_t count = GetBaseWords();
 	if (count > size)
 		Throw(E_InvalidExtendOfNumber);
@@ -725,6 +761,7 @@ void BigInteger::ExtendTo(BASEWORD *p, size_t size) const {
 	if (count != size)
 		memset(p+count, Sign(_self)==-1 ? -1 : 0, (size-count)*sizeof(BASEWORD));
 #endif
+	return p;
 }
 
 /*!!!R
@@ -747,9 +784,6 @@ void ImpMulBignums(const BASEWORD *a, size_t m, const BASEWORD *b, size_t n, BAS
 
 
 #if UCFG_BIGNUM=='A'
-
-
-//!!!PFN_ImpMulAddBignums g_pfnImpMulAddBignums = &ImpMulAddBignums;
 
 
 

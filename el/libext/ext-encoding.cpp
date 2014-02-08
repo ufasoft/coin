@@ -306,7 +306,7 @@ void UTF8Encoding::Pass(const ConstBuf& mb, UnaryFunction<String::Char, bool>& v
 }
 
 void UTF8Encoding::PassToBytes(const String::Char* pch, size_t nCh, UnaryFunction<byte, bool>& visitor) {
-	for (int i=0; i<nCh; i++) {
+	for (size_t i=0; i<nCh; i++) {
 		String::Char wch = pch[i];
 		UInt32 ch = wch; 					// may be 32-bit chars in the future
 		if (ch < 0x80) {
@@ -430,14 +430,14 @@ size_t UTF8Encoding::GetChars(const ConstBuf& mb, String::Char *chars, size_t ch
 
 Blob ASCIIEncoding::GetBytes(RCString s) {
 	Blob blob(nullptr, s.Length);
-	for (int i=0; i<s.Length; ++i)
+	for (size_t i=0; i<s.Length; ++i)
 		blob.data()[i] = (byte)s[i];
 	return blob;
 }
 
 size_t ASCIIEncoding::GetBytes(const String::Char *chars, size_t charCount, byte *bytes, size_t byteCount) {
 	size_t r = std::min(charCount, byteCount);
-	for (int i=0; i<r; ++i)
+	for (size_t i=0; i<r; ++i)
 		bytes[i] = (byte)chars[i];
 	return r;
 }
@@ -448,14 +448,14 @@ size_t ASCIIEncoding::GetCharCount(const ConstBuf& mb) {
 
 std::vector<String::Char> ASCIIEncoding::GetChars(const ConstBuf& mb) {
 	vector<String::Char> r(mb.Size);
-	for (int i=0; i<mb.Size; ++i)
+	for (size_t i=0; i<mb.Size; ++i)
 		r[i] = mb.P[i];
 	return r;
 }
 
 size_t ASCIIEncoding::GetChars(const ConstBuf& mb, String::Char *chars, size_t charCount) {
 	size_t r = std::min(charCount, mb.Size);
-	for (int i=0; i<r; ++i)
+	for (size_t i=0; i<r; ++i)
 		chars[i] = mb.P[i];
 	return r;
 }

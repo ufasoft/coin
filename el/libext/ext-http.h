@@ -291,7 +291,8 @@ public:
 #endif
 	void *m_pResponseImpl;
 
-	void ReadBuffer(void *buf, size_t size) const override;
+
+	size_t Read(void *buf, size_t size) const override;
 	int ReadByte() const override;
 	void WriteBuffer(const void *buf, size_t count) override;
 private:
@@ -401,6 +402,16 @@ private:
 friend class HttpWebRequest;
 friend class WebClient;
 friend class InetStream;
+};
+
+class WebException : public Exception {
+	typedef Exception base;
+public:
+	HttpWebResponse Response;
+
+	WebException(HRESULT hr, RCString msg = nullptr)
+		:	base(hr, msg)
+	{}
 };
 
 ENUM_CLASS(RequestCacheLevel) {

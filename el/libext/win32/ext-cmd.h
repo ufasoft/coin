@@ -213,21 +213,8 @@ struct AFX_CMDHANDLERINFO
 
 class CCmdTarget : public Object {
 	DECLARE_DYNAMIC(CCmdTarget)
-protected:
-	/*!!! 	void GetStandardProp(const AFX_DISPMAP_ENTRY* pEntry, VARIANT* pvarResult, UINT* puArgErr);
-	HRESULT SetStandardProp(const AFX_DISPMAP_ENTRY* pEntry, DISPPARAMS* pDispParams, UINT* puArgErr);
-	HRESULT CallMemberFunc(const AFX_DISPMAP_ENTRY* pEntry, WORD wFlags, VARIANT* pvarResult, DISPPARAMS* pDispParams, UINT* puArgErr);
-	static UINT GetEntryCount(const AFX_DISPMAP *pDispMap);
-	const AFX_DISPMAP_ENTRY *GetDispEntry(LONG memid);
-	static MEMBERID MemberIDFromName(const AFX_DISPMAP* pDispMap, LPCTSTR lpszName);
-	static UINT GetStackSize(const BYTE* pbParams, VARTYPE vtResult);
-	HRESULT PushStackArgs(BYTE* pStack, const BYTE* pbParams, void* pResult, VARTYPE vtResult, DISPPARAMS* pDispParams,
-	UINT* puArgErr, VARIANT* rgTempVars);*/
-
-	DECLARE_MESSAGE_MAP()
 public:
 	AFX_MODULE_STATE *m_pModuleState;
-	friend UINT APIENTRY _AfxThreadEntry(void* pParam);
 
 	CCmdTarget();
 	~CCmdTarget();
@@ -242,6 +229,18 @@ public:
 	//!!!	virtual BOOL GetDispatchIID(IID* pIID);
 
 	//!!!friend class COleConnPtContainer;
+protected:
+	/*!!! 	void GetStandardProp(const AFX_DISPMAP_ENTRY* pEntry, VARIANT* pvarResult, UINT* puArgErr);
+	HRESULT SetStandardProp(const AFX_DISPMAP_ENTRY* pEntry, DISPPARAMS* pDispParams, UINT* puArgErr);
+	HRESULT CallMemberFunc(const AFX_DISPMAP_ENTRY* pEntry, WORD wFlags, VARIANT* pvarResult, DISPPARAMS* pDispParams, UINT* puArgErr);
+	static UINT GetEntryCount(const AFX_DISPMAP *pDispMap);
+	const AFX_DISPMAP_ENTRY *GetDispEntry(LONG memid);
+	static MEMBERID MemberIDFromName(const AFX_DISPMAP* pDispMap, LPCTSTR lpszName);
+	static UINT GetStackSize(const BYTE* pbParams, VARTYPE vtResult);
+	HRESULT PushStackArgs(BYTE* pStack, const BYTE* pbParams, void* pResult, VARTYPE vtResult, DISPPARAMS* pDispParams,
+	UINT* puArgErr, VARIANT* rgTempVars);*/
+
+	DECLARE_MESSAGE_MAP()
 };
 
 #pragma pack(pop)

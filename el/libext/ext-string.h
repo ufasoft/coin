@@ -145,6 +145,9 @@ public:
 	}
 #endif
 
+	void swap(String& x) {
+		m_blob.swap(x.m_blob);
+	}
 
 	//!!!	String(const string& s);
 
@@ -195,12 +198,18 @@ public:
 
 	String& operator=(const char * lpsz);
 	String& operator=(const Char * lpsz);
+
+	String& operator=(EXT_RV_REF(String) rv) {
+		swap(rv);
+		return *this;
+	}
+
 	String& operator+=(const String& s);
 	void CopyTo(char *ar, size_t size) const;
 	void CopyTo(Char *ar, size_t size) const;
 	int Compare(const String& s) const;
 	int CompareNoCase(const String& s) const;
-	bool IsEmpty() const;
+	bool IsEmpty() const noexcept;
 	bool empty() const { return IsEmpty(); }
 	void Empty();
 	int Find(Char c) const;
@@ -284,6 +293,10 @@ private:
 	friend inline bool operator<(const String& s1, const String& s2);
 	friend inline bool AFXAPI operator==(const String& s1, const String& s2);
 };
+
+inline void swap(String& x, String& y) {
+	x.swap(y);
+}
 
 
 #if UCFG_STLSOFT
@@ -371,6 +384,7 @@ struct CStringResEntry {
 
 
 
+
 //EXPIMP_TEMPLATE template class AFX_TEMPL_CLASS /*!!!EXPIMP_CLASS*/ vector<String>;
 
 
@@ -383,4 +397,23 @@ inline size_t hash_value(const Ext::String& s) {
 }
 
 EXT_DEF_HASH(Ext::String)
+
+namespace std {
+	inline int AFXAPI stoi(Ext::RCString s, size_t *idx = 0, int base = 10) {
+		return stoi(Ext::explicit_cast<string>(s), idx, base);
+	}
+
+	inline long AFXAPI stol(Ext::RCString s, size_t *idx = 0, int base = 10) {
+		return stol(Ext::explicit_cast<string>(s), idx, base);
+	}
+
+	inline long long AFXAPI stoll(Ext::RCString s, size_t *idx = 0, int base = 10) {
+		return stoll(Ext::explicit_cast<string>(s), idx, base);
+	}
+
+	inline double AFXAPI stod(Ext::RCString s, size_t *idx = 0) {
+		return stod(Ext::explicit_cast<string>(s), idx);
+	}
+} // std::
+
 

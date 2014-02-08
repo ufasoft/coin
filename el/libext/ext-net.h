@@ -292,6 +292,8 @@ public:
 	AFX_API static String GetHostName();
 	AFX_API static IPHostEntry AFXAPI GetHostEntry(RCString hostNameOrAddress);
 	AFX_API static IPHostEntry AFXAPI GetHostEntry(const IPAddress& address);
+	
+	AFX_API static std::vector<IPAddress> GetHostAddresses(RCString hostNameOrAddress) { return GetHostEntry(hostNameOrAddress).AddressList; }
 };
 
 
@@ -472,6 +474,8 @@ public:
 
 	void IOControl(int code, const Buf& mb);
 
+	void SetKeepAliveTime(int ms);
+
 	int get_Available();
 	DEFPROP_GET(int, Available);
 
@@ -511,7 +515,7 @@ public:
 	{
 		EXT_LOCK (m_tr.MtxCallingAPI) {
 			if (tr.m_bStop)
-				Throw(E_EXT_ThreadStopped);
+				Throw(E_EXT_ThreadInterrupted);
 			m_tr.m_arKeepers.push_back(this);
 			if (!m_sock.Valid() && nPort!=-1)
 				m_sock.Create((WORD)nPort, nSocketType, host);
@@ -555,7 +559,7 @@ public:
 #endif	
 
 		EXT_LOCK (MtxCallingAPI) {
-			for (int i=0; i<m_arKeepers.size(); i++)
+			for (size_t i=0; i<m_arKeepers.size(); i++)
 				m_arKeepers[i]->m_sock.Close();
 #if UCFG_WIN32_FULL
 			QueueAPC();
@@ -576,7 +580,7 @@ protected:
 
 class SocketThread : public SocketThreadWrap<Thread> {
 public:
-	SocketThread(CThreadRef *tr) {
+	SocketThread(thread_group *tr) {
 		m_owner = tr;
 	}
 };
@@ -621,9 +625,10 @@ public:
 		:	m_sock(sock)
 	{}
 
-	void ReadBuffer(void *buf, size_t count) const override;
+				
+	size_t Read(void *buf, size_t count) const override;
 	void WriteBuffer(const void *buf, size_t count) override;
-	int ReadByte() const override;
+//!!!R	int ReadByte() const override;
 	bool Eof() const override;
 	void Close() const override;
 private:
@@ -638,6 +643,11 @@ public:
 	TcpClient()
 		:	Stream(Client)
 	{}
+
+	void Connect(const IPEndPoint& ep) {
+		Client.Create();
+		Client.Connect(ep);
+	}
 };
 
 // URI spec as of RFC3986

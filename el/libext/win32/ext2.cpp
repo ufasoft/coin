@@ -47,7 +47,7 @@ bool NamedPipe::Connect(LPOVERLAPPED ovl) {
 		if (!r) {
 			int dw = ::WaitForSingleObjectEx(ovl->hEvent, INFINITE, TRUE);
 			if (dw == WAIT_IO_COMPLETION)
-				Throw(E_EXT_ThreadStopped);
+				Throw(E_EXT_ThreadInterrupted);		//!!!?
 			if (dw != 0)
 				Throw(E_FAIL);
 			dw = GetOverlappedResult(*ovl);		//!!!
@@ -147,22 +147,21 @@ CStringVector AsciizArrayToStringArray(const TCHAR *p) {
 	return vec;
 }
 
-
-SIZE_T Process::ReadMemory(LPCVOID base, LPVOID buf, SIZE_T size) {
+SIZE_T ProcessObj::ReadMemory(LPCVOID base, LPVOID buf, SIZE_T size) {
 	SIZE_T r;
 	Win32Check(::ReadProcessMemory(HandleAccess(_self), base, buf, size, &r));
 	return r;
 }
 
-SIZE_T Process::WriteMemory(LPVOID base, LPCVOID buf, SIZE_T size) {
+SIZE_T ProcessObj::WriteMemory(LPVOID base, LPCVOID buf, SIZE_T size) {
 	SIZE_T r;
 	Win32Check(::WriteProcessMemory(HandleAccess(_self), base, (void*)buf, size, &r)); //!!!CE
 	return r;
 }
 
-DWORD Process::VirtualProtect(void *addr, size_t size, DWORD flNewProtect) {
+DWORD ProcessObj::VirtualProtect(void *addr, size_t size, DWORD flNewProtect) {
 	DWORD r;
-	if (GetCurrentProcessId() == ID)
+	if (GetCurrentProcessId() == get_ID())
 		Win32Check(::VirtualProtect(addr, size, flNewProtect, &r));
 	else
 #if UCFG_WCE
@@ -173,10 +172,10 @@ DWORD Process::VirtualProtect(void *addr, size_t size, DWORD flNewProtect) {
 	return r;
 }
 
-MEMORY_BASIC_INFORMATION Process::VirtualQuery(const void *addr) {
+MEMORY_BASIC_INFORMATION ProcessObj::VirtualQuery(const void *addr) {
 	MEMORY_BASIC_INFORMATION r;
 	SIZE_T size;
-	if (GetCurrentProcessId() == ID)
+	if (GetCurrentProcessId() == get_ID())
 		size = ::VirtualQuery(addr, &r, sizeof r);
 	else
 #if UCFG_WCE
@@ -187,54 +186,6 @@ MEMORY_BASIC_INFORMATION Process::VirtualQuery(const void *addr) {
 	if (!size)
 		ZeroStruct(r);
 	return r;
-}
-
-DWORD Process::get_ID() const {
-	if (!m_pid) {
-#if UCFG_WCE
-		Throw(E_FAIL);
-#else
-		typedef DWORD (WINAPI *PFN_GetProcessId)(HANDLE);
-		DlProcWrap<PFN_GetProcessId> pfn("KERNEL32.DLL", "GetProcessId");
-		if (pfn)
-			m_pid = pfn(Handle(_self));
-		else {
-			/*!!!R
-			typedef enum _PROCESSINFOCLASS {
-				ProcessBasicInformation = 0,
-				ProcessWow64Information = 26
-			} PROCESSINFOCLASS;
-
-			typedef void *PPEB;
-
-			typedef struct _PROCESS_BASIC_INFORMATION {
-				PVOID Reserved1;
-				PPEB PebBaseAddress;
-				PVOID Reserved2[2];
-				ULONG_PTR UniqueProcessId;
-				PVOID Reserved3;
-			} PROCESS_BASIC_INFORMATION;
-			typedef PROCESS_BASIC_INFORMATION *PPROCESS_BASIC_INFORMATION;
-*/
-			typedef NTSTATUS (WINAPI * PFN_QueryInformationProcess)(
-				HANDLE ProcessHandle,
-				PROCESSINFOCLASS ProcessInformationClass,
-				PVOID ProcessInformation,
-				ULONG ProcessInformationLength,
-				PULONG ReturnLength);
-
-			DlProcWrap<PFN_QueryInformationProcess> ntQIP("NTDLL.DLL", "NtQueryInformationProcess");
-			if (!ntQIP)
-				Throw(E_FAIL);
-
-			PROCESS_BASIC_INFORMATION info;
-			ULONG returnSize;
-			ntQIP(Handle(_self), ProcessBasicInformation, &info, sizeof(info), &returnSize);  // Get basic information.
-			m_pid = (DWORD)info.UniqueProcessId;		
-		}
-#endif
-	}
-	return m_pid;
 }
 
 struct SMainWindowHandleInfo {
@@ -256,8 +207,8 @@ static BOOL CALLBACK EnumWindowsProc_MainWindowHandle(HWND hwnd, LPARAM lParam) 
 	return TRUE;
 }
 
-HWND Process::get_MainWindowHandle() const {
-	SMainWindowHandleInfo info = { ID };
+HWND ProcessObj::get_MainWindowHandle() const {
+	SMainWindowHandleInfo info = { get_ID() };
 	Win32Check(::EnumWindows(&EnumWindowsProc_MainWindowHandle, (LPARAM)&info), 0);
 	return info.m_hwnd;
 }
@@ -265,15 +216,15 @@ HWND Process::get_MainWindowHandle() const {
 #if !UCFG_WCE
 
 
-DWORD Process::get_Version() const {
-	DWORD r = GetProcessVersion(ID);
+DWORD ProcessObj::get_Version() const {
+	DWORD r = GetProcessVersion(get_ID());
 	Win32Check(r);
 	return r;
 }
 
 typedef WINBASEAPI BOOL (WINAPI *PFN_IsWow64Process)(HANDLE hProcess, PBOOL Wow64Process);
 
-bool Process::get_IsWow64() {
+bool ProcessObj::get_IsWow64() {
 	BOOL r = FALSE;
 	DlProcWrap<PFN_IsWow64Process> pfnIsWow64Process("KERNEL32.DLL", "IsWow64Process");
 	if (pfnIsWow64Process)
@@ -281,7 +232,7 @@ bool Process::get_IsWow64() {
 	return r;
 }
 
-CTimesInfo Process::get_Times() const {
+CTimesInfo ProcessObj::get_Times() const {
 	CTimesInfo r;
 	Win32Check(::GetProcessTimes(HandleAccess(_self), &r.m_tmCreation, &r.m_tmExit, &r.m_tmKernel, &r.m_tmUser));
 	return r;
@@ -327,83 +278,6 @@ bool String::LoadString(UINT nID) {			//!!!comp
 
 #	endif
 #endif // WIN32
-
-
-//!!!R#if UCFG_EXTENDED
-
-bool Process::Start() {
-	STARTUPINFO si = {sizeof si};
-	StaticAssert(SW_SHOWNORMAL == 1, Invalid_SW_SHOWNORMAL);
-	si.wShowWindow = SW_SHOWNORMAL; // same as SW_NORMAL Critical for running iexplore
-	SafeHandle hI, hO, hE;
-#if UCFG_WCE
-	STARTUPINFO *psi = 0;
-	bool bInheritHandles = false;
-	LPCTSTR pCurrentDirectory = 0;
-#else
-	if (StartInfo.RedirectStandardInput || StartInfo.RedirectStandardOutput || StartInfo.RedirectStandardError) {
-		si.hStdInput = StdHandle::Get(STD_INPUT_HANDLE);
-		si.hStdOutput = StdHandle::Get(STD_OUTPUT_HANDLE);
-		si.hStdError = StdHandle::Get(STD_ERROR_HANDLE);
-		si.dwFlags |= STARTF_USESTDHANDLES;
-#if	 UCFG_EXTENDED
-		HANDLE hRead, hWrite;
-		SECURITY_ATTRIBUTES sattr = { sizeof(sattr), 0, TRUE };
-		if (StartInfo.RedirectStandardInput) {
-			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
-			si.hStdInput = hRead;
-			hI.Attach(hRead);
-			StandardInput.m_pFile->Duplicate(hWrite, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
-		}
-		if (StartInfo.RedirectStandardOutput) {
-			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
-			si.hStdOutput = hWrite;
-			hO.Attach(hWrite);
-			StandardOutput.m_pFile->Duplicate(hRead, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
-		}
-		if (StartInfo.RedirectStandardError) {
-			Win32Check(::CreatePipe(&hRead, &hWrite, &sattr, 0));
-			si.hStdError = hWrite;
-			hE.Attach(hWrite);
-			StandardError.m_pFile->Duplicate(hRead, DUPLICATE_CLOSE_SOURCE|DUPLICATE_SAME_ACCESS);
-		}
-#	endif
-	}
-	STARTUPINFO *psi = &si;
-	bool bInheritHandles = bool(si.dwFlags & STARTF_USESTDHANDLES);
-	String dir = StartInfo.WorkingDirectory.IsEmpty() ? nullptr : StartInfo.WorkingDirectory;
-	LPCTSTR pCurrentDirectory = dir;
-#endif
-
-	PROCESS_INFORMATION pi;
-	String cls = StartInfo.FileName;
-	if (!StartInfo.Arguments.IsEmpty())
-		cls += " "+StartInfo.Arguments;
-	size_t len = (cls.Length+1)*sizeof(TCHAR);
-	TCHAR *cl = (TCHAR*)alloca(len);
-	memcpy(cl, (const TCHAR*)cls, len);
-	String fileName = StartInfo.FileName.IsEmpty() ? nullptr : StartInfo.FileName;
-	DWORD flags = StartInfo.Flags;
-#if !UCFG_WCE
-	if (StartInfo.CreateNoWindow)
-		flags |= CREATE_NO_WINDOW;
-#endif
-	Win32Check(::CreateProcess(0, cl, 0, 0, bInheritHandles, flags, 0, (LPTSTR)pCurrentDirectory, psi, &pi)); //!!! BOOL is not bool
-	Attach(pi.hProcess);
-	m_pid = pi.dwProcessId;
-	ptr<CWinThread> pThread(new CWinThread);
-	pThread->Attach(pi.hThread, pi.dwThreadId);
-	return true;
-}
-
-unique_ptr<Process> Process::Start(ProcessStartInfo psi) {
-	unique_ptr<Process> p(new Process);
-	p->StartInfo = psi;
-	p->Start();
-	return p;
-} 
-
-//!!!R #endif
 
 
 DWORD COperatingSystem::GetSysColor(int nIndex) {

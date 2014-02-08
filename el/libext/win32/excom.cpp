@@ -10,6 +10,7 @@
 
 #include <el/libext/win32/ext-win.h>
 
+
 void __stdcall  _set_com_error_handler(void (__stdcall *pHandler)(HRESULT hr, IErrorInfo* perrinfo)); //!!! not in VISTA
 
 namespace Ext {

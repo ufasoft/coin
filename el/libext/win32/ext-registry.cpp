@@ -183,7 +183,7 @@ void RegistryKey::DeleteSubKeyTree(RCString subkey) {
 	{
 		RegistryKey key(_self, subkey);
 		vector<String> subkeys = key.GetSubKeyNames();
-		for (int i=0; i<subkeys.size(); i++)
+		for (size_t i=0; i<subkeys.size(); i++)
 			key.DeleteSubKeyTree(subkeys[i]);
 	}
 	DeleteSubKey(subkey);

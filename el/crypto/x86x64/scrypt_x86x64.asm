@@ -7,7 +7,7 @@
 
 ; Scrypt Hash using Salsa20/8 for x86/x64/SSE2
 
-include x86x64.inc
+include el/comp/x86x64.inc
 
 OPTION_LANGUAGE_C
 

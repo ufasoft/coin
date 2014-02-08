@@ -8,6 +8,10 @@
 
 #pragma once
 
+#if !UCFG_C99_FUNC
+#	define __func__ __FUNCTION__
+#endif
+
 #ifdef __cplusplus
 #	define __BEGIN_DECLS extern "C" {
 #	define __END_DECLS }
@@ -77,21 +81,3 @@ __END_DECLS
 #define le64toh(x) (x)
 
 
-__BEGIN_DECLS
-
-struct VCTypeDescriptor {
-	void *	pVFTable;		// Field overloaded by RTTI
-	void *	spare;			// reserved, possible for RTTI
-	char	name[100];			// The decorated name of the type; 0 terminated.
-};
-
-struct VCRTTICompleteObjectLocator {
-    unsigned __int32 signature; //always zero ?
-    unsigned __int32 offset;    //offset of this vtable in the complete class
-    unsigned __int32 cdOffset;  //constructor displacement offset
-    struct VCTypeDescriptor* pTypeDescriptor; //TypeDescriptor of the complete class
-    void* pClassDescriptor; //describes inheritance hierarchy
-};
-
-
-__END_DECLS

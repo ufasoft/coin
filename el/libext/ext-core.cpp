@@ -17,6 +17,14 @@ using namespace Ext;
 
 namespace Ext { 
 
+int __cdecl PopCount(unsigned int v) {
+	return BitOps::PopCount(v);
+}
+
+int __cdecl PopCount(unsigned long long v) {
+	return BitOps::PopCount(UInt64(v));
+}
+
 const unsigned char *ConstBuf::Find(const ConstBuf& mb) const {
 	for (const unsigned char *p=P, *e=p+(Size-mb.Size); p <= e;) {
 		if (const unsigned char *q = (const unsigned char*)memchr(p, mb.P[0], e-p+1)) {
@@ -160,7 +168,7 @@ MacAddress::MacAddress(RCString s)
 	if (ar.size() != 6)
 		Throw(E_FAIL);
 	byte *p = (byte*)&m_n64;
-	for (int i=0; i<ar.size(); i++)
+	for (size_t i=0; i<ar.size(); i++)
 		*p++ = (byte)Convert::ToUInt32(ar[i], 16);
 }
 
@@ -173,7 +181,7 @@ String MacAddress::ToString() const {
 ostream& AFXAPI operator<<(ostream& os, const MacAddress& mac) {
 	ios::fmtflags flags = os.flags();
 	Blob blob(mac);
-	for (int i=0; i<blob.Size; i++) {
+	for (size_t i=0; i<blob.Size; i++) {
 		if (i)
 			os << ':';
 		os << hex << (int)blob.constData()[i];
@@ -242,7 +250,7 @@ UInt64 ToUInt64AtBytePos(const dynamic_bitset<byte>& bs, size_t pos) {
 	if (0 == outRangeBits)
 		return *(UInt64*)pb;
 	size_t n = std::min(size_t(8), (bs.num_blocks()-idx)*bs.bits_per_block/8);
-	for (int i=0; i<n; ++i)
+	for (size_t i=0; i<n; ++i)
 		((byte*)&r)[i] = pb[i];
 	r &= UInt64(-1) >> outRangeBits;
 #endif

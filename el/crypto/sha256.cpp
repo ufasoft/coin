@@ -8,7 +8,7 @@
 
 #include <el/ext.h>
 
-// THis file should be included in each module, which uses it because problems with exporting constant data
+// This file should be included in each module, which uses it because problems with exporting constant data
 
 #include "hash.h"
 
@@ -18,10 +18,6 @@ namespace Ext { namespace Crypto {
 
 const UInt32 g_sha256_hinit[8] = {
 	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-};
-
-const UInt64 g_sha512_hinit[8] = {
-	0x6A09E667F3BCC908, 0xBB67AE8584CAA73B, 0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1, 0x510E527FADE682D1, 0x9B05688C2B3E6C1F, 0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179
 };
 
 const UInt32 g_sha256_k[64] = {
@@ -64,7 +60,7 @@ void SHA256::InitHash(void *dst) {
 
 #pragma optimize( "t", on)
 
-void SHA256::HashBlock(void *dst, const byte *src, UInt64 counter) {
+void SHA256::HashBlock(void *dst, const byte *src, UInt64 counter) noexcept {
 	UInt32 *p = (UInt32*)dst;
 #if UCFG_USE_MASM
 	Sha256Update_x86x64(p, (const UInt32*)src);
@@ -81,7 +77,6 @@ void SHA256::HashBlock(void *dst, const byte *src, UInt64 counter) {
 			w[i & 15] += (Rotr32(w_15, 7) ^ Rotr32(w_15, 18) ^ (w_15 >> 3)) + w[(i-7) & 15] + (Rotr32(w_2, 17) ^ Rotr32(w_2, 19) ^ (w_2 >> 10));
 		}
 
-		UInt32 t2 = (Rotr32(a, 2) ^ Rotr32(a, 13) ^ Rotr32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
 		UInt32 t1 = h + (Rotr32(e, 6) ^ Rotr32(e, 11) ^ Rotr32(e, 25)) + ((e & f) ^ (~e & g)) + g_sha256_k[i] + w[i & 15];
 		h = g; g = f; f = e;
 		e = d + t1;

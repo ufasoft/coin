@@ -6,72 +6,41 @@
 # General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
 ##########################################################################################################################################################################*/
 
-#pragma once 
+#include <el/ext.h>
+
+#include "hash.h"
+
+#if UCFG_IMP_SHA3=='S'
+#	include "sph-config.h"			//!!!
+#	include <sphlib/sph_keccak.h>
+#endif
+
+
+using namespace Ext;
 
 namespace Ext { namespace Crypto {
 
-ENUM_CLASS(CngKeyBlobFormat) {
-	OSslEccPrivateBlob,
-	OSslEccPublicBlob,
-	OSslEccPrivateBignum,
-	OSslEccPublicCompressedBlob,
-	OSslEccPublicUncompressedBlob,
-	OSslEccPrivateCompressedBlob
-} END_ENUM_CLASS(CngKeyBlobFormat);
+hashval SHA3<256>::ComputeHash(const ConstBuf& mb) {
+#if UCFG_IMP_SHA3=='S'
+	UInt32 hash[8];
 
-class CngKey {
-public:
-	void *m_pimpl;
+    sph_keccak256_context ctx;
+    sph_keccak256_init(&ctx);
+    sph_keccak256(&ctx, mb.P, mb.Size);
+    sph_keccak256_close(&ctx, hash);
+	return hashval((const byte*)hash, sizeof hash);
+#else
+	Throw(E_NOTIMPL);
+#endif
+}
 
-	CngKey()
-		:	m_pimpl(0)
-	{}
+hashval SHA3<256>::ComputeHash(Stream& stm) {
+	MemoryStream ms;
+	stm.CopyTo(ms);
+	return ComputeHash(ms);
+}
 
-	CngKey(const CngKey& key);
-	~CngKey();
-	CngKey& operator=(const CngKey& key);
-	Blob Export(CngKeyBlobFormat format) const;
-	static CngKey AFXAPI Import(const ConstBuf& mb, CngKeyBlobFormat format);
-protected:
-	CngKey(void *pimpl)
-		:	m_pimpl(pimpl)
-	{}
 
-	friend class Dsa;
-	friend class ECDsa;
-};
-
-class Dsa : public Object {
-public:
-	CngKey Key;
-
-	virtual Blob SignHash(const ConstBuf& hash) =0;
-	virtual bool VerifyHash(const ConstBuf& hash, const ConstBuf& signature) =0;
-protected:
-	Dsa(void *keyImpl)
-		:	Key(keyImpl)
-	{}
-
-	Dsa(const CngKey& key)
-		:	Key(key)
-	{}
-};
-
-class ECDsa : public Dsa {
-	typedef Dsa base;
-public:
-	ECDsa(int keySize = 521);
-
-	ECDsa(const CngKey& key)
-		:	base(key)
-	{
-	}
-
-	Blob SignHash(const ConstBuf& hash) override;
-	bool VerifyHash(const ConstBuf& hash, const ConstBuf& signature) override;
-};
-
-ptr<Dsa> CreateECDsa();
 
 
 }} // Ext::Crypto::

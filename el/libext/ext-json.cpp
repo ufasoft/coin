@@ -19,7 +19,17 @@ using namespace std;
 
 #if UCFG_JSON == UCFG_JSON_JANSSON
 
-class JsonHandle {
+static void *MallocWrap(size_t size) {
+	return Malloc(size);
+}
+
+static void FreeWrap(void *p) {
+	return Free(p);
+}
+
+static int s_initJanssonMalloc = (::json_set_alloc_funcs(&MallocWrap, &FreeWrap), 1);			// Mandatory, because we are using Ext::Free() for Jansson created objects
+
+class JsonHandle : noncopyable {
 public:
 	JsonHandle(json_t *h = 0)
 		:	m_h(h)
@@ -137,8 +147,8 @@ private:
 };
 
 
-class JsonExc : public Exc {
-	typedef Exc base;
+class JsonExc : public Exception {
+	typedef Exception base;
 public:
 	json_error_t m_err;
 
@@ -183,7 +193,7 @@ protected:
 		JsonHandle jh(CopyToJsonT(v));
 		char *s = json_dumps(jh, 0);
 		os << s;
-		free(s);
+		FreeWrap(s);
 	}
 };
 
@@ -191,6 +201,8 @@ json_t *JsonParser::CopyToJsonT(const VarValue& v) {
 	switch (v.type()) {
 	case VarType::Null:
 		return ::json_null();
+	case VarType::Bool:
+		return json_boolean(v.ToBool());
 	case VarType::Int:
 		return ::json_integer(v.ToInt64());
 	case VarType::Float:
@@ -201,25 +213,22 @@ json_t *JsonParser::CopyToJsonT(const VarValue& v) {
 		{
 			JsonHandle json(::json_array());
 //!!!R			VarValue r = JsonVarValueObj::FromJsonT(json);
-			for (int i=0; i<v.size(); ++i)
+			for (int i=0; i<v.size(); ++i) {
 				CCheck(::json_array_append_new(json, CopyToJsonT(v[i])));
+			}
 			return json.Detach();
 		}
 	case VarType::Map:
 		{
 			JsonHandle json(::json_object());
-//!!!R			VarValue r = JsonVarValueObj::FromJsonT(json);
 			vector<String> keys = v.Keys();
 			EXT_FOR (const String& key, keys) {
-				json_t *j = CopyToJsonT(v[key]);
-				VarValue vj(j);
-				CCheck(::json_object_set(json, key, j));
+				CCheck(::json_object_set_new(json, key, CopyToJsonT(v[key])));
 			}
 			return json.Detach();
 		}
 	default:
 		Throw(E_NOTIMPL);
-
 	}
 }
 
