@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -17,6 +25,8 @@ HashAlgo StringToAlgo(RCString s) {
 	String ua = s.ToUpper();
    	if (ua == "SHA256")
    		return HashAlgo::Sha256;
+   	else if (ua == "SHA3" || ua=="KECCAK")
+		return HashAlgo::Sha3;
    	else if (ua == "SCRYPT")
 		return HashAlgo::SCrypt;
    	else if (ua == "PRIME")
@@ -102,7 +112,11 @@ HashValue HashValue::Combine(const HashValue& h1, const HashValue& h2) {
 	byte buf[64];
 	memcpy(buf, h1.data(), h1.size());
 	memcpy(buf+32, h2.data(), h2.size());
-	return Hash(ConstBuf(buf, 64));
+	SHA256 sha;
+#ifdef X_DEBUG//!!!D
+	return HashValue(sha.ComputeHash(ConstBuf(buf, 64)));
+#endif
+	return HashValue(sha.ComputeHash(sha.ComputeHash(ConstBuf(buf, 64))));
 }
 
 HashValue160::HashValue160(RCString s) {
@@ -115,11 +129,6 @@ COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
 	Blob blob(&hash[0], hash.size());
 	reverse(blob.data(), blob.data()+blob.Size);
 	return os << blob;
-}
-
-HashValue Hash(const ConstBuf& mb) {
-	SHA256 sha;
-	return ConstBuf(sha.ComputeHash(sha.ComputeHash(mb)));
 }
 
 Blob CalcSha256Midstate(const ConstBuf& mb) {
@@ -282,6 +291,34 @@ pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json) {
 			return make_pair(betoh(*(UInt32*)blob.constData()), betoh(*(UInt32*)(blob.constData()+4)));
 	}
 	return pair<UInt32, UInt32>(0, 0xFFFFFFFF);
+}
+
+EXT_THREAD_PTR(HasherEng, t_pHasherEng);
+
+HasherEng *HasherEng::GetCurrent() {
+	return t_pHasherEng;
+}
+
+void HasherEng::SetCurrent(HasherEng *heng) {
+	t_pHasherEng = heng;
+}
+
+HashValue HasherEng::HashBuf(const ConstBuf& cbuf) {
+	SHA256 sha;
+	return ConstBuf(sha.ComputeHash(sha.ComputeHash(cbuf)));
+}
+
+CHasherEngThreadKeeper::CHasherEngThreadKeeper(HasherEng *cur) {
+	m_prev = t_pHasherEng;
+	t_pHasherEng = cur;
+}
+
+CHasherEngThreadKeeper::~CHasherEngThreadKeeper() {
+	t_pHasherEng = m_prev;
+}
+
+HashValue Hash(const ConstBuf& mb) {
+	return HasherEng::GetCurrent()->HashBuf(mb);
 }
 
 

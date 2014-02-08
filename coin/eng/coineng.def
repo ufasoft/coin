@@ -11,7 +11,7 @@ CoinCreateObj													@ 9
 ?LookupBlock@CoinEng@Coin@@QAE?AVBlock@2@ABVHashValue@2@@Z		@ 24 NONAME
 ?GetBlockByHeight@CoinEng@Coin@@QAE?AVBlock@2@I@Z				@ 25 NONAME
 ?BestBlockHeight@CoinEng@Coin@@QAEHXZ							@ 26 NONAME
-??0Address@Coin@@QAE@ABVString@Ext@@PAVCoinEng@1@@Z				@ 27 NONAME
+;??0Address@Coin@@QAE@ABVString@Ext@@PAVCoinEng@1@@Z				@ 27 NONAME
 ?get_ValueOut@Tx@Coin@@QBE_JXZ									@ 28 NONAME
 ?Read@Tx@Coin@@UAEXABVBinaryReader@Ext@@@Z						@ 29 NONAME
 ?Write@Tx@Coin@@UBEXAAVBinaryWriter@Ext@@@Z						@ 30 NONAME
@@ -19,7 +19,7 @@ CoinCreateObj													@ 9
 ??1CCoinEngThreadKeeper@Coin@@QAE@XZ							@ 32 NONAME
 ?Stop@CoinEng@Coin@@QAEXXZ										@ 33 NONAME
 ?BestBlock@CoinEng@Coin@@QAE?AVBlock@2@XZ						@ 34 NONAME
-??0Address@Coin@@QAE@ABVHashValue160@1@ABVString@Ext@@@Z		@ 35 NONAME
+;??0Address@Coin@@QAE@ABVHashValue160@1@ABVString@Ext@@@Z		@ 35 NONAME
 ?get_Txes@BlockObj@Coin@@QBEABVCTxes@2@XZ						@ 36 NONAME
 ?GetSerializeSize@Tx@Coin@@QBEIXZ								@ 37 NONAME
 ?get_PkScript@TxOut@Coin@@QBEABVBlob@Ext@@XZ					@ 38 NONAME

@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include EXT_HEADER_FUTURE
@@ -226,10 +234,16 @@ HashValue BlockObj::MerkleRoot(bool bSave) const {
 HashValue BlockObj::Hash() const {
 	if (!m_hash) {
 		Blob hdata = EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce);
-		if (Eng().ChainParams.HashAlgo == HashAlgo::Metis)
+		switch (Eng().ChainParams.HashAlgo) {
+		case HashAlgo::Sha3:
+			m_hash = HashValue(SHA3<256>().ComputeHash(hdata));
+			break;
+		case HashAlgo::Metis:
 			m_hash = MetisHash(hdata);
-		else
+			break;
+		default:
 			m_hash = Coin::Hash(hdata);
+		}
 	}
 	return m_hash.get();
 }
@@ -358,6 +372,26 @@ int CoinEng::GetIntervalForModDivision(int height) {
 
 int CoinEng::GetIntervalForCalculatingTarget(int height) {
 	return ChainParams.TargetInterval;
+}
+
+Target CoinEng::KimotoGravityWell(const Block& blockLast, const Block& block, int minBlocks, int maxBlocks) {
+	if (blockLast.Height < minBlocks)
+		return ChainParams.MaxTarget;
+	int actualSeconds = 0, targetSeconds = 0;
+	BigInteger average;
+	Block b = blockLast;
+	for (int mass=1; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevBlock()) {
+		average += (BigInteger(b.get_DifficultyTarget()) - average)/mass;
+		actualSeconds = max(0, int((blockLast.get_Timestamp() - b.get_Timestamp()).get_TotalSeconds()));
+		targetSeconds = int((ChainParams.BlockSpan * mass).get_TotalSeconds());
+		if (mass >= minBlocks) {
+			double eventHorizonDeviation = 1 + 0.7084 * pow(mass / 28.2, -1.228);
+			double ratio = actualSeconds && targetSeconds ? double(targetSeconds) / actualSeconds :	1;		
+			if (ratio<=1/eventHorizonDeviation || ratio>=eventHorizonDeviation)
+				break;
+		}
+	}
+	return Target(actualSeconds && targetSeconds ? (average * actualSeconds / targetSeconds) : average);
 }
 
 TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval) {
@@ -1081,7 +1115,7 @@ void Block::Accept() {
 		if (get_DifficultyTarget() != targetNext) {
 			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(get_DifficultyTarget()));
 			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
-#ifdef _DEBUG//!!!D
+#ifdef X_DEBUG//!!!D
  			eng.GetNextTarget(blockPrev, _self);
 #endif
 			Throw(E_COIN_IncorrectProofOfWork);

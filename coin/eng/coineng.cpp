@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -85,6 +93,10 @@ CoinEng *ChainParams::CreateObject(CoinDb& cdb, IBlockChainDb *db) {
 MyKeyInfo::~MyKeyInfo() {
 }
 
+Address MyKeyInfo::ToAddress() const {
+	return Address(Eng(), Hash160, Comment);
+}
+
 Blob MyKeyInfo::PlainPrivKey() const {
 	byte typ = 0;
 	return Blob(&typ, 1) + get_PrivKey();
@@ -127,22 +139,24 @@ void MyKeyInfo::SetPrivData(const PrivateKey& privKey) {
 	SetPrivData(pp.first, pp.second);
 }
 
-EXT_THREAD_PTR(CoinEng, t_pCoinEng);
+//!!!R EXT_THREAD_PTR(CoinEng, t_pCoinEng);
 EXT_THREAD_PTR(void, t_bPayToScriptHash);
 
 COIN_EXPORT CoinEng& ExternalEng() {
-	return *t_pCoinEng;
+	return *dynamic_cast<CoinEng*>(HasherEng::GetCurrent());
 }
 
-CCoinEngThreadKeeper::CCoinEngThreadKeeper(CoinEng *cur) {
-	m_prev = t_pCoinEng;
+CCoinEngThreadKeeper::CCoinEngThreadKeeper(CoinEng *cur)
+	:	base(cur)
+{
+//	m_prev = t_pCoinEng;
 	m_prevPayToScriptHash = t_bPayToScriptHash;
-	t_pCoinEng = cur;
+//	t_pCoinEng = cur;
 	t_bPayToScriptHash = 0;
 }
 
 CCoinEngThreadKeeper::~CCoinEngThreadKeeper() {
-	t_pCoinEng = m_prev;
+//	t_pCoinEng = m_prev;
 	t_bPayToScriptHash = (void*)m_prevPayToScriptHash;
 }
 
@@ -776,9 +790,6 @@ ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 void CoinEng::SendVersionMessage(Link& link) {
 	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
 	m->UserAgent = "/" MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/";		// BIP 0014
-#ifdef X_DEBUG//!!!D
-	m->UserAgent = "/Satoshi:0.8.0/";
-#endif
 	m->RemoteTimestamp = DateTime::UtcNow();
 	RandomRef().NextBytes(Buf(&m->Nonce, sizeof m->Nonce));
 	EXT_LOCK (m_mtxVerNonce) {

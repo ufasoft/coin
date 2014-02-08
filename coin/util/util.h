@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #pragma once
 
 #include <el/crypto/hash.h>
@@ -51,6 +59,7 @@ namespace Coin {
 
 ENUM_CLASS(HashAlgo) {
 	Sha256,
+	Sha3,
 	SCrypt,
 	Prime,
 	Momentum,
@@ -190,7 +199,9 @@ private:
 COIN_UTIL_EXPORT  HashValue Hash(const ConstBuf& mb);
 COIN_UTIL_EXPORT  HashValue160 Hash160(const ConstBuf& mb);
 COIN_UTIL_EXPORT String ConvertToBase58(const ConstBuf& cbuf);
-COIN_UTIL_EXPORT Blob ConvertFromBase58(RCString s);
+COIN_UTIL_EXPORT Blob ConvertFromBase58(RCString s, bool bCheckHash = true);
+String ConvertToBase58ShaSquare(const ConstBuf& cbuf);
+Blob ConvertFromBase58ShaSquare(RCString s);
 COIN_UTIL_EXPORT Blob CalcSha256Midstate(const ConstBuf& mb);
 
 COIN_UTIL_EXPORT  HashValue ScryptHash(const ConstBuf& mb);
@@ -205,22 +216,6 @@ struct SCoinMessageHeader {
 	UInt32 PayloadSize;
 };
 
-
-#pragma pack(push, 1)
-struct SolidcoinBlock {
-    Int32 nVersion;
-    byte hashPrevBlock[32];
-    byte hashMerkleRoot[32];
-    Int64 nBlockNum;
-    Int64 nTime;
-    UInt64 nNonce1;
-    UInt64 nNonce2;
-    UInt64 nNonce3;
-    UInt32 nNonce4;
-    char miner_id[12];
-    UInt32 dwBits;
-};
-#pragma pack(pop)
 
 
 class CoinSerialized {
@@ -302,6 +297,24 @@ pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json);
 
 static const int PASSWORD_ENCRYPT_ROUNDS_A = 1000,
 			PASSWORD_ENCRYPT_ROUNDS_B = 100*1000;
+
+
+class HasherEng : public Object {
+public:
+	virtual HashValue HashBuf(const ConstBuf& cbuf);
+	static HasherEng *GetCurrent();
+protected:
+	static void SetCurrent(HasherEng *heng);
+};
+
+
+class CHasherEngThreadKeeper {
+	HasherEng *m_prev;
+public:
+	CHasherEngThreadKeeper(HasherEng *cur);
+	~CHasherEngThreadKeeper();
+};
+
 
 } // Coin::
 

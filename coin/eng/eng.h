@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #pragma once
 
 #include <el/db/ext-sqlite.h>
@@ -10,7 +18,7 @@ using namespace Ext::Crypto;
 
 #include <el/inet/p2p-net.h>
 #include <el/inet/detect-global-ip.h>
-namespace P2P = Ext::Inet::P2P;
+using namespace Ext::Inet;
 
 using P2P::Link;
 using P2P::Peer;
@@ -215,11 +223,7 @@ public:
 	String Comment;
 
 	~MyKeyInfo();
-
-	Address ToAddress() const {
-		return Address(Hash160, Comment);
-	}
-
+	Address ToAddress() const;
 	Blob PlainPrivKey() const;
 	Blob EncryptedPrivKey(Aes& aes) const;
 
@@ -367,11 +371,13 @@ private:
 };
 
 
-extern EXT_THREAD_PTR(CoinEng, t_pCoinEng);
+//!!!R extern EXT_THREAD_PTR(CoinEng, t_pCoinEng);
 extern EXT_THREAD_PTR(void, t_bPayToScriptHash);
 
-class COIN_CLASS CCoinEngThreadKeeper {
-	CoinEng *m_prev;
+class COIN_CLASS CCoinEngThreadKeeper : public CHasherEngThreadKeeper {
+	typedef CHasherEngThreadKeeper base;
+
+//!!!R	CoinEng *m_prev;
 	bool m_prevPayToScriptHash;
 public:
 	CCoinEngThreadKeeper(CoinEng *cur);
@@ -412,7 +418,7 @@ ENUM_CLASS(EngMode) {
 	BlockExplorer
 } END_ENUM_CLASS(EngMode)
 
-inline CoinEng& Eng() noexcept { return *t_pCoinEng; }
+inline CoinEng& Eng() noexcept { return *(CoinEng*)HasherEng::GetCurrent(); }
 COIN_EXPORT CoinEng& ExternalEng();
 
 class LocatorHashes : public vector<HashValue> {
@@ -480,7 +486,7 @@ public:
 ptr<IBlockChainDb> CreateBlockChainDb();
 ptr<IBlockChainDb> CreateSqliteBlockChainDb();
 
-class COIN_CLASS CoinEng : public Object, public P2P::Net, public ITransactionable {
+class COIN_CLASS CoinEng : public HasherEng, public P2P::Net, public ITransactionable {
 	typedef CoinEng class_type;
 	typedef P2P::Net base;
 public:
@@ -590,6 +596,8 @@ public:
 	void EnsureTransactionStarted();
 	void CommitTransactionIfStarted();
 
+	virtual HashValue HashMessage(const ConstBuf& cbuf) { return Coin::Hash(cbuf); }
+
 	virtual void OnCheck(const Tx& tx) {}
 	virtual void OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner) {}
 	virtual void OnConnectBlock(const Block& block) {}
@@ -692,6 +700,7 @@ protected:
 	virtual void TryUpgradeDb();
 	virtual int GetIntervalForModDivision(int height);
 	virtual int GetIntervalForCalculatingTarget(int height);
+	Target KimotoGravityWell(const Block& blockLast, const Block& block, int minBlocks, int maxBlocks);
 	virtual TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan);
 	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval);
 	virtual Target GetNextTargetRequired(const Block& blockLast, const Block& block);

@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/ecdsa.h>
@@ -92,7 +100,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 		rd.Read(payload.data(), payload.Size);
 	}
 	CMemReadStream ms(payload);
-	HashValue h = Hash(payload);
+	HashValue h = Eng().HashMessage(payload);
 	if (*(UInt32*)h.data() != checksum)
 		Throw(E_EXT_Protocol_Violation);
 	ms.Position = 0;
@@ -401,16 +409,24 @@ void CoinLink::Send(ptr<P2P::Message> msg) {
 	TRC(1, Peer->get_EndPoint() << " send " << m);
 	
 	Blob blob = EXT_BIN(m);
-	
+#ifdef X_DEBUG//!!!D
+	blob = Blob::FromHexString("711101000100000000000000fd4cf55200000000010000000000000000000000000000000000ffff8974cc9221dc010000000000000000000000000000000000ffff3e85a9db21dc21d533ec25d8d2630b2f4d61783a302e382e392f00000000");
+#endif
 	MemoryStream qs2;
 	BinaryWriter wrQs2(qs2);
 	wrQs2 << eng.ChainParams.ProtocolMagic;
 	char cmd[12] = { 0 };
 	strcpy(cmd, m.Command);
 	wrQs2.WriteStruct(cmd);
-	wrQs2 << UInt32(blob.Size) << letoh(*(UInt32*)Hash(blob).data());	
+	wrQs2 << UInt32(blob.Size) << letoh(*(UInt32*)Eng().HashMessage(blob).data());	
 	wrQs2.Write(blob.constData(), blob.Size);
 	SendBinary(qs2);
+#ifdef X_DEBUG//!!!D
+//	Blob bl = Blob::FromHexString("711101000100000000000000fd4cf55200000000010000000000000000000000000000000000ffff8974cc9221dc010000000000000000000000000000000000ffff3e85a9db21dc21d533ec25d8d2630b2f4d61783a302e382e392f00000000");
+	HashValue checksum = SHA3<256>().ComputeHash(blob);	
+	checksum = checksum;
+
+#endif
 }
 
 void CoinPartialMerkleTree::Init(const vector<HashValue>& vHash, const dynamic_bitset<byte>& bsMatch) {

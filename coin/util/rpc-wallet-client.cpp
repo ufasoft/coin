@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/libext/ext-net.h>
@@ -76,21 +84,24 @@ public:
 	}	
 	
 	void Start() override {
-		if (!EpRpc.Port)
+		if (!EpRpc.Port) 
 			EpRpc = IPEndPoint(IPAddress::Loopback , GetFreePort());
-
-		try {
-			DBG_LOCAL_IGNORE_WIN32(WSAECONNREFUSED);
-			Call("getinfo");			
-
+		else {
 			try {
-				vector<Process> ps = Process::GetProcessesByName(Path::GetFileNameWithoutExtension(PathDaemon));	//!!! incorrect process can be selected and then terminated
-				if (!ps.empty())
-					m_process = ps.back();
+				DBG_LOCAL_IGNORE_WIN32(WSAECONNREFUSED);
+				DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_CANNOT_CONNECT);
+
+				Call("getinfo");			
+
+				try {
+					vector<Process> ps = Process::GetProcessesByName(Path::GetFileNameWithoutExtension(PathDaemon));	//!!! incorrect process can be selected and then terminated
+					if (!ps.empty())
+						m_process = ps.back();
+				} catch (RCExc) {
+				}
+				return;
 			} catch (RCExc) {
 			}
-			return;
-		} catch (RCExc) {
 		}
 
 		String exeFilePath = System.ExeFilePath;
@@ -235,7 +246,7 @@ public:
 		return (!!account ? Call("getnewaddress", account) : Call("getnewaddress")).ToString();
 	}
 protected:
-	WebClient GetWebClient() {
+	Ext::WebClient GetWebClient() {
 		return m_wc;
 	}
 
@@ -290,7 +301,6 @@ private:
 	Socket Sock;
 	NetworkStream Stm;
 	WebClient m_wc;
-	Ext::WebClient WebClient;
 
 	mutex MtxRpc;
 	Ext::Inet::JsonRpc JsonRpc;

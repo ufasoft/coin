@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #pragma once
 
 #include <el/xml.h>
@@ -20,7 +28,7 @@ using Ext::DB::sqlite_(NS)::SqliteVfs;
 
 
 #include <el/inet/p2p-net.h>
-namespace P2P = Ext::Inet::P2P;
+using namespace Ext::Inet;
 using P2P::Link;
 using P2P::Peer;
 
@@ -706,13 +714,23 @@ public:
 
 class COIN_CLASS Address : public HashValue160, public CPrintable {
 public:
+	CoinEng& Eng;
 	String Comment;
 	byte Ver;
 
-	Address();
-	explicit Address(const HashValue160& hash, RCString comment = "");
-	explicit Address(const HashValue160& hash, byte ver);
-	explicit Address(RCString s, CoinEng *eng);
+	Address(CoinEng& eng);
+	explicit Address(CoinEng& eng, const HashValue160& hash, RCString comment = "");
+	explicit Address(CoinEng& eng, const HashValue160& hash, byte ver);
+	explicit Address(CoinEng& eng, RCString s);
+
+	Address& operator=(const Address& a) {
+		if (&Eng != &a.Eng)
+			Throw(E_INVALIDARG);
+		Comment = a.Comment;
+		Ver = a.Ver;
+		return *this;
+	}
+
 	void CheckVer(CoinEng& eng) const;
 	String ToString() const override;
 

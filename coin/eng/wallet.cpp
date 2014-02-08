@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 
@@ -49,6 +57,7 @@ EXT_THREAD_PTR(Wallet, t_pWallet);
 
 WalletTx::WalletTx(const Tx& tx)
 	:	base(tx)
+	,	To(Eng())
 	,	Timestamp(DateTime::UtcNow())
 {}
 
@@ -64,7 +73,7 @@ void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
 
 	if (bLoadExt) {
 		Amount = sr.GetInt64(4);
-		To = Address(HashValue160(sr.GetBytes(5)));
+		To = Address(Eng(), HashValue160(sr.GetBytes(5)));
 	}
 }
 
@@ -139,7 +148,7 @@ void VerifySignature(const Tx& txFrom, const Tx& txTo, UInt32 nIn, Int32 nHashTy
         Throw(E_FAIL);
     const TxOut& txOut = txFrom.TxOuts()[txIn.PrevOutPoint.Index]; 
     if (txIn.PrevOutPoint.TxHash != Hash(txFrom) || !VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType)) {
-#ifdef _DEBUG//!!!D
+#ifdef X_DEBUG//!!!D
 		TRC(1, "txTo " << Hash(txTo));		
 		bool bC = txIn.PrevOutPoint.TxHash == Hash(txFrom);
 		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType);
@@ -674,7 +683,7 @@ vector<Address> Wallet::get_Recipients() {
 	vector<Address> r;
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		for (DbDataReader dr=m_eng->m_cdb.CmdRecipients.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();)
-			r.push_back(Address(HashValue160(dr.GetBytes(0)), dr.GetString(1)));
+			r.push_back(Address(*m_eng, HashValue160(dr.GetBytes(0)), dr.GetString(1)));
 	}
 	return r;
 }
@@ -699,7 +708,7 @@ void Wallet::AddRecipient(const Address& a) {
 void Wallet::RemoveRecipient(RCString s) {
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		SqliteCommand(EXT_STR("DELETE FROM pubkeys WHERE netid=" << m_dbNetId << " AND hash160=?"), m_eng->m_cdb.m_dbWallet)
-			.Bind(1, HashValue160(Address(s, m_eng)))
+			.Bind(1, HashValue160(Address(*m_eng, s)))
 			.ExecuteNonQuery();
 	}
 }
@@ -869,7 +878,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 
 			if (nChange > 0) {
 				tx.ChangePubKey = GetReservedPublicKey().first;
-				Blob scriptChange = Script(vSend[0].first).IsAddress() ? Script::BlobFromAddress(Address(Hash160(tx.ChangePubKey))) : Script::BlobFromPubKey(tx.ChangePubKey);
+				Blob scriptChange = Script(vSend[0].first).IsAddress() ? Script::BlobFromAddress(Address(*m_eng, Hash160(tx.ChangePubKey))) : Script::BlobFromPubKey(tx.ChangePubKey);
 				tx.TxOuts().insert(tx.TxOuts().begin() + Ext::Random().Next(tx.TxOuts().size()), TxOut(nChange, scriptChange));
 			}
 
@@ -984,7 +993,7 @@ void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment
 	if (0 == amount)
 		Throw(E_INVALIDARG);
 
-	Address addr(saddr, m_eng);	
+	Address addr(*m_eng, saddr);
 	vector<pair<Blob, Int64>> vSend;
 	vSend.push_back(make_pair(Script::BlobFromAddress(addr), Int64(amount)));
 	pair<WalletTx, decimal64> pp = CreateTransaction(nullptr, vSend);
@@ -1001,7 +1010,7 @@ decimal64 Wallet::CalcFee(const decimal64& amount) {
 		return make_decimal64(m_eng->ChainParams.MinTxFee, - m_eng->ChainParams.CoinValueExp());
 	if (amount > Balance)
 		Throw(E_COIN_InsufficientAmount);
-	Address addr(GetReservedPublicKey().second);
+	Address addr(*m_eng, GetReservedPublicKey().second);
 	vector<pair<Blob, Int64>> vSend;
 	vSend.push_back(make_pair(Script::BlobFromAddress(addr), decimal_to_long_long(amount*m_eng->ChainParams.CoinValue)));
 	ECDsa randomDsa(256);

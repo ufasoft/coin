@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "block-template.h"
@@ -110,7 +118,11 @@ HashValue MinerBlock::MerkleRoot(bool bSave) const {
 		if (Txes.empty())
 			Txes.resize(1);
 		Txes[0].Data = Coinb1 + ExtraNonce1 + ExtraNonce2 + Coinb2;
-		m_merkleRoot = MerkleBranch.Apply(Hash(Txes[0].Data));
+		SHA256 sha;
+		hashval hv = sha.ComputeHash(Txes[0].Data);
+		if (Algo != HashAlgo::Sha3)
+			hv = sha.ComputeHash(hv);
+		m_merkleRoot = MerkleBranch.Apply(HashValue(hv));
 #ifdef X_DEBUG//!!!D
 		cout << "\nTx0:" << Txes[0].Data << "\n";
 		cout << "\nTx0 Hash:" << Hash(Txes[0].Data) << "\n";
@@ -137,7 +149,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 			wrScript << byte(CoinbaseAux.Size);
 		msScript.WriteBuf(CoinbaseAux);
 	}
-	Blob scriptIn = Blob(msScript);
+	Blob scriptIn = Blob(ConstBuf(msScript));
 
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
@@ -148,7 +160,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	wr << UInt32(-1) << byte(1) << CoinbaseValue								// seq, NOut
 		<< byte(25)																// len(PkScript)
 		<< byte(0x76) << byte(0xA9) << byte(20);									// OP_DUP OP_HASH160, hash160Len
-	ms.WriteBuf(ConstBuf(ConvertFromBase58(address).constData()+1, 20));
+	ms.WriteBuf(ConstBuf(ConvertFromBase58(address, false).constData()+1, 20));
 	wr << byte(0x88) << byte(0xAC);												//OP_EQUALVERIFY OP_CHECKSIG
 	wr << UInt32(0);		// locktime;
 	Blob coinbasetxn = ms;
@@ -169,6 +181,12 @@ static HashValue s_hashMax("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 HashValue MinerShare::GetHash() const {
 	switch (Algo) {
+	case HashAlgo::Sha3:
+		{
+			MemoryStream ms;
+			base::WriteHeader(BinaryWriter(ms).Ref());
+			return HashValue(SHA3<256>().ComputeHash(ConstBuf(ms)));
+		}
 	case HashAlgo::Metis:
 		{
 			MemoryStream ms;

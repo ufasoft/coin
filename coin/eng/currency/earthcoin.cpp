@@ -1,6 +1,14 @@
+/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
-#include "eng.h"
+#include "../eng.h"
 
 
 namespace Coin {
@@ -68,7 +76,7 @@ protected:
 		if (blockLast.Height < 2)
 			return ChainParams.MaxTarget;
 		const int blockSpanSeconds = int(ChainParams.BlockSpan.get_TotalSeconds());
-		int seconds = int((blockLast.Timestamp - blockLast.GetPrevBlock().Timestamp).get_TotalSeconds());
+		int seconds = int((blockLast.get_Timestamp() - blockLast.GetPrevBlock().get_Timestamp()).get_TotalSeconds());
 		TimeSpan span = TimeSpan::FromSeconds(clamp(seconds, blockSpanSeconds/16, blockSpanSeconds*16));
 		return Target(BigInteger(blockLast.get_DifficultyTarget()) * ((ChainParams.TargetInterval - 1) * ChainParams.BlockSpan.get_Ticks() + 2 * span.get_Ticks()) / ((ChainParams.TargetInterval + 1) * ChainParams.BlockSpan.get_Ticks()));
 	}

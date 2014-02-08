@@ -1,3 +1,11 @@
+/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
+#                                                                                                                                                                          #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
+# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
+# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
+##########################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -126,25 +134,31 @@ void AuxPow::Check(const Block& blockAux) {
 		Throw(E_COIN_AUXPOW_WrongIndex);
 }
 
-Address::Address() {
-	Ver = Eng().ChainParams.AddressVersion;
+Address::Address(CoinEng& eng)
+	:	Eng(eng)
+{
+	Ver = eng.ChainParams.AddressVersion;
 	memset(data(), 0, size());
 }
 
-Address::Address(const HashValue160& hash, RCString comment)
-	:	Comment(comment)
+Address::Address(CoinEng& eng, const HashValue160& hash, RCString comment)
+	:	Eng(eng)
+	,	Comment(comment)
 {
-	Ver = Eng().ChainParams.AddressVersion;
+	Ver = eng.ChainParams.AddressVersion;
 	HashValue160::operator=(hash);
 }
 
-Address::Address(const HashValue160& hash, byte ver)
-	:	Ver(ver)
+Address::Address(CoinEng& eng, const HashValue160& hash, byte ver)
+	:	Eng(eng)
+	,	Ver(ver)
 {
 	HashValue160::operator=(hash);
 }
 
-Address::Address(RCString s, CoinEng *eng) {
+Address::Address(CoinEng& eng, RCString s) 
+	:	Eng(eng)
+{
 	try {
 		Blob blob = ConvertFromBase58(s.Trim());
 		if (blob.Size < 21)
@@ -154,16 +168,17 @@ Address::Address(RCString s, CoinEng *eng) {
 	} catch (RCExc) {
 		Throw(E_COIN_InvalidAddress);
 	}
-	if (eng)
-		CheckVer(*eng);
+	CheckVer(eng);
 }
 
 void Address::CheckVer(CoinEng& eng) const {
-	if (Ver != eng.ChainParams.AddressVersion && Ver != eng.ChainParams.ScriptAddressVersion)
+	if (&Eng != &eng || Ver != eng.ChainParams.AddressVersion && Ver != eng.ChainParams.ScriptAddressVersion)
 		Throw(E_COIN_InvalidAddress);
 }
 
 String Address::ToString() const {
+	CCoinEngThreadKeeper engKeeper(&Eng);
+
 	vector<byte> v(21);
 	v[0] = Ver;
 	memcpy(&v[1], data(), 20);
