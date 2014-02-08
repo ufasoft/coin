@@ -1,0 +1,660 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{dc469f2d-251e-49eb-8030-0a555e2eb5ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="mpz">
+      <UniqueIdentifier>{acec84b4-cb0e-4abe-923a-016c9ae2ac5e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{2f83e6b0-7d01-485c-8465-75796626e5b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="asm">
+      <UniqueIdentifier>{601eceb6-2e79-4f4d-a00a-bb1bf474f005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="asm\x86">
+      <UniqueIdentifier>{e7096338-a2ec-45f4-8dd7-f3a5fe047caa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{bf562845-21a0-4e3d-bcf9-b9fb3cd2c778}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="mpn">
+      <UniqueIdentifier>{db14a643-721f-4981-b749-9b530120afcd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="rand">
+      <UniqueIdentifier>{672c8daa-b195-40b5-99ff-c63237b1783a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="mpn\excluded">
+      <UniqueIdentifier>{4c32b9d2-36a2-4677-910f-c5afa02fad41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="asm\x86\sse2">
+      <UniqueIdentifier>{984a1f38-9e56-470b-a39b-292d297e784b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="asm\x64">
+      <UniqueIdentifier>{d49924e8-5558-4cf6-bdf6-9b3aedd93c0b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="fft">
+      <UniqueIdentifier>{74a6284d-038f-41ef-81bf-86263e1dead1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="mpz\add.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\realloc.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="memory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\get_str.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\iset_str.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\get_str.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\set_str.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\tdiv_qr.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\rshift.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\lshift.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\submul_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divrem_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mul.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mul_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divrem_2.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\set_str.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sub_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\clear.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\init.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\export.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\import.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\invert.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\sizeinbase.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\inits.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\iset.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\sub.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\set.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\gcdext.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\divexact.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\mul.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\gcdext.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divexact.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\hgcd.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\gcd_subdiv_step.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\gcdext_lehmer.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\gcdext_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\hgcd2.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\matrix22_mul.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\powm.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tstbit.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\add_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\cmp.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\cmp_si.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\mul_2exp.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\sub_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_q.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_r.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\iset_si.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\pprime_p.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\cmp_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\cmpabs_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\millerrabin.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\mod.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mod_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mod_1_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mod_1_2.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\urandomm.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_q_2exp.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\set_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\scan1.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\powm_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="rand\randclr.c">
+      <Filter>rand</Filter>
+    </ClCompile>
+    <ClCompile Include="rand\randdef.c">
+      <Filter>rand</Filter>
+    </ClCompile>
+    <ClCompile Include="rand\randmts.c">
+      <Filter>rand</Filter>
+    </ClCompile>
+    <ClCompile Include="rand\randmt.c">
+      <Filter>rand</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\aorsmul.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\clrbit.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\setbit.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_r_2exp.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\addmul_1.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\add_n.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mul_1.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sqr_basecase.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\redc_1.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\init2.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\swap.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\aorsmul_i.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="assert.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="errno.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_bpl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_clz_tab.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_dv_tab.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_minv_tab.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_set_fns.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tal-reent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mp_get_fns.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\divis_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\mul_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_q_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\set_si.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\divis.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\mul_si.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\tdiv_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpir-pch.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mpir.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\invert.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom3_mul.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\com_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mp_bases.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\modexact_1c_odd.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\gcdext_subdiv_step.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divrem_euclidean_r_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\inv_divappr_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sb_bdiv_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom4_mul.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom8_sqr_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divexact_by3c.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\mul_fft_main.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\tdiv_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\mul_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_bdiv_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divexact_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\rsh_divrem_hensel_qr_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mod_1_3.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\mulmod_2expp1.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom8h_mul.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\miller_rabin.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divisible_p.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_couple_handling.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_interpolate_16pts.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_eval_pm2rexp.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_eval_pm2exp.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom4_mul_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mulmod_bexpp1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mulmod_2expp1_basecase.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\copyi.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\zero.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\combine_bits.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\split_bits.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_negacylic.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\normmod_2expp1.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\ifft_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\inv_div_qr_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sb_div_qr.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom3_mul_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\rsh_divrem_hensel_qr_1_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\rsh_divrem_hensel_qr_1_2.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_eval_dgr3_pm1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\preinv_mod_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\mul_mfa_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\adjust.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\adjust_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_radix2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\neg_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\mul_2expmod_2expp1.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\butterfly_lshB.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_trunc.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\ifft_radix2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\ifft_mfa_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_bdiv_q_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_bdiv_qr_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sb_bdiv_qr.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_divappr_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_eval_pm2.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\divexact_byfobm1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sumdiff_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\butterfly_rshB.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\revbin.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\div_2expmod_2expp1.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\ifft_trunc.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\ifft_negacyclic.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sb_divappr_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom_eval_pm1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_div_qr.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\inv_div_qr.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\inv_divappr_q_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_div_qr_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mulmid_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_divappr_q_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sb_div_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\toom42_mulmid.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mulmid_basecase.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_mfa_trunc_sqrt2_inner.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="fft\fft_mfa_trunc_sqrt2.c">
+      <Filter>fft</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mulmid.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\dc_div_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\inv_div_q.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\add_err1_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\add_err2_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\sub_err2_n.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\preinv_divrem_1.c">
+      <Filter>mpn</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\fdiv_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpz\iset_ui.c">
+      <Filter>mpz</Filter>
+    </ClCompile>
+    <ClCompile Include="mpn\generic\mul_basecase.c">
+      <Filter>mpn\excluded</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="file_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mpir-config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mpirxx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mpir.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <YASM Include="mpn\x86w\addmul_1.asm">
+      <Filter>asm\x86</Filter>
+    </YASM>
+    <YASM Include="mpn\x86w\add_n.asm">
+      <Filter>asm\x86</Filter>
+    </YASM>
+    <YASM Include="mpn\x86w\mul_1.asm">
+      <Filter>asm\x86</Filter>
+    </YASM>
+    <YASM Include="mpn\x86w\p4\sqr_basecase.asm">
+      <Filter>asm\x86</Filter>
+    </YASM>
+    <YASM Include="mpn\x86w\pentium4\sse2\addmul_1.asm">
+      <Filter>asm\x86\sse2</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\addmul_1.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\add_n.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\sqr_basecase.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\mul_1.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\redc_1.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86_64w\sandybridge\mul_basecase.asm">
+      <Filter>asm\x64</Filter>
+    </YASM>
+    <YASM Include="mpn\x86w\mul_basecase.asm">
+      <Filter>asm\x86</Filter>
+    </YASM>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="mpir.def">
+      <Filter>Resources</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="mpir.rc">
+      <Filter>Resources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>
