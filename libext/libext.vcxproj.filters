@@ -1,0 +1,181 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Source Files\win32">
+      <UniqueIdentifier>{dd66a373-aeab-4d98-b380-ff71d7b1ad05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\no-pch">
+      <UniqueIdentifier>{ad0ee3d8-6533-4d68-8fb2-32d479162659}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\jansson">
+      <UniqueIdentifier>{98ef0fea-bf78-41ed-8fef-555429b667d7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\crypto">
+      <UniqueIdentifier>{5c802b61-b136-4524-8446-5005be6bc92b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="stl">
+      <UniqueIdentifier>{7fdfb2db-6b42-4a06-8590-e5518cac6bfe}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ext-base.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-blob.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-core.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-file.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-fw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-stream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-string.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\comp\stdafx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-os.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="threader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-ip-address.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sockets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="binary-reader-writer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="datetime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="varvalue.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-encoding.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\ext-com.cpp">
+      <Filter>Source Files\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\ext2.cpp">
+      <Filter>Source Files\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\ext-win.cpp">
+      <Filter>Source Files\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\ext-registry.cpp">
+      <Filter>Source Files\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="..\stl\decimal.cpp">
+      <Filter>stl</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-app.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="stack-trace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-handlers.cpp">
+      <Filter>Source Files\no-pch</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-json.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ext-net.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="http.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bignum.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="murmurhash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="internet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\com-module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\excom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\dump.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\memory.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\load.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\strbuffer.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\strconv.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\error.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\utf.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\value.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\foreign\jansson\hashtable.c">
+      <Filter>Source Files\jansson</Filter>
+    </ClCompile>
+    <ClCompile Include="..\stl\filesystem.cpp">
+      <Filter>stl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\stl\thread.cpp">
+      <Filter>stl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\stl\mutex.cpp">
+      <Filter>stl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\stl\dynamic_bitset.cpp">
+      <Filter>stl</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ext-cpp.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="..\bignum\x86x64\bignum-x86x64.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="..\crypto\x86x64\scrypt_x86x64.asm">
+      <Filter>Source Files\crypto</Filter>
+    </MASM>
+    <MASM Include="..\crypto\x86x64\sha256_x86x64.asm">
+      <Filter>Source Files\crypto</Filter>
+    </MASM>
+  </ItemGroup>
+</Project>
