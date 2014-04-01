@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #if UCFG_WIN32
@@ -44,6 +36,11 @@
 
 namespace Ext { 
 using namespace std;
+
+static bool s_bSilentUI;
+
+bool AFXAPI GetSilentUI() { return s_bSilentUI; }
+void AFXAPI SetSilentUI(bool b) { s_bSilentUI = b; }
 
 mutex g_mfcCS;
 
@@ -1074,10 +1071,14 @@ hashval Crc32::ComputeHash(Stream& stm) {
 
 CMessageProcessor g_messageProcessor;
 
+const DWORD //!!!E_EXT_BASE = 0x80040000 | 10000,
+	E_EXT_UPPER = E_EXT_BASE+0xFFFF;
 
 CMessageProcessor::CMessageProcessor() {
 	m_default.Init(0, UInt32(-1), Path::GetFileNameWithoutExtension(System.ExeFilePath));
-	///!!!  RegisterModule(E_EXT_BASE, E_EXT_UPPER, EXT_MODULE);
+#ifdef X_AFXDLL	 //!!!
+	RegisterModule(E_EXT_BASE, E_EXT_UPPER, Path::GetFileName(AfxGetModuleState()->FileName));
+#endif
 }
 
 CMessageRange::CMessageRange() {
@@ -1133,7 +1134,10 @@ String CMessageProcessor::CModuleInfo::GetMessage(HRESULT hr) {
 }
 
 void CMessageProcessor::SetParam(RCString s) {
-	g_messageProcessor.m_param.GetData()->m_string = s;
+	String *ps = g_messageProcessor.m_param;
+	if (!ps)
+		g_messageProcessor.m_param.reset(ps = new String);
+	*ps = s;
 }
 
 String AFXAPI AfxProcessError(HRESULT hr) {
@@ -1172,9 +1176,9 @@ String CMessageProcessor::ProcessInst(HRESULT hr) {
 	TCHAR buf[256];
 	char *ar[5] = {0, 0, 0, 0, 0};
 	char **p = 0;
-	String s = m_param->m_string;
-	if (!s.IsEmpty()) {
-		ar[0] = (char*)(const char*)s;
+	String *ps = m_param;
+	if (ps && !ps->IsEmpty()) {
+		ar[0] = (char*)ps->c_str();
 		p = ar;
 	}
 #if UCFG_WIN32
@@ -1244,9 +1248,6 @@ String CMessageProcessor::ProcessInst(HRESULT hr) {
 String CMessageProcessor::Process(HRESULT hr) {
 	return g_messageProcessor.ProcessInst(hr);
 }
-
-const int //!!!E_EXT_BASE = 0x80040000 | 10000,
-	E_EXT_UPPER = E_EXT_BASE+0xFFFF;
 
 void CMessageProcessor::CheckStandard() {
 #if UCFG_EXTENDED
@@ -1598,6 +1599,14 @@ Process AFXAPI Process::GetProcessById(pid_t pid) {
 Process AFXAPI Process::GetCurrentProcess() {
 	return GetProcessById(getpid());
 }
+
+#if UCFG_WIN32
+Process AFXAPI Process::FromHandle(HANDLE h, bool bOwn) {
+	Process r;
+	r.m_pimpl = new ProcessObj(h, bOwn);
+	return r;
+}
+#endif // UCFG_WIN32
 
 vector<Process> AFXAPI Process::GetProcesses() {
 #if UCFG_USE_POSIX

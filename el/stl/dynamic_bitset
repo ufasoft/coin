@@ -1,15 +1,12 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 #define _DYNAMIC_BITSET_
 
 #include EXT_HEADER(vector)
+
+namespace Ext {
+	int __cdecl PopCount(unsigned int v);
+	int __cdecl PopCount(unsigned long long v);
+}
 
 namespace ExtSTL {
 
@@ -41,20 +38,10 @@ public:
 	size_type size() const { return m_size; }
 	bool empty() const { return size() == 0; }
 
-	bool test(size_type pos) const {
-		return ByteRef(pos) & byte(1 << (pos & 7));
-	}
-	
-	bool operator[](size_type pos) const { return test(pos); }
-
 	void replace(size_type pos, bool val);
 	void flip(size_type pos);
 	void reset(size_type pos);
 
-	void set(size_type pos) {
-		ByteRef(pos) |= 1 << (pos & 7);
-	}
-	
 	virtual void resize(size_t siz) =0;
 	
 	void push_back(bool val) {
@@ -85,37 +72,150 @@ public:
 		,	m_data((size+bits_per_block-1)/bits_per_block)
 	{}
 
+	dynamic_bitset(const dynamic_bitset& bs)
+		:	base(bs.m_size)
+		,	m_data(bs.m_data)
+	{}
+
+	dynamic_bitset(EXT_RV_REF(dynamic_bitset) rv)
+		:	base(rv.m_size)
+		,	m_data(static_cast<EXT_RV_REF(std::vector<block_type>)>(rv.m_data))
+	{}
+
 	size_type num_blocks() const { return m_data.size(); }
 
-	size_type max_size() const { return std::min(m_data.max_size()*bits_per_block, std::numeric_limits<size_type>::max()); }
+	size_type max_size() const { return (std::min)(m_data.max_size()*bits_per_block, (std::numeric_limits<size_type>::max)()); }
+
+	size_type count() const {
+		size_type r = 0;
+		EXT_FOR (block_type b, m_data) {
+			r += Ext::PopCount(b);
+		}
+		return r;
+	}
+
+	bool operator==(const dynamic_bitset& bs) const {
+		return size()==bs.size() && m_data==bs.m_data;
+	}
+
+	void swap(dynamic_bitset& x) {
+		m_data.swap(x.m_data);
+		std::swap(m_size, x.m_size);
+	}
+
+	block_type *data() { return &m_data[0]; }
+
+	dynamic_bitset& operator=(EXT_RV_REF(dynamic_bitset) rv) {
+		swap(rv);
+		return *this;
+	}
 
 	void reserve(size_t siz) {
 		m_data.reserve((siz+bits_per_block-1) / bits_per_block);
 	}
 
 	void resize(size_t siz) override {
-		size_t prevSize = size();
 		m_data.resize(((m_size = siz)+bits_per_block-1)/bits_per_block);
-		for (size_t i=prevSize; i<m_size; ++i)
-			reset(i);
+		ClearLastBits();
 	}
 
-	using base::set;
+	bool test(size_type pos) const {
+		return ByteRefInline(pos) & byte(1 << (pos & 7));
+	}
+	
+	bool operator[](size_type pos) const { return test(pos); }
+
+	void set(size_type pos) {
+		ByteRefInline(pos) |= 1 << (pos & 7);
+	}
+
 	void set() {
 		std::fill(m_data.begin(), m_data.end(), block_type(-1));
+		ClearLastBits();
 	}
 
 	using base::reset;
 	void reset() {
 		std::fill(m_data.begin(), m_data.end(), block_type(0));
 	}
+
+	dynamic_bitset operator~() const {
+		dynamic_bitset r = *this;
+		for (size_t i=0; i<m_data.size(); ++i)
+			r.m_data[i] = ~r.m_data[i];
+		r.ClearLastBits();
+		return r;
+	}
+
+	dynamic_bitset& operator&=(const dynamic_bitset& bs) {
+		size_t m = min(m_data.size(), bs.m_data.size());
+		for (size_t i=0; i<m; ++i)
+			m_data[i] &= bs.m_data[i];
+		std::fill(m_data.begin()+m, m_data.end(), block_type(0));
+		return *this;
+	}
+
+	dynamic_bitset& operator|=(const dynamic_bitset& bs) {
+		size_t m = min(m_data.size(), bs.m_data.size());
+		for (size_t i=0; i<m; ++i)
+			m_data[i] |= bs.m_data[i];
+		ClearLastBits();
+		return *this;
+	}
+
+	void Or(const dynamic_bitset& bs, ssize_t offset) {
+		if (offset % bits_per_block)
+			Ext::ThrowImp(E_NOTIMPL);
+		else {
+			ssize_t blockOffset = offset / ssize_t(bits_per_block);
+			for (int i=0; i<bs.m_data.size(); ++i) {
+				ssize_t place = i + blockOffset;
+				if (place>=0 && place<m_data.size())
+					m_data[place] |= bs.m_data[i];
+			}
+		}
+	}
+
+	dynamic_bitset& operator^=(const dynamic_bitset& bs) {
+		size_t m = min(m_data.size(), bs.m_data.size());
+		for (size_t i=0; i<m; ++i)
+			m_data[i] ^= bs.m_data[i];
+		ClearLastBits();
+		return *this;
+	}
 private:
+	inline byte& ByteRefInline(size_t pos) const {
+		return *((byte*)&m_data[0] + (pos >> 3));
+	}
+
 	byte& ByteRef(size_t pos) const override {
 		ASSERT(pos < size());
 		return *((byte*)&m_data[0] + (pos >> 3));
 	}
+
+	void ClearLastBits() {
+		if (int bits = m_size % bits_per_block)		
+			m_data.back() &= (block_type(1) << bits) - 1;
+	}
 };
 
+template <typename T>
+dynamic_bitset<T> operator&(const dynamic_bitset<T>& a, const dynamic_bitset<T>& b) {
+	dynamic_bitset<T> r = a;
+	return r &= b;
+}
+
+template <typename T>
+dynamic_bitset<T> operator|(const dynamic_bitset<T>& a, const dynamic_bitset<T>& b) {
+	dynamic_bitset<T> r = a;
+	return r |= b;
+}
+
+template <typename T>
+dynamic_bitset<T> operator^(const dynamic_bitset<T>& a, const dynamic_bitset<T>& b) {
+	dynamic_bitset<T> r = a;
+	return r ^= b;
+}
 
 template <typename T, typename I>
 void to_block_range(const dynamic_bitset<T>& bs, I it) {
@@ -129,4 +229,5 @@ namespace std {
 using ExtSTL::dynamic_bitset;
 using ExtSTL::to_block_range;
 }
+
 

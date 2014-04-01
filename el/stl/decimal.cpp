@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 #include <el/bignum.h>
 
@@ -31,6 +23,26 @@ long long decimal_to_long_long(const decimal64& v) {
 	return r;
 }
 
+static const double _M_LN10 = log(10.);
+
+decimal64_::decimal64_(double v) {
+	if (v == 0) {
+		m_val = 0;
+		m_exp = 0;
+	} else {
+		bool bNeg = v < 0;
+		double exp10 = log10(bNeg ? -v : v);
+		m_exp = int(floor(exp10)) - (numeric_limits<Int64>::digits10 - 1);
+		m_val = (Int64)pow(10., exp10 - m_exp);
+		if (bNeg)
+			m_val = -m_val;	
+	}
+}
+
+double decimal_to_double(const decimal64_& v) {
+	return double(v.m_val) * exp (v.m_exp * _M_LN10);
+}
+
 decimal64 make_decimal64(Int64 val, int exp) {
 	decimal64 r;
 	r.m_val = val;
@@ -43,12 +55,35 @@ EXT_API ostream& operator<<(ostream& os, const decimal64& v) {
 		os << v.m_val << string(v.m_exp, '0');
 	} else {
 		int nexp = -v.m_exp;
-		Int64 div = 1;
+		Int64 val = v.m_val;
+		for (lldiv_t qr; nexp>0 && (qr=div(val, 10LL)).rem == 0; --nexp)
+			val = qr.quot;
+		Int64 d = 1;
 		for (int i=0; i<nexp; ++i)
-			div *= 10;
-		os << v.m_val/div << use_facet<numpunct<char>>(os.getloc()).decimal_point() << setw(nexp) << setfill('0') << v.m_val % div;
+			d *= 10;
+		os << val/d << use_facet<numpunct<char>>(os.getloc()).decimal_point() << setw(nexp) << setfill('0') << val % d;
 	}
 	return os;
+}
+
+static regex s_reDecimal("([-+])?(\\d*)(\\.(\\d*))?([eE](([-+])?(\\d+)))?");
+
+EXT_API istream& operator>>(istream& is, decimal64_& v) {		//!!! TODO read exponent
+	string s;
+	is >> s;
+	smatch m;
+	if (regex_match(s, m, s_reDecimal)) {
+		string sign = m[1].str(),
+				intpart = m[2].str(),
+				fppart = m[4].str();
+
+		v = make_decimal64(stoll(sign+intpart+fppart), -(int)fppart.size());
+		if (m[5].matched) {
+			v.m_exp += atoi(m[6].str().c_str());
+		}
+	} else
+		is.setstate(ios::failbit);
+	return is;
 }
 
 decimal64 operator*(const decimal64& a, const decimal64& b) {

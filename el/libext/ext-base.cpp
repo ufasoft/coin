@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #pragma warning(disable: 4073)
@@ -92,8 +84,7 @@ bool CHandleBaseBase::Close(bool bFromDtor) {
 
 
 #ifndef WDM_DRIVER
-//!!!RCTls SafeHandle::t_pCurrentHandle;
-EXT_THREAD_PTR(void, SafeHandle::t_pCurrentHandle);
+EXT_THREAD_PTR(void) SafeHandle::t_pCurrentHandle;
 #endif
 
 SafeHandle::HandleAccess::~HandleAccess() {	
@@ -267,7 +258,7 @@ SafeHandle::BlockingHandleAccess::~BlockingHandleAccess() {
 }
 
 #if !UCFG_WDM
-tls_ptr<String> Exception::t_LastStringArg;
+thread_specific_ptr<String> Exception::t_LastStringArg;
 #endif
 
 String Exception::get_Message() const {
@@ -343,6 +334,8 @@ HRESULT AFXAPI HResultInCatch(RCExc) {		// arg not used
 		return E_INVALIDARG;
 	} catch (bad_cast&) {
 		return E_EXT_InvalidCast;
+	} catch (const out_of_range&) {
+		return E_EXT_IndexOutOfRange;
 	} catch (const exception&) {
 		return E_FAIL;
 	}
@@ -366,12 +359,14 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 	case E_FAIL:					throw UnspecifiedException();
 	case E_EXT_ThreadInterrupted:	throw thread_interrupted();
 	case E_EXT_InvalidCast:			throw bad_cast();
+	case E_EXT_IndexOutOfRange:		throw out_of_range(explicit_cast<string>(AfxProcessError(E_EXT_IndexOutOfRange)));
 	case HRESULT_OF_WIN32(ERROR_STACK_OVERFLOW):	throw StackOverflowExc();
 	case HRESULT_OF_WIN32(ERROR_FILE_NOT_FOUND):
 		{
 			FileNotFoundException e;
 #if !UCFG_WDM
-			e.FileName = *Exception::t_LastStringArg;
+			if (Exception::t_LastStringArg)
+				e.FileName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
@@ -379,7 +374,8 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 		{
 			FileAlreadyExistsExc e;
 #if !UCFG_WDM
-			e.FileName = *Exception::t_LastStringArg;
+			if (Exception::t_LastStringArg)
+				e.FileName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
@@ -392,7 +388,8 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 		{
 			ProcNotFoundExc e;
 #if !UCFG_WDM
-			e.ProcName = *Exception::t_LastStringArg;
+			if (Exception::t_LastStringArg)
+				e.ProcName = *Exception::t_LastStringArg;
 #endif
 			throw e;
 		}
@@ -405,8 +402,11 @@ DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr) {
 }
 
 DECLSPEC_NORETURN void AFXAPI ThrowImp(HRESULT hr, const char *funname, int nLine) {
-	TRC(1, funname <<  "(Ln" << nLine << "): " << AfxProcessError(hr)); 
-
+#if UCFG_EH_SUPPORT_IGNORE
+	if (!CLocalIgnore::HresultIsIgnored(hr)) {
+		TRC(1, funname <<  "(Ln" << nLine << "): " << AfxProcessError(hr)); 
+	}
+#endif
 	ThrowImp(hr);
 }
 
@@ -704,7 +704,7 @@ void CTraceWriter::Init(const char* funname) {
 
 static InterlockedSingleton<mutex> s_pCs;
 
-CTraceWriter::~CTraceWriter() {
+CTraceWriter::~CTraceWriter() noexcept {
 	if (m_pos) {
 		m_os << '\n';
 		string str = m_os.str();		

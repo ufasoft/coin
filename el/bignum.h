@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 typedef uintptr_t BASEWORD;
@@ -24,13 +16,10 @@ void __stdcall ImpShld(const BASEWORD s[], BASEWORD *d, size_t siz, size_t amt);
 void __stdcall ImpShrd(const BASEWORD s[], BASEWORD *d, size_t siz, size_t amt, BASEWORD prev); // siz>=1, s[siz], d[siz],  amt<32x64
 
 void __stdcall ImpAddBignumsEx(BASEWORD *u, const BASEWORD *v, size_t siz);
-BASEWORD __stdcall ImpMulAddBignums(BASEWORD *r, const BASEWORD *a, size_t n, BASEWORD w);
-//!!!R BASEWORD __stdcall ImpMulAddBignumsSse2(BASEWORD *r, const BASEWORD *a, size_t n, BASEWORD w);
+BASEWORD __cdecl ImpMulAddBignums(BASEWORD *r, const BASEWORD *a, size_t n, BASEWORD w);
 
-BASEWORD __stdcall ImpShortDiv(const BASEWORD s[], const BASEWORD d[], size_t siz, BASEWORD q);
+BASEWORD __stdcall ImpShortDiv(const BASEWORD s[], BASEWORD d[], size_t siz, BASEWORD q);
 
-//!!!R typedef BASEWORD (__stdcall *PFN_ImpMulAddBignums)(BASEWORD *r, const BASEWORD *a, size_t n, BASEWORD w);
-//!!!R EXT_DATA extern PFN_ImpMulAddBignums g_pfnImpMulAddBignums;
 
 
 #endif // UCFG_BIGNUM
@@ -55,6 +44,7 @@ typedef void (__stdcall *PFNImpBinary)(const BASEWORD *a, const BASEWORD *b, BAS
 
 
 #if UCFG_BIGNUM=='G' || UCFG_BIGNUM=='N'
+	using std::swap;
 #	if UCFG_BIGNUM=='G'
 #		pragma warning(push)
 #		pragma warning(disable: 4146)
@@ -95,7 +85,7 @@ template <> inline Ext::UInt32 int_cast<Ext::UInt32, Ext::UInt64>(const Ext::UIn
 class BigInteger;
 
 
-#if defined(_WIN64) //!!!&& defined(_M_IA64)
+#if UCFG_PLATFORM_X64
 
 	struct CUInt128 {
 		UInt64 Low;
@@ -107,10 +97,10 @@ class BigInteger;
 		{}
 
 		CUInt128 operator<<(int off) const {
-			CUInt128 r;
-			ImpShld(&Low, &r.Low, 2, off>>1);
-			ImpShld(&Low, &r.Low, 2, (off>>1) | (off&1));
-			return r;
+			UInt64 a[3], r[3];
+			ImpShld(&Low, a, 2, off>>1);
+			ImpShld(a, r, 2, (off>>1) | (off&1));
+			return CUInt128(r[0], r[1]);
 		}		
 
 		CUInt128 operator|(const CUInt128 v) const {
@@ -178,6 +168,7 @@ inline BigInteger operator-(const BigInteger& x, const BigInteger& y);
 class BigInteger {
 	typedef BigInteger class_type;
 public:
+	BigInteger();
 
 /*!!!
 	BigInteger(const BigInteger& v)
@@ -204,7 +195,7 @@ public:
 
 	String ToString(int bas = 10) const;
 
-	void ExtendTo(BASEWORD *p, size_t size) const;
+	BASEWORD *ExtendTo(BASEWORD *p, size_t size) const;
 
 #if UCFG_BIGNUM=='G'
 	BigInteger(const mpz_class& zz)
@@ -214,7 +205,7 @@ public:
 
 
 #if UCFG_BIGNUM!='A'
-	BigInteger(int n = 0);
+	BigInteger(int n);
 #	if LONG_MAX==0x7fffffff
 	BigInteger(long n);
 #	endif
@@ -223,13 +214,6 @@ public:
 	BigInteger& operator=(const BigInteger& bi);
 #else
 
-	BigInteger(S_BASEWORD n = 0)
-		:	m_blob(nullptr)
-		,	m_count(1)
-	{
-		m_data[0] = n;
-	}
-
 #	if INTPTR_MAX > 0x7fffffff
 	BigInteger(int n)
 		:	m_blob(nullptr)
@@ -237,21 +221,41 @@ public:
 	{
 		m_data[0] = n;
 	}
+#	else
+	BigInteger(S_BASEWORD n)
+		:	m_blob(nullptr)
+		,	m_count(1)
+	{
+		m_data[0] = n;
+	}
 #	endif
 
-#if UCFG_SEPARATE_LONG_TYPE && LONG_MAX==0x7fffffff
+#	if UCFG_SEPARATE_LONG_TYPE && LONG_MAX==0x7fffffff
 	explicit BigInteger(unsigned long n)
 		:	m_blob(nullptr)
 	{
 		Int64 v = n;
 		Init((byte*)&v, sizeof(v));
 	}
-#endif
+#	endif
 
 	BigInteger(const BASEWORD *p, size_t count)
 		:	m_blob(nullptr)
 	{
 		Init((byte*)p, count*sizeof(BASEWORD));
+	}
+
+	BigInteger(EXT_RV_REF(BigInteger) rv)
+		:	m_blob(nullptr)
+		,	m_count(1)
+	{
+		m_data[0] = 0;
+		swap(rv);
+	}
+
+	BigInteger& operator=(EXT_RV_REF(BigInteger) rv) {
+		swap(rv);
+		return *this;
 	}
 
 	const BASEWORD *get_Data() const { return m_count<=_countof(m_data) ? m_data : (const BASEWORD*)m_blob.constData(); }
@@ -277,11 +281,24 @@ public:
 		return (long)r;
 	}
 
+	operator explicit_cast<unsigned int>() const {
+		Int64 r;
+		if (!AsInt64(r) || r<0 || r>UINT_MAX)
+			Throw(E_FAIL);
+		return (unsigned int)r;
+	}
+
 	operator explicit_cast<byte>() const {
 		Int64 r;
 		if (!AsInt64(r) || r<0 || r>255)
 			Throw(E_FAIL);
 		return (byte)r;
+	}
+
+	friend inline void swapHelper(BigInteger& x, BigInteger& y);
+
+	void swap(BigInteger& x) {
+		swapHelper(*this, x);
 	}
 
 	//!!!	Int64 ToInt64() const;
@@ -299,6 +316,7 @@ public:
 
 	friend int AFXAPI Sign(const BigInteger& v);
 	friend EXT_API std::pair<BigInteger, BigInteger> AFXAPI div(const BigInteger& x, const BigInteger& y);
+	UInt32 NMod(unsigned int d) const;
 	friend BigInteger AFXAPI operator>>(const BigInteger& x, size_t v);
 	friend BigInteger AFXAPI operator<<(const BigInteger& x, size_t v);
 	friend BinaryWriter& AFXAPI operator<<(BinaryWriter& wr, const BigInteger& n);
@@ -324,10 +342,11 @@ public:
 	int Compare(const BigInteger& x) const;
 	BigInteger Add(const BigInteger& x) const;
 	BigInteger Sub(const BigInteger& x) const;
-	BigInteger Mul(const BigInteger& x) const;
+	BigInteger Mul(const BigInteger& y) const;
 	BigInteger And(const BigInteger& x) const;
 	BigInteger Or(const BigInteger& x) const;
 	BigInteger Xor(const BigInteger& x) const;
+		
 
 	size_t GetBaseWords() const
 #if UCFG_BIGNUM!='A'
@@ -370,6 +389,18 @@ private:
 	friend BigInteger BinaryBignums(PFNImpBinary pfn, const BigInteger& x, const BigInteger& y, int incsize = 0);
 //!!!R	friend inline size_t hash_value(const BigInteger& bi);
 };
+
+inline void swapHelper(BigInteger& x, BigInteger& y) {
+#if UCFG_BIGNUM!='A'
+	swap(x.m_zz, y.m_zz);
+#else
+	x.m_blob.swap(y.m_blob);
+	std::swap(x.m_count, y.m_count);
+	std::swap(*x.m_data, *y.m_data);
+#endif
+}
+
+inline void swap(BigInteger& x, BigInteger& y) { swapHelper(x, y); }
 
 inline BigInteger abs(const BigInteger& bi) {
 	return Sign(bi) < 0 ? -bi : bi;

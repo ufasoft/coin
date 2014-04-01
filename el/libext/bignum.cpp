@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 using namespace std;
@@ -360,34 +352,35 @@ pair<BigInteger, BigInteger> AFXAPI div(const BigInteger& x, const BigInteger& y
 	if (signY)
 		ny = -ny;
 	BigInteger q, r;
-	if (ny.m_count == 1) {
-		BASEWORD v = *ny.m_data;
+	int len = ny.Length;
+	if (len <= BASEWORD_BITS) {
+		BASEWORD v = ny.get_Data()[0];
 		size_t size = nx.m_count;
 		BASEWORD *pq = (BASEWORD*)alloca(size*sizeof(BASEWORD));
+		BASEWORD rem[2] = { 0, 0 };
 #if UCFG_BIGNUM!='A'
 		const BASEWORD *px = nx.get_Data();
-		BASEWORD rem = 0;
 		for (int i=size; i--;) {
-			D_BASEWORD u = (D_BASEWORD(rem)<<BASEWORD_BITS) | px[i];
+			D_BASEWORD u = (D_BASEWORD(rem[0])<<BASEWORD_BITS) | px[i];
 			pq[i] = BASEWORD(u / v);
-			rem = u % v;
+			rem[0] = u % v;
 		}
 #else
 		BASEWORD *px = (BASEWORD*)alloca((size+1)*sizeof(BASEWORD));
 		nx.ExtendTo(px, size+1);
-		BASEWORD rem = ImpShortDiv(px, pq, size, v);
+		rem[0] = ImpShortDiv(px, pq, size, v);
 #endif
 		q = BigInteger(pq, size);
-		r = BigInteger(&rem, 1);
+		r = BigInteger(rem, 2);
 	} else if (nx < ny) {
 		q = 0;
 		r = nx;
 	} else {
-		int len = ny.Length;
 		int offset = (-len) & (BASEWORD_BITS-1);		// Normalize
 		nx <<= offset;
 		ny <<= offset;
 		int n = ny.m_count-1;
+		ASSERT(n >= 2);
 		int m = ((nx.Length+BASEWORD_BITS-1) / BASEWORD_BITS)-n;
 		const BASEWORD *pv = ny.get_Data();
 		BASEWORD v_n_1 = pv[n-1],
@@ -456,7 +449,7 @@ size_t BigInteger::get_Length() const {
 	return NumBits(m_zz);
 #else
 	S_BASEWORD w = get_Data()[m_count-1];
-	return (m_count-1)*BASEWORD_BITS+1+ImpBSR(w ^ (w>>(BASEWORD_BITS-1)));
+	return (m_count-1)*BASEWORD_BITS + 1 + ImpBSR(w ^ (w>>(BASEWORD_BITS-1)));
 #endif
 }
 
@@ -718,10 +711,10 @@ BigInteger AFXAPI operator<<(const BigInteger& x, size_t v) {
 #if UCFG_BIGNUM!='A'
 	return BigInteger(x.m_zz << (long)v);
 #else
-	size_t size = v/BASEWORD_BITS+1+x.m_count;
+	size_t size = v/BASEWORD_BITS + 1 + x.m_count;
 	BASEWORD *r = (BASEWORD*)alloca(size*sizeof(BASEWORD));
 	memset(r, 0, size*sizeof(BASEWORD));
-	BASEWORD *p = r+v/BASEWORD_BITS;
+	BASEWORD *p = r + v/BASEWORD_BITS;
 	ImpShld(x.Data, p, x.m_count, v & (BASEWORD_BITS-1));
 	return BigInteger(r, size);
 #endif

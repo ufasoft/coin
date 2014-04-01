@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 
@@ -28,6 +20,8 @@ class DirectoryInfo;
 
 typedef UInt32 (*AFX_THREADPROC)(void *);
 
+bool AFXAPI GetSilentUI();
+void AFXAPI SetSilentUI(bool b);
 
 #if !UCFG_WDM
 class CResID : public CPersistent, public CPrintable {
@@ -240,6 +234,8 @@ public:
 	IOExc(HRESULT hr)
 		:	base(hr)
 	{}
+
+	~IOExc() noexcept {}
 
 	String get_Message() const override {
 		String r = base::get_Message();
@@ -687,7 +683,7 @@ EXT_DEF_HASH(Ext::Guid)
 
 namespace Ext {
 
-class Version : public CPrintable {
+class Version : public CPrintable, totally_ordered<Version> {
 public:
 	int Major, Minor, Build, Revision;
 
@@ -708,17 +704,11 @@ public:
 		return Major==ver.Major && Minor==ver.Minor && Build==ver.Build && Revision==ver.Revision;
 	}
 
-	bool operator!=(const Version& ver) const { return !operator==(ver); }
-
 	bool operator<(const Version& ver) const {
 		return Major<ver.Major ||
 			Major==ver.Major && (Minor<ver.Minor ||
 			                     Minor==ver.Minor && (Build<ver.Build ||
 								                      Build==ver.Build  && Revision<ver.Revision));
-	}
-
-	bool operator>(const Version& ver) const {
-		return ver < *this;
 	}
 
 	String ToString(int fieldCount) const;
@@ -1238,11 +1228,6 @@ private:
 #endif // UCFG_USE_POSIX
 
 
-class AFX_CLASS CNoTrackString : public CNoTrackObject {
-public:
-	String m_string;
-};
-
 class AFX_CLASS CMessageRange {
 public:
 	CMessageRange();
@@ -1250,7 +1235,7 @@ public:
 	virtual String CheckMessage(DWORD code) { return ""; }
 };
 
-class EXTAPI CMessageProcessor {
+class EXTAPI CMessageProcessor : noncopyable {
 	struct CModuleInfo {
 		UInt32 m_lowerCode, m_upperCode;
 		String m_moduleName;
@@ -1277,7 +1262,7 @@ public:
 	String ProcessInst(HRESULT hr);
 	static String AFXAPI Process(HRESULT hr);
 
-	CThreadLocal<CNoTrackString> m_param;
+	thread_specific_ptr<String> m_param;
 
 	static void AFXAPI SetParam(RCString s);
 };
@@ -1376,6 +1361,13 @@ namespace Ext {
 
 class MarkupParser : public Object {
 public:
+	int Indent;
+	CBool Compact;
+
+	MarkupParser()
+		:	Indent(0)
+	{}
+
 	virtual ~MarkupParser() {
 	}
 
@@ -1564,7 +1556,6 @@ public:
 	void put_PriorityClass(DWORD pc) { Win32Check(::SetPriorityClass(HandleAccess(*this), pc)); }
 
 	String get_MainModuleFileName();
-	DEFPROP_GET(String, MainModuleFileName);
 #endif
 
 	void FlushInstructionCache(LPCVOID base = 0, SIZE_T size = 0) { Win32Check(::FlushInstructionCache(HandleAccess(*this), base, size)); }
@@ -1598,6 +1589,8 @@ public:
 
 #if UCFG_EXTENDED && !UCFG_WCE
 	Stream& StandardInput() { return m_pimpl->StandardInput; }
+	Stream& StandardOutput() { return m_pimpl->StandardOutput; }
+	Stream& StandardError() { return m_pimpl->StandardError; }
 #endif
 
 	DWORD get_ID() const { return m_pimpl->get_ID(); }
@@ -1618,14 +1611,25 @@ public:
 	static std::vector<Process> AFXAPI GetProcesses();
 	static std::vector<Process> AFXAPI GetProcessesByName(RCString name);
 
+#if UCFG_WIN32
+	static Process AFXAPI FromHandle(HANDLE h, bool bOwn);
+	void FlushInstructionCache(LPCVOID base = 0, SIZE_T size = 0) { m_pimpl->FlushInstructionCache(base, size); }
+	DWORD VirtualProtect(void *addr, size_t size, DWORD flNewProtect) { return m_pimpl->VirtualProtect(addr, size, flNewProtect); }
+	MEMORY_BASIC_INFORMATION VirtualQuery(const void *addr) { return m_pimpl->VirtualQuery(addr); }
+	SIZE_T ReadMemory(LPCVOID base, LPVOID buf, SIZE_T size) { return m_pimpl->ReadMemory(base, buf, size); }
+	SIZE_T WriteMemory(LPVOID base, LPCVOID buf, SIZE_T size) { return m_pimpl->WriteMemory(base, buf, size); }
+#endif
+
 #if UCFG_WIN32_FULL
 	DWORD get_PriorityClass() { return m_pimpl->get_PriorityClass(); }
 	void put_PriorityClass(DWORD pc) { m_pimpl->put_PriorityClass(pc); }
 	DEFPROP(DWORD, PriorityClass);
 
 	void GenerateConsoleCtrlEvent(DWORD dwCtrlEvent = 1);		// CTRL_BREAK_EVENT==1
-#endif
 
+	String get_MainModuleFileName() { return m_pimpl->get_MainModuleFileName(); }
+	DEFPROP_GET(String, MainModuleFileName);
+#endif
 };
 
 

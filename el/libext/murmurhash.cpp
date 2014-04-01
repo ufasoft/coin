@@ -132,7 +132,7 @@ unsigned int MurmurHashAligned2(const ConstBuf& cbuf, UInt32 seed) {
 	}
 }
 
-UInt32 MurmurHash3_x86_32(const ConstBuf& cbuf, UInt32 seed) {
+UInt32 MurmurHash3_32(const ConstBuf& cbuf, UInt32 seed) {
 	const byte *data = cbuf.P;
 	size_t len = cbuf.Size,
 		nblocks = len / 4;

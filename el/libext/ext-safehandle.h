@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #if UCFG_WIN32
@@ -118,10 +110,41 @@ public:
 };
 
 #if UCFG_USE_DECLSPEC_THREAD
-#	define EXT_THREAD_PTR(typ, name) __declspec(thread) typ *name
+#	define EXT_THREAD_PTR(typ) __declspec(thread) typ*
 #else
-#	define EXT_THREAD_PTR(typ, name) Ext::single_tls_ptr<typ> name
+#	define EXT_THREAD_PTR(typ) Ext::single_tls_ptr<typ>
 #endif
+
+template <typename T>
+class thread_specific_ptr : CDestructibleTls {
+public:
+	void reset(T *p = 0) {
+		T* prev = (T*)get_Value();
+		if (prev != p) {
+			put_Value(p);
+			delete prev;
+		}
+	}
+
+	operator T*() const { return (T*)get_Value(); }
+	T* operator->() const { return operator T*(); }
+protected:
+	void OnThreadDetach(void *p) override {
+		delete (T*)p;
+	}
+};
+
+template <typename T>
+class tls_ptr : thread_specific_ptr<T> {
+	typedef thread_specific_ptr<T> base;
+public:
+	T& operator*() {
+		T *r = *this;
+		if (!r)
+			reset(r = new T);
+		return *r;	
+	}
+};
 
 
 #endif // !WDM_DRIVER
@@ -195,7 +218,7 @@ public:
 
 #ifndef WDM_DRIVER
 	//!!!R static CTls t_pCurrentHandle;
-	static EXT_THREAD_PTR(void, t_pCurrentHandle);
+	static EXT_THREAD_PTR(void) t_pCurrentHandle;
 #endif
 
 	SafeHandle()
@@ -309,8 +332,8 @@ public:
 	};
 
 	void InternalReleaseHandle() const;
-protected:
 	HANDLE DangerousGetHandleEx() const { return (HANDLE)m_handle; }
+protected:
 	void ReplaceHandle(HANDLE h) { m_handle = (intptr_t)h; }
 	virtual void ReleaseHandle(HANDLE h) const;	
 private:

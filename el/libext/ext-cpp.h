@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #if UCFG_STDSTL
@@ -229,6 +221,7 @@ AFX_API bool AFXAPI AfxAssertFailedLine(const char* sexp, const char*fileName, i
 #	define noexcept throw()
 #endif
 
+
 #include "exthelpers.h"		// uses std::swap() from <utility>
 
 
@@ -292,14 +285,11 @@ typename enable_if<Ext::is_movable<T>::value, Ext::rv<T>&>::type move(T& x) {
 	return *static_cast<Ext::rv<T>* >(&x);
 } // std::
 
-
 }
 
-
-
-
-
 #endif // UCFG_CPP11_RVALUE
+
+#include "ext-ptr.h"
 
 #if !UCFG_MINISTL
 #	include "ext-meta.h"
@@ -365,9 +355,6 @@ namespace Ext {
 
 class AFX_CLASS CNoTrackObject {
 public:
-	void* __stdcall operator new(size_t nSize);
-	void __stdcall operator delete(void*);
-
 	CNoTrackObject();
 	virtual ~CNoTrackObject();
 };
@@ -375,11 +362,12 @@ public:
 #if UCFG_FRAMEWORK && !defined(_CRTBLD)
 
 struct HResultItem {
-	HResultItem *Next, *Prev;
+	HResultItem *Next;
 	HRESULT HResult;
 
-	explicit HResultItem(HRESULT hr)
+	explicit HResultItem(HRESULT hr, HResultItem *next = 0)
 		:	HResult(hr)
+		,	Next(next)
 	{}
 		
 	operator HRESULT() const { return HResult; }
@@ -390,61 +378,14 @@ class EXT_CLASS CLocalIgnore : public HResultItem {
 public:
 	CLocalIgnore(HRESULT hr);
 	~CLocalIgnore();
+
+	static bool AFXAPI HresultIsIgnored(HRESULT hr);
 };
 
 #endif	// UCFG_FRAMEWORK && !defined(_CRTBLD)
 
 //!!!R AFX_API void AFXAPI DbgAddIgnoredHResult(HRESULT hr);
 
-class AFX_CLASS CThreadLocalObject {
-public:
-	CThreadLocalObject() {
-		AllocSlot();
-	}
-
-	CNoTrackObject* GetData(CNoTrackObject* (AFXAPI * pfnCreateObject)());
-	CNoTrackObject* GetDataNA();
-
-	int m_nSlot;
-	~CThreadLocalObject();
-private:
-	void AllocSlot();
-};
-
-template <class TYPE> class AFX_CLASS CThreadLocal : public CThreadLocalObject {
-public:
-	TYPE* GetData()
-	{
-		TYPE* pData = (TYPE*)CThreadLocalObject::GetData(&CreateObject);
-		//!!!CE		ASSERT(pData != NULL);
-		return pData;
-	}
-	TYPE* GetDataNA()
-	{
-		TYPE* pData = (TYPE*)CThreadLocalObject::GetDataNA();
-		return pData;
-	}
-	operator TYPE*()
-	{ return GetData(); }
-	TYPE* operator->()
-	{ return GetData(); }
-
-	//!!!	static CNoTrackObject* CreateObject()
-	static CNoTrackObject * AFXAPI CreateObject()
-	{ return new TYPE; }
-};
-
-template <class T>
-class tls_ptr {
-	struct CWrap : public CNoTrackObject {
-		T m_val;
-	};
-
-	CThreadLocal<CWrap> m_wrap;
-public:
-	operator T*() { return &m_wrap.GetData()->m_val; }
-	T* operator->() { return operator T*(); }
-};
 
 
 	//!!!extern vector<HRESULT> g_arIgnoreExceptions;
@@ -863,12 +804,15 @@ void * __cdecl operator new[](size_t sz);
 #	include "ext-lru.h"
 
 namespace Ext {
-class CIgnoreList : public CNoTrackObject {
+class CIgnoreList {
 public:
 	typedef IntrusiveList<HResultItem> CIgnoredExceptions;
 	CIgnoredExceptions IgnoredExceptions;
 };
-extern CThreadLocal<CIgnoreList> t_ignoreList;
+//extern thread_specific_ptr<CIgnoreList> t_ignoreList;
+
+extern EXT_THREAD_PTR(HResultItem) t_ignoreList;
+
 }	// Ext::
 
 #endif	// UCFG_FRAMEWORK && !defined(_CRTBLD)

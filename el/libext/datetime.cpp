@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #pragma warning(disable: 4073)
@@ -78,8 +70,8 @@ void TimeSpan::ToTimeval(timeval& tv) const {
 	tv.tv_usec = long((m_ticks % 10000000)/10);
 }
 
-static const Int64 Unix_FileTime_Offset = 116444736000000000LL,
-	               Unix_DateTime_Offset = DateTime::FileTimeOffset+Unix_FileTime_Offset;
+const Int64 Unix_FileTime_Offset = 116444736000000000LL,
+               Unix_DateTime_Offset = DateTime::FileTimeOffset+Unix_FileTime_Offset;
 
 DateTime::DateTime(const timeval& tv) { 
 	m_ticks = Int64(tv.tv_sec)*10000000 + Unix_DateTime_Offset+tv.tv_usec*10;
@@ -606,7 +598,8 @@ DateTime::operator tm() const {
 	timeval tv;
 	ToTimeval(tv);
 	time_t tim = tv.tv_sec;
-	return *gmtime(&tim);
+	tm r;
+	return *gmtime_r(&tim, &r);
 }
 #endif
 
@@ -663,8 +656,7 @@ extern "C" {
 * Returns the difference between gmt and local time in seconds.
 * Use gmtime() and localtime() to keep things simple.
 */
-__int32 _cdecl
-	gmt2local(time_t t)
+__int32 _cdecl gmt2local(time_t t)
 {
 	register int dt, dir;
 	register struct tm *gmt, *loc;
@@ -692,14 +684,6 @@ __int32 _cdecl
 }
 
 
-
-int __stdcall gettimeofday(struct timeval *tp, void *) {
-	Ext::Int64 res = DateTime::UtcNow().Ticks-Unix_DateTime_Offset;	
-	tp->tv_sec = (long)(res/10000000);	//!!! can be overflow
-	tp->tv_usec = (long)(res % 10000000) / 10; // Micro Seconds
-	return 0;
-
-}
 
 #endif // UCFG_WIN32_FULL
 

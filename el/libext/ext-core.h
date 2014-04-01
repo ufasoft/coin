@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 
@@ -54,70 +46,24 @@ ENUM_CLASS(Endian) {
 	Little
 } END_ENUM_CLASS(Endian);
 
-inline UInt16 htole(UInt16 v) {
-	return htole16(v);
-}
-
-inline Int16 htole(Int16 v) {
-	return Int16(htole16(UInt16(v)));
-}
-
-inline UInt32 htole(UInt32 v) {
-	return htole32(v);
-}
-
-inline Int32 htole(Int32 v) {
-	return Int32(htole32(UInt32(v)));
-}
-
-inline UInt64 htole(UInt64 v) {
-	return htole64(v);
-}
-
-inline Int64 htole(Int64 v) {
-	return Int64(htole64(UInt64(v)));
-}
-
-inline UInt16 letoh(UInt16 v) {
-	return le16toh(v);
-}
-
-inline Int16 letoh(Int16 v) {
-	return Int16(le16toh(UInt16(v)));
-}
-
-inline UInt32 letoh(UInt32 v) {
-	return le32toh(v);
-}
-
-inline Int32 letoh(Int32 v) {
-	return Int32(le32toh(UInt32(v)));
-}
-
-inline UInt64 letoh(UInt64 v) {
-	return le64toh(v);
-}
-
-inline Int64 letoh(Int64 v) {
-	return Int64(le64toh(UInt64(v)));
-}
+__forceinline UInt16	htole(UInt16 v) { return htole16(v); }
+__forceinline Int16		htole(Int16 v) { return Int16(htole16(UInt16(v))); }
+__forceinline UInt32	htole(UInt32 v) { return htole32(v); }
+__forceinline Int32		htole(Int32 v) { return Int32(htole32(UInt32(v))); }
+__forceinline UInt64	htole(UInt64 v) { return htole64(v); }
+__forceinline Int64		htole(Int64 v) { return Int64(htole64(UInt64(v))); }
+__forceinline UInt16	letoh(UInt16 v) { return le16toh(v); }
+__forceinline Int16		letoh(Int16 v) { return Int16(le16toh(UInt16(v))); }
+__forceinline UInt32	letoh(UInt32 v) { return le32toh(v); }
+__forceinline Int32		letoh(Int32 v) { return Int32(le32toh(UInt32(v))); }
+__forceinline UInt64	letoh(UInt64 v) { return le64toh(v); }
+__forceinline Int64		letoh(Int64 v) { return Int64(le64toh(UInt64(v))); }
 
 #if UCFG_SEPARATE_LONG_TYPE
-	inline long letoh(long v) {
-		return letoh(int_presentation<sizeof(long)>::type(v));
-	}
-
-	inline unsigned long letoh(unsigned long v) {
-		return letoh(int_presentation<sizeof(unsigned long)>::type(v));
-	}
-
-	inline long htole(long v) {
-		return htole(int_presentation<sizeof(long)>::type(v));
-	}
-
-	inline unsigned long htole(unsigned long v) {
-		return htole(int_presentation<sizeof(unsigned long)>::type(v));
-	}
+__forceinline long			letoh(long v) { return letoh(int_presentation<sizeof(long)>::type(v)); }
+__forceinline unsigned long letoh(unsigned long v) { return letoh(int_presentation<sizeof(unsigned long)>::type(v)); }
+__forceinline long			htole(long v) { return htole(int_presentation<sizeof(long)>::type(v)); }
+__forceinline unsigned long htole(unsigned long v) { return htole(int_presentation<sizeof(unsigned long)>::type(v)); }
 #endif
 
 inline float htole(float v) {
@@ -140,29 +86,12 @@ inline double letoh(double v) {
 	return (double&)(vp);
 }
 
-inline UInt32 htobe(UInt32 v) {
-	return htobe32(v);
-}
-
-inline UInt16 htobe(UInt16 v) {
-	return htobe16(v);
-}
-
-inline UInt32 betoh(UInt32 v) {
-	return be32toh(v);
-}
-
-inline UInt16 betoh(UInt16 v) {
-	return be16toh(v);
-}
-
-inline UInt64 htobe(UInt64 v) {
-	return htobe64(v);
-}
-
-inline UInt64 betoh(UInt64 v) {
-	return be64toh(v);
-}
+inline UInt32 htobe(UInt32 v) { return htobe32(v); }
+inline UInt16 htobe(UInt16 v) { return htobe16(v); }
+inline UInt32 betoh(UInt32 v) { return be32toh(v); }
+inline UInt16 betoh(UInt16 v) { return be16toh(v); }
+inline UInt64 htobe(UInt64 v) { return htobe64(v); }
+inline UInt64 betoh(UInt64 v) { return be64toh(v); }
 
 template <typename T>
 class BeInt {
@@ -323,7 +252,7 @@ public:
 	int ReadByte() const override;
 };
 
-class AFX_CLASS CBlobReadStream : public CMemReadStream {
+class CBlobReadStream : public CMemReadStream {
 	typedef CMemReadStream base;
 public:
 	CBlobReadStream(const Blob& blob)
@@ -490,7 +419,7 @@ template <typename EL, typename TR>
 inline std::basic_ostream<EL, TR>& operator<<(std::basic_ostream<EL, TR>& os, const CPrintable& ob) { return os << ob.ToString(); }
 
 
-class MacAddress {
+class MacAddress : totally_ordered<MacAddress> {
 public:
 	UInt64 m_n64;
 
@@ -521,7 +450,6 @@ public:
 
 	bool operator<(MacAddress mac) const { return m_n64<mac.m_n64; }
 	bool operator==(MacAddress mac) const { return m_n64==mac.m_n64; }
-	bool operator!=(MacAddress mac) const { return m_n64!=mac.m_n64; }
 
 	static MacAddress __stdcall Null() { return MacAddress(); }
 	static MacAddress __stdcall Broadcast() { return MacAddress(0xFFFFFFFFFFFFLL); }
@@ -595,7 +523,7 @@ protected:
 #if UCFG_WDM
 	static bool t_IgnoreIncorrectChars;
 #else
-	static EXT_THREAD_PTR(Encoding, t_IgnoreIncorrectChars);
+	static EXT_THREAD_PTR(Encoding) t_IgnoreIncorrectChars;
 #endif
 
 	typedef std::unordered_map<String, ptr<Encoding>> CEncodingMap;
@@ -753,6 +681,31 @@ public:
 	}
 #endif // !UCFG_WCE
 
+	static inline int ScanReverse(UInt32 mask) {
+#	ifdef _MSC_VER
+		unsigned long index;
+		return _BitScanReverse(&index, mask) ? index+1 : 0;
+#	else
+		return mask==0 ? 0 : 32-__builtin_clz(mask);
+#	endif
+	}
+
+	static inline int ScanReverse(UInt64 mask) {
+#	ifdef _MSC_VER
+#		ifdef _M_X64
+			unsigned long index;
+			return _BitScanReverse64(&index, mask) ? index+1 : 0;
+#		else
+			int r;
+			return !mask ? 0
+				: (r = ScanReverse(UInt32(mask >> 32))) ? r+32
+				: ScanReverse(UInt32(mask));
+#		endif
+#	else
+		return mask==0 ? 0 : 64-__builtin_clzll(mask);
+#	endif
+	}
+
 };
 
 typedef void (_cdecl *PFNAtExit)();
@@ -812,7 +765,7 @@ private:
 };
 
 unsigned int MurmurHashAligned2(const ConstBuf& cbuf, UInt32 seed);
-UInt32 MurmurHash3_x86_32(const ConstBuf& cbuf, UInt32 seed);
+UInt32 MurmurHash3_32(const ConstBuf& cbuf, UInt32 seed);
 
 } // Ext::
 
