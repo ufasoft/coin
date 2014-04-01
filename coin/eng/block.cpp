@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include EXT_HEADER_FUTURE
@@ -495,9 +487,14 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 	for (int i=1; i<m_txes.size(); ++i)
 		if (m_txes[i].IsCoinBase())
 			Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
-
+#ifdef _DEBUG//!!!D
+		int n = 0;
+#endif
 	EXT_FOR (const Tx& tx, m_txes) {
 		tx.Check();
+#ifdef _DEBUG//!!!D
+		++n;
+#endif
 	}
 	if (bCheckMerkleRoot && MerkleRoot(false) != m_merkleRoot.get())
 		Throw(E_COIN_MerkleRootMismatch);
@@ -663,25 +660,12 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKey) {
 	if (!IsPubKey(pubKey))
 		return;
-#ifdef X_DEBUG//!!!D
-					if (!memcmp(hash160.data(), "\x14\x7A\x95\x7A", 4)) {
-						Blob compressed = ToCompressedKey(pubKey);
-						Blob uncomp = ToUncompressedKey(compressed);
-						ASSERT(pubKey == uncomp);
-						cout << "";
-					}
-#endif
-
 	Blob compressed;
 	try {
 		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING), ignEC_R_INVALID_ENCODING);
 		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE), ignEC_R_POINT_IS_NOT_ON_CURVE);
 		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB), ignERR_R_EC_LIB);
 		compressed = ToCompressedKey(pubKey);
-#ifdef X_DEBUG//!!!D
-		if (pubKey.P[1] == 0x69 && pubKey.P[2] == 0x5A)
-			compressed = compressed;
-#endif
 	} catch (RCExc) {
 		return;
 	}
@@ -858,12 +842,6 @@ void Block::Connect() const {
 
 		for (CConnectJob::CMap::iterator it=job.Map.begin(), e=job.Map.end(); it!=e; ++it) {
 			if (it->second.Insert) {
-#ifdef X_DEBUG//!!!D
-				Blob pk = it->second.PubKey;
-				if (pk.Size == 20) {
-					ASSERT(it->first == it->second.PubKey);
-				}
-#endif
 				eng.Db->InsertPubkey(Int64(CIdPk(it->first)), it->second.PubKey);
 			} else if (it->second.Update)
 				eng.Db->UpdatePubkey(Int64(CIdPk(it->first)), it->second.PubKey);
@@ -907,6 +885,11 @@ void Block::Connect() const {
 		m_pimpl->Write(wr);
 //!!!?			wr << byte(0);
 
+#ifdef X_DEBUG//!!!D
+		static ofstream ofsapp("c:\\work\\coin\\tx.log", ios::app);
+		ofsapp << "\nBlock  " << Hash(_self) << " Height: " << Height << "  " << get_Txes().size() << " Txes\n";
+#endif
+
 		vector<HashValue> prevTxHashes;
 		prevTxHashes.reserve(m_pimpl->m_txes.size());
 		Coin::TxHashesOutNums txHashOutNums;
@@ -916,6 +899,9 @@ void Block::Connect() const {
 			const Tx& tx = m_pimpl->m_txes[i];
 			if (eng.ShouldBeSaved(tx)) {
 				Coin::HashValue txHash = Coin::Hash(tx);
+#ifdef X_DEBUG//!!!D
+				ofsapp << "  " << i << "\t" << txHash << "\n";
+#endif
 				prevTxHashes.push_back(txHash);
 
 				MemoryStream msTx;
@@ -1192,7 +1178,6 @@ void Block::Accept() {
 
 void Block::Process(P2P::Link *link) {
 	CoinEng& eng = Eng();
-
 #ifdef X_DEBUG//!!!D
 	TRC(1, "Before LogObjectCounters");
 	LogObjectCounters();

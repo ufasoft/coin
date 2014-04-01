@@ -1,18 +1,10 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 
 #include "wallet.h"
 #include "script.h"
 
-#ifdef X_DEBUG//!!!D
+#ifdef C_DEBUG//!!!D
 #	include <el/xml.h>
 	namespace Coin {
 #		include "../blockexplorer/xml-write.cpp"
@@ -21,12 +13,13 @@
 
 namespace Coin {
 
+EXT_THREAD_PTR(Wallet) t_pWallet;
+
 Wallet::Wallet(CoinEng& eng)
 	:	base(eng)
 {
 	Init();
 }
-
 
 Wallet::Wallet(CoinDb& cdb, RCString name)
 	:	m_peng(CoinEng::CreateObject(cdb, name))
@@ -39,7 +32,6 @@ void Wallet::Init() {
 	Progress = 1;
 	CurrentHeight = -1;
 	m_eng->m_iiEngEvents = this;
-	SetNextResendTime(DateTime::UtcNow());
 }
 
 DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx) {
@@ -51,9 +43,6 @@ const DbReader& operator>>(const DbReader& rd, WalletTx& wtx) {
 	rd >> static_cast<Tx&>(wtx) >> wtx.PrevTxes;
 	return rd;
 }
-
-
-EXT_THREAD_PTR(Wallet, t_pWallet);
 
 WalletTx::WalletTx(const Tx& tx)
 	:	base(tx)
@@ -617,6 +606,14 @@ void Wallet::ReacceptWalletTxes() {
 	}
 }
 
+void Wallet::SetNextResendTime(const DateTime& dt) {
+	m_dtNextResend = dt + TimeSpan::FromSeconds(Ext::Random().Next(30*60));
+	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
+#ifdef X_DEBUG//!!!D
+	m_dtNextResend = dt + TimeSpan::FromSeconds(3);
+#endif
+}
+
 void Wallet::Start() {
 	if (m_bLoaded)
 		return;
@@ -651,6 +648,7 @@ void Wallet::Start() {
 	}
 
 	m_eng->Start();
+	SetNextResendTime(DateTime::UtcNow());
 	m_bLoaded = true;
 }
 
@@ -658,7 +656,7 @@ void Wallet::Stop() {
 	SetBestBlockHash(BestBlockHash);
 	m_bLoaded = false;
 #if UCFG_COIN_GENERATE
-	m_eng->m_cdb.UnregisterForMining(this);
+	UnregisterForMining(this);
 #endif
 	m_eng->Stop();
 }
@@ -714,7 +712,7 @@ void Wallet::RemoveRecipient(RCString s) {
 }
 
 pair<Int64, int> Wallet::GetBalanceValueExp() {
-	return pair<Int64, int>(EXT_LOCKED(m_eng->m_cdb.MtxDb, m_eng->CheckMoneyRange(m_eng->m_cdb.CmdGetBalance.Bind(1, m_dbNetId).ExecuteInt64Scalar())), m_eng->ChainParams.CoinValueExp());
+	return pair<Int64, int>(EXT_LOCKED(m_eng->m_cdb.MtxDb, m_eng->CheckMoneyRange(m_eng->m_cdb.CmdGetBalance.Bind(1, m_dbNetId).ExecuteInt64Scalar())), m_eng->ChainParams.Log10CoinValue());
 }
 
 decimal64 Wallet::get_Balance() {
@@ -749,13 +747,12 @@ void Wallet::SetAddressComment(const Address& addr, RCString comment) {
 	Throw(E_FAIL);
 }
 
-
 void Wallet::put_MiningEnabled(bool b) {
 #if UCFG_COIN_GENERATE
 	if (m_bMiningEnabled = b)
-		m_eng->m_cdb.RegisterForMining(this);
+		RegisterForMining(this);
 	else
-		m_eng->m_cdb.UnregisterForMining(this);
+		UnregisterForMining(this);
 #endif
 }
 
@@ -895,7 +892,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 			Int64 minFee = tx.GetMinFee(1, Tx::AllowFree(priority));
 			if (fee >= minFee)  {
 				tx.Timestamp = DateTime::UtcNow();
-				return make_pair(tx, make_decimal64(fee, -m_eng->ChainParams.CoinValueExp()));
+				return make_pair(tx, make_decimal64(fee, -m_eng->ChainParams.Log10CoinValue()));
 			}
 			fee = minFee;
 		}
@@ -917,14 +914,6 @@ void Wallet::Commit(WalletTx& wtx) {
 		m_eng->m_cdb.RemovePubKeyFromReserved(wtx.ChangePubKey);
 	ProcessMyTx(wtx, true);
 	Relay(wtx);
-}
-
-void Wallet::SetNextResendTime(const DateTime& dt) {
-	m_dtNextResend = dt + TimeSpan::FromSeconds(Ext::Random().Next(30*60));
-	TRC(2, "next resend at " << m_dtNextResend);
-#ifdef X_DEBUG//!!!D
-	m_dtNextResend = dt + TimeSpan::FromSeconds(3);
-#endif
 }
 
 void Wallet::ResendWalletTxes() {
@@ -952,6 +941,9 @@ void Wallet::ResendWalletTxes() {
 								x.Formatting = XmlFormatting::Indented;
 								x << wtx;
 							}
+							Int64 minFee = wtx.GetMinFee();
+							minFee = wtx.GetMinFee();
+							minFee = wtx.GetMinFee();
 							wtx.Check();
 #endif
 
@@ -985,11 +977,11 @@ void Wallet::OnPeriodicForLink(CoinLink& link) {
 }
 
 void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment) {
-	TRC(0, decAmount << " " << m_eng->ChainParams.Symbol << " to " << saddr);
+	TRC(0, decAmount << " " << m_eng->ChainParams.Symbol << " to " << saddr << " " << comment);
 
 	if (decAmount > Balance)
 		Throw(E_COIN_InsufficientAmount);
-	Int64 amount = decimal_to_long_long(decAmount*m_eng->ChainParams.CoinValue);
+	Int64 amount = decimal_to_long_long(decAmount * m_eng->ChainParams.CoinValue);
 	if (0 == amount)
 		Throw(E_INVALIDARG);
 
@@ -1007,7 +999,7 @@ decimal64 Wallet::CalcFee(const decimal64& amount) {
 	DBG_LOCAL_IGNORE_NAME(E_COIN_InsufficientAmount, ignE_COIN_InsufficientAmount);
 
 	if (0 == amount)
-		return make_decimal64(m_eng->ChainParams.MinTxFee, - m_eng->ChainParams.CoinValueExp());
+		return make_decimal64(m_eng->ChainParams.MinTxFee, - m_eng->ChainParams.Log10CoinValue());
 	if (amount > Balance)
 		Throw(E_COIN_InsufficientAmount);
 	Address addr(*m_eng, GetReservedPublicKey().second);

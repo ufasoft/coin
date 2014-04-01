@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "../util/prime-util.h"
@@ -109,8 +101,8 @@ public:
 	{
 	}
 
-	void SetChainParams(const Coin::ChainParams& p, IBlockChainDb *db) override {
-		base::SetChainParams(p, db);
+	void SetChainParams(const Coin::ChainParams& p) override {
+		base::SetChainParams(p);
 		ChainParams.MedianTimeSpan = 99;
 	}
 protected:
@@ -165,14 +157,7 @@ public:
 		ChainParams::Add(_self);		
 	}
 
-protected:
-	PrimeCoinEng *CreateObject(CoinDb& cdb, IBlockChainDb *db) override {
-		PrimeCoinEng *r = new PrimeCoinEng(cdb);
-		r->SetChainParams(_self, db);
-		return r;
-	}
-
-
+	PrimeCoinEng *CreateEng(CoinDb& cdb) override { return new PrimeCoinEng(cdb); }
 } s_primecoinParams(true);
 
 

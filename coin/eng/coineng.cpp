@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -16,6 +8,13 @@
 #include "coin-protocol.h"
 #include "script.h"
 #include "eng.h"
+
+#if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
+#	include "backend-dblite.h"
+#else
+#	include "backend-sqlite.h"
+#endif
+
 
 using Ext::DB::DbException;
 
@@ -83,10 +82,13 @@ void ChainParams::Init() {
 	MedianTimeSpan = 11;
 }
 
+CoinEng *ChainParams::CreateEng(CoinDb& cdb) {
+	return new CoinEng(cdb);
+}
 
-CoinEng *ChainParams::CreateObject(CoinDb& cdb, IBlockChainDb *db) {
-	CoinEng *r = new CoinEng(cdb);
-	r->SetChainParams(_self, db);
+CoinEng *ChainParams::CreateObject(CoinDb& cdb) {
+	CoinEng *r = CreateEng(cdb);
+	r->SetChainParams(_self);
 	return r;
 }
 
@@ -103,7 +105,7 @@ Blob MyKeyInfo::PlainPrivKey() const {
 }
 
 Blob MyKeyInfo::EncryptedPrivKey(Aes& aes) const {
-	byte typ = 'A';
+	byte typ = DEFAULT_PASSWORD_ENCRYPT_METHOD;
 	Blob privKey = PrivKey;
 	return Blob(&typ, 1) + aes.Encrypt(privKey + Crc32().ComputeHash(privKey));
 }
@@ -139,8 +141,7 @@ void MyKeyInfo::SetPrivData(const PrivateKey& privKey) {
 	SetPrivData(pp.first, pp.second);
 }
 
-//!!!R EXT_THREAD_PTR(CoinEng, t_pCoinEng);
-EXT_THREAD_PTR(void, t_bPayToScriptHash);
+EXT_THREAD_PTR(void) t_bPayToScriptHash;
 
 COIN_EXPORT CoinEng& ExternalEng() {
 	return *dynamic_cast<CoinEng*>(HasherEng::GetCurrent());
@@ -176,9 +177,9 @@ CoinEng::CoinEng(CoinDb& cdb)
 CoinEng::~CoinEng() {
 }
 
-void CoinEng::SetChainParams(const Coin::ChainParams& p, IBlockChainDb *db) {
+void CoinEng::SetChainParams(const Coin::ChainParams& p) {
 	ChainParams = p;
-	Db = db;
+	Db = CreateBlockChainDb();
 	if (ChainParams.IsTestNet)
 		Caches.HashToBlockCache.SetMaxSize(2165);
 }
@@ -218,6 +219,14 @@ void CoinEng::Close() {
 		m_iiEngEvents->OnCloseDatabase();
 
 	Db->Close();
+}
+
+ptr<IBlockChainDb> CoinEng::CreateBlockChainDb() {
+#if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
+	return new DbliteBlockChainDb;
+#else
+	return new SqliteBlockChainDb;
+#endif
 }
 
 Block CoinEng::GetBlockByHeight(UInt32 height) {
@@ -333,6 +342,10 @@ CoinMessage *CoinEng::CreateFilterClearMessage() {
 	return new FilterClearMessage;
 }
 
+CoinMessage *CoinEng::CreateRejectMessage() {
+	return new RejectMessage;
+}
+
 CoinMessage *CoinEng::CreateCheckPointMessage() {
 	return new CoinMessage("checkpoint");
 }
@@ -367,12 +380,10 @@ bool CoinEng::CreateDb() {
 	bool r = Db->Create(GetDbFilePath());
 
 	TransactionScope dbtx(*Db);
-
-
+	
 	if (m_iiEngEvents)
 		m_iiEngEvents->OnCreateDatabase();
 
-	CreateAdditionalTables();
 	return r;
 }
 
@@ -469,10 +480,8 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 	FullPeriod = !a.IsEmpty() && atoi(a);
 }
 
-int ChainParams::CoinValueExp() const {
-	int r = 0;
-	for (Int64 n=CoinValue; n >= 10; ++r)
-		n /= 10;
+int ChainParams::Log10CoinValue() const {
+	int r = (int)log10(double(CoinValue));
 	return r;
 }
 
@@ -485,11 +494,8 @@ void ChainParams::AddSeedEndpoint(RCString seed) {
 }
 
 
-
-ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name, ptr<IBlockChainDb> db) {
+ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 	String pathXml = Path::Combine(Path::GetDirectoryName(System.ExeFilePath), "coin-chains.xml");
-	if (!db)
-		db = CreateBlockChainDb();
 	ptr<CoinEng> peng;
 	if (!File::Exists(pathXml))
 		Throw(E_COIN_XmlFileNotFound);
@@ -533,11 +539,11 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name, ptr<IBlockChainDb
 				for (Coin::ChainParams *p=Coin::ChainParams::Root; p; p=p->Next) 
 					if (p->Name == name) {
 						params.MaxPossibleTarget = p->MaxPossibleTarget;
-						peng = p->CreateObject(cdb, db);
+						peng = p->CreateObject(cdb);
 					}
 				if (!peng)
-					peng = params.CreateObject(cdb, db);
-				peng->SetChainParams(params, db);
+					peng = params.CreateObject(cdb);
+				peng->SetChainParams(params);
 				goto LAB_RET;
 			}
 		}
@@ -654,6 +660,7 @@ void CoinEng::Stop() {
 	EXT_LOCK (m_mtxThreadStateChange) {
 		m_tr.join_all();
 	}
+	m_bSomeInvReceived = false;				// clear state for next Start()
 	Close();
 }
 
@@ -741,6 +748,8 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		switch (HResultInCatch(ex)) {
 		case E_COIN_SizeLimits:
 		case E_COIN_RejectedByCheckpoint:
+		case E_COIN_MoneyOutOfRange:
+		case E_COIN_DupTxInputs:
 			Misbehaving(m, 100);
 			break;
 		case E_COIN_TxNotFound:
@@ -758,6 +767,11 @@ LAB_MIS:
 			Misbehaving(m, 1);
 		}
 	}
+}
+
+void CoinEng::OnPingTimeout(P2P::Link& link) {
+	CCoinEngThreadKeeper engKeeper(this);
+	link.Send(CreatePingMessage());
 }
 
 size_t CoinEng::GetMessageHeaderSize() {
@@ -915,7 +929,8 @@ CoinEngApp::CoinEngApp() {
 #endif
 
 #if UCFG_TRC //!!!D
-//	CTrace::s_nLevel = 0xF;
+	if (!CTrace::s_nLevel)
+		CTrace::s_nLevel = 0x3F;
 	static ofstream s_ofs((Path::Combine(get_AppDataDir(), "coin.log")).ToOsString(), ios::binary);
 	CTrace::s_pOstream = &s_ofs;//!!!D
 	TRC(0, "Starting");
@@ -939,7 +954,8 @@ const Version
 //!!!R	VER_DUPLICATED_TX(0, 27),
 	VER_NORMALIZED_KEYS(0, 30),
 	VER_KEYS32(0, 35),
-	VER_INDEXED_PEERS(0, 35);
+	VER_INDEXED_PEERS(0, 35),
+	VER_USE_HASH_TABLE_DB(0, 81);
 
 
 void CoinEng::UpgradeDb(const Version& ver) {
@@ -1321,8 +1337,8 @@ void CoinEng::CheckCoinbasedTxPrev(int height, const Tx& txPrev) {
 }
 
 void IBlockChainDb::Recreate() {
-	CoinEng& eng = Eng();
-	Close();
+	CoinEng& eng = Eng();	
+	Close(false);
 	File::Delete(eng.GetDbFilePath());
 	eng.CreateDb();
 }

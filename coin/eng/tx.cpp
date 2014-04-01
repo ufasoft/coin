@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -444,11 +436,6 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 
 const Blob& TxOut::get_PkScript() const {
 	if (!m_pkScript) {
-#ifdef X_DEBUG//!!!D
-		if (Value == 1014505)
-			cout << "";
-#endif
-
 		CoinEng& eng = Eng();
 		switch (m_typ) {
 		case 20:
@@ -704,12 +691,15 @@ void Tx::Check() const {
 	Int64 nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
         if (!txOut.IsEmpty()) {
-			if (txOut.Value < eng.ChainParams.MinTxOutAmount)
+			if (!IsCoinBase() && txOut.Value < eng.ChainParams.MinTxOutAmount)
 				Throw(E_COIN_TxOutBelowMinimum);
-			if (txOut.Value > eng.ChainParams.MaxMoney)
-				throw PeerMisbehavingExc(100);
 		}
 		eng.CheckMoneyRange(nOut += eng.CheckMoneyRange(txOut.Value));
+	}
+	unordered_set<OutPoint> outPoints;
+	EXT_FOR(const TxIn& txIn, TxIns()) {									// Check for duplicate inputs
+		if (!outPoints.insert(txIn.PrevOutPoint).second)
+			Throw(E_COIN_DupTxInputs);
 	}
 	eng.OnCheck(_self);
 }
@@ -784,9 +774,8 @@ Int64 Tx::get_Fee() const {
 }
 
 decimal64 Tx::GetDecimalFee() const {
-	return make_decimal64(Fee, -Coin::Eng().ChainParams.CoinValueExp());
+	return make_decimal64(Fee, -Coin::Eng().ChainParams.Log10CoinValue());
 }
-
 
 int Tx::get_DepthInMainChain() const {
 	CoinEng& eng = Eng();

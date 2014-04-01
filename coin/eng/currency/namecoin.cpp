@@ -1,25 +1,197 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/bignum.h>
 #include <el/crypto/hash.h>
 
 
-//#include "coineng.h"
 #include "../coin-protocol.h"
 #include "../script.h"
 #include "../eng.h"
 #include "coin-msg.h"
 #include "namecoin.h"
 
+#if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
+#	include "../backend-dblite.h"
+#endif
+
 namespace Coin {
+
+const Version VER_NAMECOIN_DOMAINS(0, 81);
+
+#if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
+
+class NamecoinDbliteDb : public DbliteBlockChainDb, public INamecoinDb {
+	typedef DbliteBlockChainDb base;
+public:
+	DbTable m_tableDomains;
+
+	NamecoinDbliteDb()
+		:	m_tableDomains("domains",	0,	UCFG_COIN_TABLE_TYPE)
+	{
+	}
+protected:
+	void OnOpenTables(DbTransaction& dbt, bool bCreate) override {
+		base::OnOpenTables(dbt, bCreate);
+		if (bCreate || m_db.UserVersion >= VER_NAMECOIN_DOMAINS)
+			m_tableDomains.Open(dbt, bCreate);
+	}
+
+	int GetNameHeight(const ConstBuf& cbufName, int heightExpired) override {
+		DbTxRef dbt(m_db);
+		DbCursor c(dbt, m_tableDomains);
+		if (c.SeekToKey(cbufName)) {
+			int r = (int)letoh(*(UInt32*)c.get_Data().P);
+			if (r > heightExpired)
+				return r;
+			c.Delete();
+		}
+		return -1;
+	}
+
+	DomainData Resolve(RCString domain) override {
+		DomainData r;
+		const char *pDomain = domain;
+		ConstBuf cbufName(pDomain, strlen(pDomain));
+		DbTxRef dbt(m_db);
+		DbCursor c(dbt, m_tableDomains);
+		if (c.SeekToKey(cbufName))
+			BinaryReader(CMemReadStream(c.get_Data())) >> r;
+		return r;
+	}
+
+	void PutDomainData(RCString domain, UInt32 height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
+		const char *pDomain = domain;
+		ConstBuf cbufName(pDomain, strlen(pDomain));
+		if (!bInsert && GetNameHeight(cbufName, -1) < 0)
+			Throw(E_COIN_InconsistentDatabase);
+		DomainData dd;
+		dd.Height = height;
+		dd.AddressData = addressData;
+		DbTxRef dbt(m_db);
+		m_tableDomains.Put(dbt, cbufName, EXT_BIN(dd), bInsert);
+	}
+
+	void OptionalDeleteExpiredDomains(UInt32 height) override {
+		if (height & 0xFFF)
+			return;
+		DbTxRef dbt(m_db);
+		for (DbCursor c(dbt, m_tableDomains); c.SeekToNext();) {
+			if (letoh(*(UInt32*)c.get_Data().P) <= height)
+				c.Delete();
+		}
+	}
+};
+
+typedef NamecoinDbliteDb NamecoinDbType;
+
+#else
+
+class NamecoinSqliteDb : public SqliteBlockChainDb, public INamecoinDb {
+	typedef SqliteBlockChainDb base;
+public:
+	CBool ResolverMode;
+
+	NamecoinSqliteDb()
+		:	ResolverMode(true)
+		,	m_cmdInsertDomain("INSERT INTO domains (name, txid) VALUES (?, ?)"				, m_db)
+		,	m_cmdUpdateDomain("UPDATE domains SET txid=? WHERE name=?"						, m_db)
+		,	m_cmdFindDomain("SELECT txid FROM domains WHERE name=?"							, m_db)
+		,	m_cmdDeleteDomain("DELETE FROM domains WHERE txid=?"							, m_db)
+		,	m_cmdNameHeight("SELECT blockid FROM domains JOIN txes ON domains.txid=txes.id WHERE name=?"	, m_db)
+	{
+		if (ResolverMode) {
+			m_cmdFindDomain.CommandText = "SELECT address, height FROM domains WHERE name=?";
+			m_cmdInsertDomain.CommandText = "INSERT INTO domains (name, address, height) VALUES (?, ?, ?)";
+			m_cmdUpdateDomain.CommandText = "UPDATE domains SET address=?, height=? WHERE name=?";
+			m_cmdNameHeight.CommandText = "SELECT height FROM domains WHERE name=?";
+		}	
+	}
+
+protected:
+	SqliteCommand m_cmdInsertDomain, m_cmdUpdateDomain, m_cmdFindDomain, m_cmdNameHeight, m_cmdDeleteDomain;
+
+	String GetDomainsDbPath() {
+		String s = GetDbFilePath();
+		return Path::Combine(Path::GetDirectoryName(s), Path::GetFileNameWithoutExtension(s)+"-domains.db");
+	}
+
+	bool Create(RCString path) override {
+		bool r = base::Create(path);
+		if (ResolverMode)
+			m_db.ExecuteNonQuery("CREATE TABLE domains (name PRIMARY KEY"
+													", address"
+													", height)");
+		else
+			m_db.ExecuteNonQuery("CREATE TABLE domains (txid INTEGER PRIMARY KEY"
+													", name UNIQUE)");
+		return r;
+	}
+
+	int GetNameHeight(const ConstBuf& cbufName, int heightExpired) override {
+		DbDataReader dr = m_cmdNameHeight.Bind(1, ToStringName(cbufName)).ExecuteReader();
+		return dr.Read() ? dr.GetInt32(0) : -1;
+	}
+
+	DomainData Resolve(RCString domain) override {
+		if (!ResolverMode)
+			Throw(E_NOTIMPL);
+		DomainData r;
+		EXT_LOCK (MtxSqlite) {
+			DbDataReader dr = m_cmdFindDomain.Bind(1, domain).ExecuteReader();
+			if (dr.Read()) {
+				r.AddressData = dr.GetString(0);
+				r.Height = dr.GetInt32(1);
+			}
+		}
+		return r;
+	}
+
+	void PutDomainData(RCString domain, UInt32 height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
+		if (ResolverMode) {
+			if (bInsert) {
+				m_cmdInsertDomain.Bind(1, domain)
+								.Bind(2, addressData)
+								.Bind(3, height)
+								.ExecuteNonQuery();
+			} else {
+				m_cmdUpdateDomain.Bind(3, domain)
+								.Bind(1, addressData)
+								.Bind(2, height)
+								.ExecuteNonQuery();
+			}
+		} else {
+			if (bInsert) {
+				m_cmdInsertDomain.Bind(1, domain)
+								.Bind(2, ReducedHashValue(hashTx))
+								.ExecuteNonQuery();
+			} else {
+				m_cmdUpdateDomain.Bind(1, ReducedHashValue(hashTx))
+								.Bind(2, domain)
+								.ExecuteNonQuery();
+			}
+		}
+	}
+
+	void OptionalDeleteExpiredDomains(UInt32 height) override {
+		if (ResolverMode) {
+			if (!(heightExpired & 0xFF)) {
+				SqliteCommand(EXT_STR("DELETE FROM domains WHERE height <= " << heightExpired), m_db)
+					.ExecuteNonQuery();
+			}
+		} else {
+			Block blockExpired = GetBlockByHeight(heightExpired);
+			EXT_FOR (const TxHashOutNum& hom, blockExpired.get_TxHashesOutNums()) {
+				m_cmdDeleteDomain
+					.Bind(1, ReducedHashValue(hom.HashTx))
+					.ExecuteNonQuery();
+			}
+		}
+	}
+};
+
+typedef NamecoinSqliteDb NamecoinDbType;
+
+#endif // COIN_BACKEND_DBLITE
 
 const int NAMECOIN_TX_VERSION = 0x7100;
 
@@ -89,60 +261,25 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 	DecodedTx r;
 	bool bFound = false;
 	for (int i=0; i<tx.TxOuts().size(); ++i) {
-		pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_PkScript());
-		if (pp.first) {
-			if (exchange(bFound, true))
-				Throw(E_COIN_NAME_InvalidTx);
-			r = pp.second;
-			r.NOut = i;
+		try {
+			DBG_LOCAL_IGNORE_NAME(E_COIN_InvalidScript, ignE_COIN_InvalidScript);
+
+			pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_PkScript());
+			if (pp.first) {
+				if (exchange(bFound, true))
+					Throw(E_COIN_NAME_InvalidTx);
+				r = pp.second;
+				r.NOut = i;
+			}
+		} catch (RCExc ex) {
+			if (HResultInCatch(ex) != E_COIN_InvalidScript)
+				throw;
 		}
 	}
 	if (!bFound)
 		Throw(E_COIN_NAME_InvalidTx);
 	return r;
 }
-
-void NamecoinEng::CreateAdditionalTables() {
-#if UCFG_COIN_COINCHAIN_BACKEND != COIN_BACKEND_SQLITE
-	String dbPath = GetDomainsDbPath();
-	File::Delete(dbPath);
-	m_db.Create(dbPath);
-#endif
-	if (ResolverMode)
-		m_db.ExecuteNonQuery("CREATE TABLE domains (name PRIMARY KEY"
-												", address"
-												", height)");
-	else
-		m_db.ExecuteNonQuery("CREATE TABLE domains (txid INTEGER PRIMARY KEY"
-												", name UNIQUE)");
-}
-
-bool NamecoinEng::OpenDb() {
-	bool r = base::OpenDb();
-	String dbPath = GetDomainsDbPath();
-	if (File::Exists(dbPath))
-		m_db.Open(dbPath, FileAccess::ReadWrite, FileShare::None);
-	else
-		CreateAdditionalTables();
-	return r;
-}
-
-static class NamecoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	NamecoinChainParams(bool)
-		:	base("Namecoin"			, false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-protected:
-	NamecoinEng *CreateObject(CoinDb& cdb, IBlockChainDb *db) override {
-		NamecoinEng *r = new NamecoinEng(cdb, db);
-		r->SetChainParams(_self, db);
-		return r;
-	}
-} s_namecoinParams(true);
 
 void NamecoinEng::OnCheck(const Tx& tx) {
 	if (tx.m_pimpl->Ver != NAMECOIN_TX_VERSION)
@@ -195,19 +332,6 @@ Int64 NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decreas
 	return r -= (r >> 14) * (height % 8192);
 }
 
-/*!!!R
-bool NamecoinEng::ShouldBeSaved(const Tx& tx) {
-	if (tx.Ver == NAMECOIN_TX_VERSION) {
-		DecodedTx dt = DecodeNameTx(tx);
-		switch (dt.Op) {
-		case OP_NAME_FIRSTUPDATE:
-		case OP_NAME_UPDATE:
-			return true;
-		}
-	}
-	return base::ShouldBeSaved(tx);
-} */
-
 void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner)  {
 	try {
 		DBG_LOCAL_IGNORE_NAME(E_COIN_NAME_ExpirationError, ignE_COIN_NAME_ExpirationError); //!!!?
@@ -239,6 +363,8 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				Throw(E_COIN_NAME_NewPointsPrevious);
 			break;
 		case OP_NAME_FIRSTUPDATE:
+			if (dt.Args[0].Size==0 || dt.Args[0].Size>127)				//!!! DBLite supports key length 1..127
+				return;
 			{
 				if (GetNameNetFee(tx) < GetNetworkFee(tx.Height))
 					Throw(E_COIN_TxFeeIsLow);
@@ -247,8 +373,9 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 						Throw(E_COIN_NAME_InvalidTx);
 				}
 
-				int hPrev = GetNameHeight(dt.Args[0]);
-				if (hPrev>=0 && (tx.Height-hPrev)<GetExpirationDepth(tx.Height))
+				int heightExpired = tx.Height - GetExpirationDepth(tx.Height);
+				int hPrev = NamecoinDb().GetNameHeight(dt.Args[0], heightExpired);
+				if (hPrev>=0 && hPrev > heightExpired)
 					Throw(E_COIN_NAME_ExpirationError);
 				if (!LiteMode) {
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], MIN_FIRSTUPDATE_DEPTH);
@@ -256,36 +383,14 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 						Throw(E_COIN_NAME_ExpirationError);
 				}
 
-				if (bBlock) {
-					String domain = ToStringName(dt.Args[0]);
-					if (ResolverMode) {
-						if (hPrev < 0) {
-							m_cmdInsertDomain.Bind(1, domain)
-											.Bind(2, ToStringName(dt.Value))
-											.Bind(3, tx.Height)
-											.ExecuteNonQuery();
-						} else {
-							m_cmdUpdateDomain.Bind(3, domain)
-											.Bind(1, ToStringName(dt.Value))
-											.Bind(2, tx.Height)
-											.ExecuteNonQuery();
-						}
-					} else {
-						if (hPrev < 0) {
-							m_cmdInsertDomain.Bind(1, domain)
-											.Bind(2, ReducedHashValue(hashTx))
-											.ExecuteNonQuery();
-						} else {
-							m_cmdUpdateDomain.Bind(1, ReducedHashValue(hashTx))
-											.Bind(2, domain)
-											.ExecuteNonQuery();
-						}
-					}
-				}
+				if (bBlock)
+					NamecoinDb().PutDomainData(ToStringName(dt.Args[0]), tx.Height, hashTx, ToStringName(dt.Value), hPrev < 0);
 			}
 			break;
 
 		case OP_NAME_UPDATE:
+			if (dt.Args[0].Size==0 || dt.Args[0].Size>127)				//!!! DBLite supports key length 1..127
+				return;
 			{
 				if (!LiteMode) {
 					if (!bFound || (dtPrev.Op != OP_NAME_FIRSTUPDATE && dtPrev.Op != OP_NAME_UPDATE))
@@ -295,19 +400,8 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 						Throw(E_COIN_NAME_ExpirationError);
 				}
 
-				if (bBlock) {
-					String domain = ToStringName(dt.Args[0]);
-					if (ResolverMode) {
-						m_cmdUpdateDomain.Bind(3, domain)
-										.Bind(1, ToStringName(dt.Value))
-										.Bind(2, tx.Height)
-										.ExecuteNonQuery();
-					} else {
-						m_cmdUpdateDomain.Bind(1, ReducedHashValue(hashTx))
-										 .Bind(2, domain)
-										.ExecuteNonQuery();
-					}
-				}
+				if (bBlock)
+					NamecoinDb().PutDomainData(ToStringName(dt.Args[0]), tx.Height, hashTx, ToStringName(dt.Value), false);
 			}
 			break;
 		}
@@ -323,22 +417,9 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 }
 
 void NamecoinEng::OnConnectBlock(const Block& block) {
-	int heightExpired = block.Height-GetExpirationDepth(block.Height)-1000;
-	if (heightExpired >= 0) {
-		if (ResolverMode) {
-			if (!(heightExpired & 0xFF)) {
-				SqliteCommand(EXT_STR("DELETE FROM domains WHERE height <= " << heightExpired), m_db)
-					.ExecuteNonQuery();
-			}
-		} else {
-			Block blockExpired = GetBlockByHeight(heightExpired);
-			EXT_FOR (const TxHashOutNum& hom, blockExpired.get_TxHashesOutNums()) {
-				m_cmdDeleteDomain
-					.Bind(1, ReducedHashValue(hom.HashTx))
-					.ExecuteNonQuery();
-			}
-		}
-	}
+	int heightExpired = block.Height - GetExpirationDepth(block.Height) - 1000;
+	if (heightExpired >= 0)
+		NamecoinDb().OptionalDeleteExpiredDomains(heightExpired);
 }
 
 void NamecoinEng::OnDisconnectInputs(const Tx& tx) {
@@ -346,6 +427,7 @@ void NamecoinEng::OnDisconnectInputs(const Tx& tx) {
 		return;
 
 	DecodedTx dt = DecodeNameTx(tx);
+	/*!!!?
 	switch (dt.Op) {
 	case OP_NAME_FIRSTUPDATE:
 		SqliteCommand("DELETE FROM domains WHERE name=?", m_db)
@@ -372,22 +454,29 @@ void NamecoinEng::OnDisconnectInputs(const Tx& tx) {
 		}
 		break;
 	}
-
+	*/
 }
 
-pair<bool, String> NamecoinEng::FindName(RCString name) {
-	if (!ResolverMode)
-		Throw(E_NOTIMPL);
-	pair<bool, String> r;
-	EXT_LOCK (Mtx) {
-		DbDataReader dr = m_cmdFindDomain.Bind(1, name).ExecuteReader();
-		if (r.first = dr.Read())
-			r.second = dr.GetString(0);
+
+ptr<IBlockChainDb> NamecoinEng::CreateBlockChainDb() {
+	return new NamecoinDbType;
+}
+
+INamecoinDb& NamecoinEng::NamecoinDb() {
+	return dynamic_cast<NamecoinDbType&>(*Db);
+}
+
+static class NamecoinChainParams : public ChainParams {
+	typedef ChainParams base;
+public:
+	NamecoinChainParams(bool)
+		:	base("Namecoin"			, false)
+	{	
+		ChainParams::Add(_self);
 	}
-	return r;
-}
 
-
+	NamecoinEng *CreateEng(CoinDb& cdb) override { return new NamecoinEng(cdb); }
+} s_namecoinParams(true);
 
 } // Coin::
 

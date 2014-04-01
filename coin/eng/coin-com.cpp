@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 #include <el/xml.h>
 
@@ -115,11 +107,7 @@ public:
 		*r = m_wtx.GetComment().AllocSysString();
 	} METHOD_END
 
-	HRESULT __stdcall get_Hash(BSTR *r)
-	METHOD_BEGIN {
-		*r = String(EXT_STR(Hash(m_wtx))).AllocSysString();
-	} METHOD_END
-
+	HRESULT __stdcall get_Hash(BSTR *r);
 	HRESULT __stdcall get_Amount(DECIMAL *r);
 	HRESULT __stdcall get_Confirmations(int *r);
 	HRESULT __stdcall put_Comment(BSTR s);
@@ -418,7 +406,7 @@ public:
 					os << ", Rescanning block " << m_wallet.CurrentHeight;
 				}
 				if (m_wallet.MiningEnabled) {
-					os << ", Mining " << setprecision(1) << fixed << m_wallet.Speed/1000000 << " MHash/s";
+					os << ", Mining " << setprecision(3) << fixed << m_wallet.Speed/1000000 << " MH/s";
 				}
 			} while (false);
 		}
@@ -469,6 +457,12 @@ public:
 	HRESULT __stdcall ExportWalletToBdb(BSTR filepath)
 	METHOD_BEGIN {
 		m_wallet.ExportWalletToBdb(filepath);
+	} METHOD_END
+
+	HRESULT __stdcall ImportWallet(BSTR filepath, BSTR password)
+	METHOD_BEGIN {
+		CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
+		m_wallet.m_eng->m_cdb.ImportWallet(filepath, password);
 	} METHOD_END
 
 	HRESULT __stdcall CancelPendingTxes()
@@ -627,7 +621,7 @@ public:
 		*r = m_cdb.NeedPassword;
 	} METHOD_END
 
-	HRESULT __stdcall put_Password(BSTR password)
+	HRESULT __stdcall SetPassword(BSTR password)
 	METHOD_BEGIN {
 		m_cdb.Password = password;
 	} METHOD_END
@@ -642,11 +636,6 @@ public:
 	HRESULT __stdcall ChangePassword(BSTR oldPassword, BSTR newPassword)
 	METHOD_BEGIN {
 		m_cdb.ChangePassword(oldPassword, newPassword);
-	} METHOD_END
-
-	HRESULT __stdcall ImportWallet(BSTR filepath, BSTR password)
-	METHOD_BEGIN {
-		m_cdb.ImportWallet(filepath, password);
 	} METHOD_END
 
 	HRESULT __stdcall ExportWalletToXml(BSTR filepath)
@@ -672,6 +661,12 @@ public:
 
 TransactionCom::~TransactionCom() {
 }
+
+HRESULT __stdcall TransactionCom::get_Hash(BSTR *r)
+METHOD_BEGIN {
+	CCoinEngThreadKeeper engKeeper(&m_wallet.m_wallet.Eng);
+	*r = String(EXT_STR(Hash(m_wtx))).AllocSysString();
+} METHOD_END
 
 HRESULT __stdcall TransactionCom::get_Amount(DECIMAL *r)
 METHOD_BEGIN {

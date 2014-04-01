@@ -3,11 +3,9 @@
 #include <el/bignum.h>
 #include <el/crypto/hash.h>
 
-
-//#include "coineng.h"
-#include "coin-protocol.h"
-#include "script.h"
-#include "eng.h"
+#include "../coin-protocol.h"
+#include "../script.h"
+#include "../eng.h"
 #include "coin-msg.h"
 #include "util.h"
 
@@ -270,12 +268,7 @@ public:
 		MaxPossibleTarget = Target(0x1E7FFFFF);
 	}
 
-protected:
-	SolidcoinEng *CreateObject(CoinDb& cdb, IBlockChainDb *db) override {
-		SolidcoinEng *r = new SolidcoinEng(cdb);
-		r->SetChainParams(_self, db);
-		return r;
-	}
+	SolidcoinEng *CreateEng(CoinDb& cdb) override { return new SolidcoinEng(cdb); }
 } s_solidcoinParams(true);
 
 

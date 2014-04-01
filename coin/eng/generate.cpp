@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "coin-protocol.h"
@@ -21,40 +13,37 @@ namespace Coin {
 class EmbeddedMiner : public BitcoinMiner {
 	typedef BitcoinMiner base;
 public:
-	EmbeddedMiner(CoinDb& cdb)
-		:	m_cdb(cdb)
+	EmbeddedMiner(Wallet& wallet)
+		:	m_wallet(wallet)
 		,	m_merkleToBlock(10)
 		,	m_prevBlock(nullptr)
 	{
+		HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
+
 #	ifdef X_DEBUG //!!!D
 		ThreadCount = 0;
 #	endif
 	}
 
-	void RegisterForMining(WalletBase* wallet);
-	void UnregisterForMining(WalletBase* wallet);
+	void RegisterForMining();
+	void UnregisterForMining();
 protected:
 	ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient) override;
 	bool SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) override;
 private:
-	CoinDb& m_cdb;
+	Wallet& m_wallet;
 
-	struct WalletBestHash {
-		WalletBase* Wallet;
-		HashValue BestHash;
-	};
+	HashValue BestHash;
 
-	mutex m_mtxGen;
-	set<WalletBase*> m_genWallets;
-	vector<WalletBestHash> m_parentWallets;
 	vector<WalletBase*> m_childWallets;
 	int m_merkleSize;
 	UInt32 m_merkleNonce;
 	DateTime m_dtPrevGetwork;
 	UInt32 m_extraNonce;
 	Block m_prevBlock;
-	LruMap<HashValue, pair<Block, WalletBase*>> m_merkleToBlock;
-	CPointer<WalletBase> m_prevWalletBase;
+	
+	mutex m_mtxMerkleToBlock;
+	LruMap<HashValue, Block> m_merkleToBlock;
 
 	void UpdateParentChilds();
 	void SetUniqueExtraNonce(Block& block, CoinEng& eng);
@@ -189,14 +178,8 @@ Block WalletBase::CreateNewBlock() {
 }
 
 void EmbeddedMiner::UpdateParentChilds() {
-	m_parentWallets.clear();
 	m_childWallets.clear();
-	EXT_FOR (WalletBase *w, m_genWallets) {
-		if (!w->m_eng->ChainParams.AuxPowEnabled) {
-			WalletBestHash wbh = { w, HashValue() }; //!!!
-			m_parentWallets.push_back(wbh);
-		}
-	}
+	/*!!!
 	EXT_FOR (WalletBase *w, m_genWallets) {
 		if (m_parentWallets.empty()) {
 			WalletBestHash wbh = { w, HashValue() }; //!!!
@@ -216,6 +199,7 @@ LAB_DUP_CHAIN_ID:
 			;	
 		}
 	}
+	*/
 
 	if (m_childWallets.empty())
 		m_merkleSize = 0;
@@ -235,42 +219,34 @@ LAB_NONCE_CLASH:
 	}
 }
 
-void EmbeddedMiner::RegisterForMining(WalletBase* wallet) {
-	bool bStart = true;
-	EXT_LOCK (m_mtxGen) {
-		bStart = m_genWallets.empty();
+void EmbeddedMiner::RegisterForMining() {
+	if (!Started) {
 
-		if (m_genWallets.insert(wallet).second) {
-			EXT_LOCK (wallet->m_eng->Mtx) {
-				wallet->ReserveGenKey();
-			}
+		EXT_LOCK (m_wallet.m_eng->Mtx) {
+			m_wallet.ReserveGenKey();
 		}
 		UpdateParentChilds();
+		base::Start(&m_wallet.m_peng->m_cdb.m_tr);
 	}
-	if (bStart)
-		base::Start(&m_cdb.m_tr);
 }
 
-void EmbeddedMiner::UnregisterForMining(WalletBase* wallet) {
-	bool bStop = false;
-	EXT_LOCK (m_mtxGen) {
-		m_genWallets.erase(wallet);
-		UpdateParentChilds();
-		bStop = m_genWallets.empty();
+void EmbeddedMiner::UnregisterForMining() {
+	UpdateParentChilds();
+	base::Stop();
+}
+
+void WalletBase::RegisterForMining(WalletBase* wallet) {
+	if (!Miner.get()) {
+		Miner.reset(new EmbeddedMiner(*(Wallet*)wallet));
 	}
-	if (bStop)
-		base::Stop();
+	dynamic_cast<EmbeddedMiner*>(Miner.get())->RegisterForMining();
 }
 
-void CoinDb::RegisterForMining(WalletBase* wallet) {
-	if (!Miner.get())
-		Miner.reset(new EmbeddedMiner(_self));
-	dynamic_cast<EmbeddedMiner*>(Miner.get())->RegisterForMining(wallet);
-}
-
-void CoinDb::UnregisterForMining(WalletBase* wallet) {
-	if (Miner.get())
-		dynamic_cast<EmbeddedMiner*>(Miner.get())->UnregisterForMining(wallet);
+void WalletBase::UnregisterForMining(WalletBase* wallet) {
+	if (Miner.get()) {
+		dynamic_cast<EmbeddedMiner*>(Miner.get())->UnregisterForMining();
+		Miner.reset();
+	}
 }
 
 void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
@@ -300,67 +276,55 @@ ptr<BitcoinWorkData> EmbeddedMiner::GetWork(WebClient*& curWebClient) {
 LAB_START:
 	Thread::Sleep(msWait);
 
-	EXT_LOCK (m_mtxGen) {
-		if (m_parentWallets.empty())
-			return nullptr;
-		ptr<BitcoinWorkData> wd = new BitcoinWorkData;
+	ptr<BitcoinWorkData> wd = new BitcoinWorkData;
+	m_wallet.Speed = Speed;
+	m_wallet.OnChange();
 
-		float walletSpeed = Speed/m_parentWallets.size();
-		EXT_FOR (WalletBase *wb, m_genWallets) {
-			wb->Speed = walletSpeed;
-			wb->OnChange();
-		}
-
-		DateTime now = DateTime::UtcNow();		
-		Block block(nullptr);
+	DateTime now = DateTime::UtcNow();		
+	Block block(nullptr);
 		
-		WalletBase *wb;
-		WalletBestHash wbh = m_parentWallets[0];
-		if (now > m_dtPrevGetwork+TimeSpan::FromSeconds(60) ||
-			wbh.Wallet->m_eng->IsInitialBlockDownload() || wbh.BestHash != EXT_LOCKED(wbh.Wallet->m_eng->Mtx, Hash(wbh.Wallet->m_eng->BestBlock())))
-		{	
-			std::rotate(m_parentWallets.begin(), m_parentWallets.begin()+1, m_parentWallets.end());
-			WalletBestHash& wbh = m_parentWallets[0];
-			block = (wb = wbh.Wallet)->CreateNewBlock();
-			if (!block) {
-				msWait = 1000;
-				goto LAB_START;
-			}
-			wbh.BestHash = Hash(wb->m_eng->BestBlock());
-			m_dtPrevGetwork = now;
-		} else {
-			block = m_prevBlock.Clone();
-			wb = m_prevWalletBase;
+	if (now > m_dtPrevGetwork+TimeSpan::FromSeconds(60) ||
+		m_wallet.m_eng->IsInitialBlockDownload() || BestHash != EXT_LOCKED(m_wallet.m_eng->Mtx, Hash(m_wallet.m_eng->BestBlock())))
+	{	
+		block = m_wallet.CreateNewBlock();
+		if (!block) {
+			msWait = 1000;
+			goto LAB_START;
 		}
-		CCoinEngThreadKeeper engKeeper(&wb->Eng);
-		SetUniqueExtraNonce(block, wb->Eng);
-
-		m_prevBlock = block;
-		m_prevWalletBase = wb;
-
-		HashValue hashMerkleRoot = block.MerkleRoot;
-		m_merkleToBlock.insert(make_pair(hashMerkleRoot, make_pair(block, wb)));
-
-		MemoryStream stm;
-		BinaryWriter wr(stm);
-		block.WriteHeader(wr);
-
-		Blob blob = stm;
-		size_t len = blob.Size;
-		blob.Size = 128;
-		FormatHashBlocks(blob.data(), len);
-
-		wd->Hash1 = Blob(0, 64);
-		FormatHashBlocks(wd->Hash1.data(), 32);
-
-		wd->HashTarget = HashValue::FromDifficultyBits(block.get_DifficultyTarget().m_value);
-		wd->Timestamp = now;
-		wd->Data = blob;
-		wd->Midstate = CalcSha256Midstate(wd->Data);
-		wd->HashAlgo = wb->m_eng->ChainParams.HashAlgo;
-
-		return wd;
+		BestHash = Hash(m_wallet.m_peng->BestBlock());
+		m_dtPrevGetwork = now;
+	} else {
+		block = m_prevBlock.Clone();
 	}
+	CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
+	SetUniqueExtraNonce(block, *m_wallet.m_eng);
+
+	m_prevBlock = block;
+
+	HashValue hashMerkleRoot = block.MerkleRoot;
+	EXT_LOCK (m_mtxMerkleToBlock) {
+		m_merkleToBlock.insert(make_pair(hashMerkleRoot, block));
+	}
+
+	MemoryStream stm;
+	BinaryWriter wr(stm);
+	block.WriteHeader(wr);
+
+	Blob blob = stm;
+	size_t len = blob.Size;
+	blob.Size = 128;
+	FormatHashBlocks(blob.data(), len);
+
+	wd->Hash1 = Blob(0, 64);
+	FormatHashBlocks(wd->Hash1.data(), 32);
+
+	wd->HashTarget = HashValue::FromDifficultyBits(block.get_DifficultyTarget().m_value);
+	wd->Timestamp = now;
+	wd->Data = blob;
+	wd->Midstate = CalcSha256Midstate(wd->Data);
+	wd->HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
+
+	return wd;
 }
 
 bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
@@ -377,12 +341,11 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 
 	Block block(nullptr);
 	WalletBase *wb;
-	EXT_LOCK (m_mtxGen) {
+	EXT_LOCK (m_mtxMerkleToBlock) {
 		auto it = m_merkleToBlock.find(merkle);
 		if (it == m_merkleToBlock.end())
 			return false;
-		block = it->second.first.first;
-		wb = it->second.first.second;
+		block = it->second.first;
 		m_merkleToBlock.erase(it);
 	}
 	block.m_pimpl->Timestamp = DateTime::from_time_t(letoh(pd[17]));
@@ -396,17 +359,17 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	}
 	return true;
 #endif
-	CCoinEngThreadKeeper engKeeper(wb->m_eng);
+	CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
 	ptr<BlockMessage> m = new BlockMessage(block);
-	EXT_LOCK (wb->m_eng->Mtx) {
-		EXT_LOCK (wb->m_eng->MtxPeers) {
+	EXT_LOCK (m_wallet.m_eng->Mtx) {
+		EXT_LOCK (m_wallet.m_eng->MtxPeers) {
 			for (auto it=begin(wb->m_eng->Links); it!=end(wb->m_eng->Links); ++it) {			// early broadcast found Block
 				CoinLink& link = static_cast<CoinLink&>(**it);
 				link.Send(m);
 			}
 		}
-		m_cdb.RemovePubHash160FromReserved(wb->m_genHash160);
-		wb->ReserveGenKey();
+		m_wallet.m_peng->m_cdb.RemovePubHash160FromReserved(m_wallet.m_genHash160);
+		m_wallet.ReserveGenKey();
 		block.Process();
 	}
 	return true;

@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/xml.h>
@@ -501,6 +493,7 @@ private:
 };
 
 class COIN_CLASS Block : public Pimpl<BlockObj>, public CPersistent {
+	typedef Pimpl<BlockObj> base;
 	typedef Block class_type;
 public:
 	Block();
@@ -726,6 +719,7 @@ public:
 	Address& operator=(const Address& a) {
 		if (&Eng != &a.Eng)
 			Throw(E_INVALIDARG);
+		HashValue160::operator=(a);
 		Comment = a.Comment;
 		Ver = a.Ver;
 		return *this;

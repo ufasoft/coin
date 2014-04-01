@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -49,8 +41,14 @@ ScriptWriter& operator<<(ScriptWriter& wr, const Script& script) {
 Script::Script(const ConstBuf& mb) {
 	Vm vm;
 	vm.Init(mb);
-	while (!vm.m_stm->Eof())
-		push_back(vm.GetOp());
+	try {
+//		DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, ignE_EXT_EndOfStream);
+
+		while (!vm.m_stm->Eof())
+			push_back(vm.GetOp());
+	} catch (const EndOfStreamException&) {
+		Throw(E_COIN_InvalidScript);
+	}
 }
 
 void Script::FindAndDelete(const ConstBuf& mb) {
@@ -150,6 +148,8 @@ Instr Vm::GetOp() {
 		break;
 	default:
 		if (instr.Opcode < OP_PUSHDATA1) {
+			if (instr.Opcode > m_rd->BaseStream.Length-m_rd->BaseStream.Position)
+				Throw(E_COIN_InvalidScript);											//!!!T to avoid nested EH
 			instr.Value = m_rd->ReadBytes(instr.Opcode);
 			instr.Opcode = OP_PUSHDATA1;
 		} else if (instr.Opcode > OP_NOP10) {
@@ -767,7 +767,7 @@ CoinFilter::CoinFilter(int nElements, double falsePostitiveRate, UInt32 tweak, b
 }
 
 size_t CoinFilter::Hash(const ConstBuf& cbuf, int n) const {
-	return MurmurHash3_x86_32(cbuf, HashNum * 0xFBA4C795 + Tweak) % Bitset.size();
+	return MurmurHash3_32(cbuf, HashNum * 0xFBA4C795 + Tweak) % Bitset.size();
 }
 
 ConstBuf CoinFilter::FindScriptData(const ConstBuf& script) const {

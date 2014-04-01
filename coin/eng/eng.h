@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/db/ext-sqlite.h>
@@ -141,9 +133,10 @@ public:
 
 	static void Add(const ChainParams& p);
 	void Init();
-	virtual CoinEng *CreateObject(CoinDb& cdb, IBlockChainDb *db);
+	virtual CoinEng *CreateEng(CoinDb& cdb);
+	virtual CoinEng *CreateObject(CoinDb& cdb);
 	void LoadFromXmlAttributes(IXmlAttributeCollection& xml);
-	int CoinValueExp() const;				// precise calculation of log10(CoinValue)
+	int Log10CoinValue() const;				// precise calculation of log10(CoinValue)
 	void AddSeedEndpoint(RCString seed);
 };
 
@@ -205,10 +198,14 @@ public:
 	virtual void AddRecipient(const Address& a) { Throw(E_NOTIMPL); }
 
 #if UCFG_COIN_GENERATE
+	unique_ptr<BitcoinMiner> Miner;
+
 	Blob m_genPubKey;
 	HashValue160 m_genHash160;
 	void ReserveGenKey();
 	virtual Block CreateNewBlock();
+	void RegisterForMining(WalletBase* wallet);			// only single wallet for each Eng allowed
+	void UnregisterForMining(WalletBase* wallet);
 #endif
 };
 
@@ -346,13 +343,6 @@ public:
 	void ImportWallet(RCString filepath, RCString password);
 	void ExportWalletToXml(RCString filepath);
 
-#if UCFG_COIN_GENERATE
-	auto_ptr<BitcoinMiner> Miner;
-
-	void RegisterForMining(WalletBase* wallet);			// only single wallet for each Eng allowed
-	void UnregisterForMining(WalletBase* wallet);
-#endif
-	
 	void OnIpDetected(const IPAddress& ip) override;
 	Link *CreateLink(thread_group& tr) override;
 	bool IsBanned(const IPAddress& ip) override;
@@ -371,8 +361,7 @@ private:
 };
 
 
-//!!!R extern EXT_THREAD_PTR(CoinEng, t_pCoinEng);
-extern EXT_THREAD_PTR(void, t_bPayToScriptHash);
+extern EXT_THREAD_PTR(void) t_bPayToScriptHash;
 
 class COIN_CLASS CCoinEngThreadKeeper : public CHasherEngThreadKeeper {
 	typedef CHasherEngThreadKeeper base;
@@ -409,7 +398,8 @@ extern const Version
 //!!!R	VER_DUPLICATED_TX,
 	VER_NORMALIZED_KEYS,
 	VER_KEYS32,
-	VER_INDEXED_PEERS;
+	VER_INDEXED_PEERS,
+	VER_USE_HASH_TABLE_DB;
 
 ENUM_CLASS(EngMode) {
 	DbLess,
@@ -445,7 +435,7 @@ public:
 
 	virtual bool Create(RCString path)															=0;
 	virtual bool Open(RCString path)															=0;			// returns false if DBConvering deffered
-	virtual void Close()																		=0;	
+	virtual void Close(bool bAsync = true)																		=0;	
 	virtual void Recreate();
 	
 	virtual Version CheckUserVersion()															=0;
@@ -544,11 +534,14 @@ public:
 
 	CoinEng(CoinDb& cdb);
 	~CoinEng();
-	static ptr<CoinEng> CreateObject(CoinDb& cdb, RCString name, ptr<IBlockChainDb> db = nullptr);
+	static ptr<CoinEng> CreateObject(CoinDb& cdb, RCString name);
 	void ContinueLoad0();
 	void ContinueLoad();
 	virtual void Load();
 	virtual void Close();
+
+	virtual ptr<IBlockChainDb> CreateBlockChainDb();
+
 	void Start() override;
 	void Stop();
 
@@ -578,7 +571,7 @@ public:
 		}
 	}
 
-	virtual void SetChainParams(const Coin::ChainParams& p, IBlockChainDb *db);
+	virtual void SetChainParams(const Coin::ChainParams& p);
 	void SendVersionMessage(Link& link);	
 	bool HaveBlockInMainTree(const HashValue& hash);
 	bool HaveBlock(const HashValue& hash);
@@ -666,6 +659,7 @@ public:
 	virtual CoinMessage *CreateFilterLoadMessage();
 	virtual CoinMessage *CreateFilterAddMessage();
 	virtual CoinMessage *CreateFilterClearMessage();
+	virtual CoinMessage *CreateRejectMessage();
 	virtual CoinMessage *CreateCheckPointMessage();
 
 	virtual TxObj *CreateTxObj() { return new TxObj; }	
@@ -693,6 +687,7 @@ protected:
 	void SavePeers() override;
 
 	void OnMessageReceived(P2P::Message *m) override;
+	void OnPingTimeout(P2P::Link& link) override;
 	void AddLink(P2P::LinkBase *link) override;	
 	void OnCloseLink(P2P::LinkBase& link) override;
 	
@@ -719,7 +714,6 @@ private:
 	DateTime m_dtLastFreeTx;
 	double m_freeCount;
 
-	virtual void CreateAdditionalTables() {}
 	void UpgradeTo(const Version& ver);
 	void LoadLastBlockInfo();
 	void Misbehaving(P2P::Message *m, int howMuch);

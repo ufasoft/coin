@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 
@@ -89,7 +81,6 @@ public:
 	void Send(ptr<P2P::Message> msg) override;
 protected:
 	void OnPeriodic() override;
-	P2P::Message *CreatePingMessage() override;
 };
 
 
@@ -502,6 +493,35 @@ protected:
 	}
 };
 
+ENUM_CLASS(RejectReason) {
+	Malformed 	= 1,
+	Invalid 	= 0x10,
+	Obsolete	= 0x11,
+	Duplicate	= 0x12,
+	NonStandard	= 0x40,
+	Dust		= 0x41,
+	InsufficientFee	= 0x42,
+	CheckPoint		= 0x43
+} END_ENUM_CLASS(RejectReason);
 
+class RejectMessage : public CoinMessage {
+	typedef CoinMessage base;
+public:
+	String Command, Reason;
+	HashValue Hash;
+	RejectReason Code;
+
+	RejectMessage()
+		:	base("reject")
+	{}
+
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
+	String ToString() const override;
+protected:
+	void Process(P2P::Link& link) override {
+		TRC(2, ToString());
+	}
+};
 
 } // Coin::

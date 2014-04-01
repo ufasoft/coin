@@ -60,6 +60,7 @@ library CointEng {
 		[id(23)] HRESULT CompactDatabase();
 		[id(24)] HRESULT ExportWalletToBdb([in] BSTR filepath);
 		[id(25)] HRESULT CancelPendingTxes();
+		[id(26)] HRESULT ImportWallet([in] BSTR filepath, [in] BSTR password);
 	};
 
 	[uuid(55534654-3F35-46d9-0004-54BAFC250402)]
@@ -82,9 +83,8 @@ library CointEng {
 		[id(3), propget] HRESULT Wallets([out,retval] SAFEARRAY(IWallet) *r);
 		[id(4), propget] HRESULT WalletDatabaseExists([out,retval] VARIANT_BOOL *r);
 		[id(5), propget] HRESULT NeedPassword([out,retval] VARIANT_BOOL *r);
-		[id(6), propput] HRESULT Password([in] BSTR password);
+		[id(6)] HRESULT SetPassword([in] BSTR password);
 		[id(7)] HRESULT ChangePassword([in] BSTR oldPassword, [in] BSTR newPassword);
-		[id(8)] HRESULT ImportWallet([in] BSTR filepath, [in] BSTR password);
 		[id(9)] HRESULT ExportWalletToXml([in] BSTR filepath);
 		[id(10), propget] HRESULT LocalPort([out, retval] int *r);
 		[id(10), propput] HRESULT LocalPort([in] int port);

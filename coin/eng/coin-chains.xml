@@ -1,11 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CoinChains>
+	<Chain Name="LiteCoin" Symbol="LTC" Algo="scrypt" FullPeriod="1" AddressVersion="48"
+			Genesis="12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2" InitBlockValue="50" BlockSpan="150"
+			MaxMoney="84000000" MinTxFee="100000"
+			HalfLife="840000" MaxTargetHex="1E0FFFFF"
+			ProtocolVersion="70002" ProtocolMagicHex="DBB6C0FB" DefaultPort="9333"
+			BootUrls="dns://dnsseed.litecointools.com dns://dnsseed.litecoinpool.org dns://dnsseed.ltc.xurious.com dns://dnsseed.koin-project.com" >
+		<AlertPubKey Key="040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9" />
+
+		<Checkpoint Block="1" 		Hash="80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f" />
+		<Checkpoint Block="2" 		Hash="13957807cdd1d02f993909fa59510e318763f99a506c4c426e3b254af09f40d7" />
+		<Checkpoint Block="1500" 	Hash="841a2965955dd288cfa707a755d05a54e45f8bd476835ec9af4402a2b59a2967" />
+		<Checkpoint Block="8064" 	Hash="eb984353fc5190f210651f150c40b8a4bab9eeeff0b729fcb3987da694430d70" />
+		<Checkpoint Block="50000" 	Hash="69dc37eb029b68f075a5012dcc0419c127672adb4f3a32882b2b3e71d07a20a6" />
+		<Checkpoint Block="80000" 	Hash="4fcb7c02f676a300503f49c764a89955a8f920b46a8cbecb4867182ecdb2e90a" />
+		<Checkpoint Block="179620" 	Hash="2ad9c65c990ac00426d18e446e0fd7be2ffa69e9a7dcb28358a50b2b78b9f709" />
+		<Checkpoint Block="240000" 	Hash="7140d1c4b4c2157ca217ee7636f24c9c73db39c4590c4e6eab2e3ea1555088aa" />
+		<Checkpoint Block="383640" 	Hash="2b6809f094a9215bafc65eb3f110a35127a34be94b7d0590a096c3f126c6f364" />
+		<Checkpoint Block="456000" 	Hash="bf34f71cc6366cd487930d06be22f897e34ca6a40501ac7d401be32456372004" />
+
+		<Seed EndPoint="12.23.127.175 24.15.87.243 24.90.140.223 68.96.160.55 70.79.69.220 71.197.170.183 91.121.174.223 94.154.208.89 99.243.145.178 99.247.174.88" />
+		<Seed EndPoint="108.69.112.21 110.175.142.250 113.28.12.51 135.0.19.73 150.164.8.8 178.33.111.19 199.26.85.59 199.204.38.220" />
+		<Seed EndPoint="203.109.148.82" />
+	</Chain>
+
+	<Chain Name="PPCoin" Symbol="PPC" AddressVersion="55" ScriptAddressVersion="117" 
+			Genesis="0000000032fe677166d54963b62a4677d8957e87c508eaa4fd7eb1c880cd27e3" CoinbaseMaturity="500"
+			CoinValue="1000000" MaxMoney="2000000000" MinTxOutAmount="10000" MinTxFee="10000" AnnualPercentageRate="1"
+			PowOfDifficultyToHalfSubsidy="4"
+			InitBlockValue="9999" MaxTargetHex="1D00FFFF" InitTargetHex="1C00FFFF"
+			ProtocolVersion="60003"  ProtocolMagicHex="E5E9E8E6" DefaultPort="9901"
+			BootUrls="dns://tnseed.ppcoin.net dns://seed.ppcoin.net dns://dnsseed.ppc.altcointech.net" >
+
+		<Checkpoint Block="19080" 	Hash="000000000000bca54d9ac17881f94193fd6a270c1bb21c3bf0b37f588a40dbd7" />
+		<Checkpoint Block="30583" 	Hash="d39d1481a7eecba48932ea5913be58ad3894c7ee6d5a8ba8abeb772c66a6696e" />
+
+		<AlertPubKey Key="04a0a849dd49b113d3179a332dd77715c43be4d0076e2f19e66de23dd707e56630f792f298dfd209bf042bb3561f4af6983f3d81e439737ab0bf7f898fecd21aab" />
+		<CheckpointMasterPubKey Key="04c0c707c28533fd5c9f79d2d3a2d80dff259ad8f915241cd14608fb9bc07c74830efe8438f2b272a866b4af5e0c2cc2a9909972aefbd976937e39f46bb38c277c" />
+
+		<Seed EndPoint="69.164.204.19 84.200.84.74 178.33.22.35 66.90.146.146 91.156.102.128 110.174.124.20 67.14.164.114 37.209.40.22" />
+		<Seed EndPoint="50.71.216.165 109.108.236.208 173.28.37.150 68.102.86.156 213.251.187.24 188.134.122.31 72.38.179.122 76.74.177.224" />
+	</Chain>
+
 	<Chain Name="Bitcoin" Symbol="BTC" ChainID="0" AddressVersion="0" ScriptAddressVersion="5" 
 		 	Genesis="000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
-		 	MaxMoney="21000000" MinTxFee="10000" InitBlockValue="50" HalfLife="210000" MaxTargetHex="1D00FFFF" PayToScriptHashHeight="173500"
+		 	MaxMoney="21000000" MinTxFee="1000" InitBlockValue="50" HalfLife="210000" MaxTargetHex="1D00FFFF" PayToScriptHashHeight="173500"
 		 	CheckDupTxHeight="171200"
-		 	ProtocolVersion="70001" ProtocolMagicHex="D9B4BEF9" DefaultPort="8333"
-			BootUrls="dns://seed.bitcoin.sipa.be dns://bitseed.xf2.org dns://dnsseed.bluematt.me">
+		 	ProtocolVersion="70002" ProtocolMagicHex="D9B4BEF9" DefaultPort="8333"
+			BootUrls="dns://seed.bitcoin.sipa.be dns://bitseed.xf2.org dns://dnsseed.bluematt.me dns://seed.bitcoinstats.com">
 
 		<AlertPubKey Key="04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284" />
 
@@ -13,9 +55,8 @@
 		<Checkpoint Block="74000" Hash="0000000000573993a3c9e41ce34471c079dcf5f52a0e824a81e7f953b8661a20" />
 		<Checkpoint Block="105000" Hash="00000000000291ce28027faea320c8d2b054b2e0fe44a773f3eefb151d6bdc97" />
 		<Checkpoint Block="193000" Hash="000000000000059f452a5f7340de6682a977387c17010ff6e6c3bd83ca8b1317" />
-		<Checkpoint Block="210000" Hash="000000000000048b95347e83192f69cf0366076336c639f9b7228e9ba171342e" />
-		<Checkpoint Block="225430" Hash="00000000000001c108384350f74090433e7fcf79a606b8e797f065b130575932" />
 		<Checkpoint Block="250000" Hash="000000000000003887df1f29024b06fc2200b55f8af8f35453d7be294df2d214" />
+		<Checkpoint Block="279000" Hash="0000000000000001ae8c72a0b0c301f67e3afca10e819efa9041e458e9bd7e40" />
 
 	</Chain>
 
@@ -47,7 +88,7 @@
 			MaxMoney="10000000000" MinTxFee="100000000"
 			MaxTargetHex="1E0FFFFF"
 			ProtocolVersion="60003" ProtocolMagicHex="C0C0C0C0" DefaultPort="22556"
-			BootUrls="dns://seed.dogeftw.com">
+			BootUrls="dns://seed.dogecoin.com dns://seed.dogeftw.com">
 		<AlertPubKey Key="040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9" />
 
 		<Checkpoint Block="42279" 	Hash="8444c3ef39a46222e87584ef956ad2c9ef401578bd8b51e8e4b9a86ec3134d3a" />
@@ -91,31 +132,21 @@
 		<Checkpoint Block="41300" 	Hash="8c4e02f6c0d20e856fd7e952a147fee30ce145ca6932a284f354924362d2b408" />
 	</Chain>
 
-	<Chain Name="LiteCoin" Symbol="LTC" Algo="scrypt" FullPeriod="1" AddressVersion="48"
-			Genesis="12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2" InitBlockValue="50" BlockSpan="150"
-			MaxMoney="84000000" MinTxFee="100000"
-			HalfLife="840000" MaxTargetHex="1E0FFFFF"
-			ProtocolVersion="70002" ProtocolMagicHex="DBB6C0FB" DefaultPort="9333"
-			BootUrls="dns://dnsseed.litecointools.com dns://dnsseed.litecoinpool.org dns://dnsseed.ltc.xurious.com dns://dnsseed.koin-project.com" >
-		<AlertPubKey Key="040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9" />
 
-		<Checkpoint Block="1" 		Hash="80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f" />
-		<Checkpoint Block="2" 		Hash="13957807cdd1d02f993909fa59510e318763f99a506c4c426e3b254af09f40d7" />
-		<Checkpoint Block="1500" 	Hash="841a2965955dd288cfa707a755d05a54e45f8bd476835ec9af4402a2b59a2967" />
-		<Checkpoint Block="8064" 	Hash="eb984353fc5190f210651f150c40b8a4bab9eeeff0b729fcb3987da694430d70" />
-		<Checkpoint Block="50000" 	Hash="69dc37eb029b68f075a5012dcc0419c127672adb4f3a32882b2b3e71d07a20a6" />
-		<Checkpoint Block="80000" 	Hash="4fcb7c02f676a300503f49c764a89955a8f920b46a8cbecb4867182ecdb2e90a" />
-		<Checkpoint Block="179620" 	Hash="2ad9c65c990ac00426d18e446e0fd7be2ffa69e9a7dcb28358a50b2b78b9f709" />
-		<Checkpoint Block="240000" 	Hash="7140d1c4b4c2157ca217ee7636f24c9c73db39c4590c4e6eab2e3ea1555088aa" />
-		<Checkpoint Block="383640" 	Hash="2b6809f094a9215bafc65eb3f110a35127a34be94b7d0590a096c3f126c6f364" />
-		<Checkpoint Block="456000" 	Hash="bf34f71cc6366cd487930d06be22f897e34ca6a40501ac7d401be32456372004" />
+<!--
+	<Chain Name="MaxCoin" Symbol="MAX" Algo="sha3" AddressVersion="110" ScriptAddressVersion="127" 
+			Genesis="0000002d0f86558a6e737a3a351043ee73906fe077692dfaa3c9328aaca21964" BlockSpan="30" TargetInterval="6" FullPeriod="1" CoinbaseMaturity="120"
+			CoinValue="100000000" MaxMoney="250000000" MinTxFee="10000"
+			InitBlockValue="96" HalfLife="1051200" MaxTargetHex="1E00FFFF" 
+			ProtocolVersion="70001"  ProtocolMagicHex="D2BBBEF9" DefaultPort="8668"
+			BootUrls="dns://maxexplorer.cloudapp.net dns://maxcoin.cloudapp.net dns://wombat.dar.sh dns://maxcoinus.cloudapp.net dns://maxcoinasia.cloudapp.net">
 
-		<Seed EndPoint="12.23.127.175 24.15.87.243 24.90.140.223 68.96.160.55 70.79.69.220 71.197.170.183 91.121.174.223 94.154.208.89 99.243.145.178 99.247.174.88" />
-		<Seed EndPoint="108.69.112.21 110.175.142.250 113.28.12.51 135.0.19.73 150.164.8.8 178.33.111.19 199.26.85.59 199.204.38.220" />
-		<Seed EndPoint="203.109.148.82" />
+		<AlertPubKey Key="04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284" />
+
+		<Seed EndPoint="213.179.202.19" />
 	</Chain>
-                            
-
+-->
+                 
 	<Chain Name="MetisCoin" Symbol="MTC" Algo="metis" AddressVersion="50" ScriptAddressVersion="9" 
 			Genesis="00000bf4f1158945f88cc568fb916a448a211a3e4ffcbf8c199baaea45a904ca" BlockSpan="150" CoinbaseMaturity="60"
 			CoinValue="100000" MaxMoney="81000000" MinTxFee="10"
@@ -137,7 +168,7 @@
 			Genesis="000000000062b72c5e2ceb45fbc8587e807c155b0da735e6483dfba2f0a9c770"
 			MinTxFee="500000"
 			InitBlockValue="50" HalfLife="210000" MaxTargetHex="1D00FFFF"
-			ProtocolVersion="35000" ProtocolMagicHex="FEB4BEF9" DefaultPort="8334"
+			ProtocolVersion="37200" ProtocolMagicHex="FEB4BEF9" DefaultPort="8334"
 			BootUrls="irc://92.243.23.21/namecoin dns://bitseed.xf2.org dns://dnsseed.bluematt.me" IrcRange="2"
 			MergedMiningStartBlock="19200">
 		<AlertPubKey Key="04ba207043c1575208f08ea6ac27ed2aedd4f84e70b874db129acb08e6109a3bbb7c479ae22565973ebf0ac0391514511a22cb9345bdb772be20cfbd38be578b0c" />
@@ -171,25 +202,6 @@
 		<CheckpointMasterPubKey Key="04a51b735f816de4ec3f891d5b38bbc91e1f7245c7c08d17990760b86b4d8fc3910a850ffecf73bfa8886f01739a0c4c4322201282d07b6e48ce931cc92af94850" />
 
 		<Seed EndPoint="81.200.241.51 81.200.241.54 81.200.245.198 188.120.239.144" />
-	</Chain>
-
-	<Chain Name="PPCoin" Symbol="PPC" AddressVersion="55" ScriptAddressVersion="117" 
-			Genesis="0000000032fe677166d54963b62a4677d8957e87c508eaa4fd7eb1c880cd27e3" CoinbaseMaturity="500"
-			CoinValue="1000000" MaxMoney="2000000000" MinTxOutAmount="10000" MinTxFee="10000" AnnualPercentageRate="1"
-			PowOfDifficultyToHalfSubsidy="4"
-			InitBlockValue="9999" MaxTargetHex="1D00FFFF" InitTargetHex="1C00FFFF"
-			ProtocolVersion="60003"  ProtocolMagicHex="E5E9E8E6" DefaultPort="9901"
-			BootUrls="dns://tnseed.ppcoin.net dns://seed.ppcoin.net dns://dnsseed.ppc.altcointech.net" >
-
-		<Checkpoint Block="19080" 	Hash="000000000000bca54d9ac17881f94193fd6a270c1bb21c3bf0b37f588a40dbd7" />
-		<Checkpoint Block="30583" 	Hash="d39d1481a7eecba48932ea5913be58ad3894c7ee6d5a8ba8abeb772c66a6696e" />
-
-		<AlertPubKey Key="04a0a849dd49b113d3179a332dd77715c43be4d0076e2f19e66de23dd707e56630f792f298dfd209bf042bb3561f4af6983f3d81e439737ab0bf7f898fecd21aab" />
-		<CheckpointMasterPubKey Key="04c0c707c28533fd5c9f79d2d3a2d80dff259ad8f915241cd14608fb9bc07c74830efe8438f2b272a866b4af5e0c2cc2a9909972aefbd976937e39f46bb38c277c" />
-
-		<Seed EndPoint="69.164.204.19 84.200.84.74 178.33.22.35 66.90.146.146 91.156.102.128 110.174.124.20 67.14.164.114 37.209.40.22" />
-		<Seed EndPoint="50.71.216.165 109.108.236.208 173.28.37.150 68.102.86.156 213.251.187.24 188.134.122.31 72.38.179.122 76.74.177.224" />
-
 	</Chain>
 
 

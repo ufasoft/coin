@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -39,7 +31,7 @@ CoinDb::CoinDb()
 	,	CmdGetBalance("SELECT SUM(value) FROM coins INNER JOIN mytxes ON txid=mytxes.id WHERE mytxes.netid=? AND (blockord > -2 OR fromme)"	, m_dbWallet)
 	,	CmdRecipients("SELECT hash160, comment FROM pubkeys WHERE netid=?"																				, m_dbWallet)
 	,	CmdGetTxId("SELECT id FROM mytxes WHERE netid=? AND hash=?"																						, m_dbWallet)
-	,	CmdPendingTxes("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE blockord<0 AND blockord>-15 AND netid=? ORDER BY timestamp"	, m_dbWallet)					//!!! timestamp < " << to_time_t(m_eng->.Chain.DtBestReceived) - 5*60 << " AND
+	,	CmdPendingTxes("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE (blockord BETWEEN -14 AND -1) AND netid=? ORDER BY timestamp"	, m_dbWallet)					//!!! timestamp < " << to_time_t(m_eng->.Chain.DtBestReceived) - 5*60 << " AND
 	,	CmdSetBestBlockHash("UPDATE nets SET bestblockhash=? WHERE netid=?"																				, m_dbWallet)
 	,	CmdFindCoin("SELECT rowid FROM coins WHERE txid=? AND nout=?"																					, m_dbWallet)
 	,	CmdInsertCoin("INSERT INTO coins (txid, nout, value, keyid, pkscript) VALUES(?, ?, ?, ?, ?)"													, m_dbWallet)
@@ -61,10 +53,6 @@ CoinDb::CoinDb()
 }
 
 CoinDb::~CoinDb()  {
-#if UCFG_COIN_GENERATE
-	if (Miner.get())
-		Miner.get()->Stop();
-#endif
 	m_tr.StopChilds();
 }
 
@@ -92,7 +80,7 @@ void CoinDb::InitAes(Aes& aes, RCString password, byte encrtyptAlgo) {
 MyKeyInfo& CoinDb::AddNewKey(MyKeyInfo& ki) {
 	Aes aes;
 	if (!m_masterPassword.IsEmpty())
-		InitAes(aes, m_masterPassword, 'A');
+		InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 		
 	CmdAddNewKey.Bind(1, !m_masterPassword.IsEmpty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
 		.Bind(2, ToCompressedKey(ki.PubKey))
@@ -480,10 +468,6 @@ void CoinDb::Load() {
 
 void CoinDb::Close() {
 	if (m_bLoaded) {
-#if UCFG_COIN_GENERATE
-		if (Miner.get())
-			Miner->Stop();
-#endif
 		m_bLoaded = false;
 
 		m_cmdIsFromMe.Dispose();
@@ -519,7 +503,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 
 	Aes aes;
 	if (!newPassword.IsEmpty())
-		InitAes(aes, newPassword, 'A');
+		InitAes(aes, newPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 
 	EXT_LOCK (MtxDb) {
 		SqliteCommand cmd("UPDATE privkeys SET privkey=? WHERE id=?", m_dbWallet);

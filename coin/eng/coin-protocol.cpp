@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/ecdsa.h>
@@ -68,6 +60,7 @@ static MessageClassFactoryBase
 	s_factoryFilterLoad	("filterload"	, &CoinEng::CreateFilterLoadMessage	),
 	s_factoryFilterAdd	("filteradd"	, &CoinEng::CreateFilterAddMessage	),
 	s_factoryFilterClear("filterclear"	, &CoinEng::CreateFilterClearMessage),
+	s_factoryReject		("reject"		, &CoinEng::CreateRejectMessage		),
 
 	s_factoryCheckPoint	("checkpoint"	, &CoinEng::CreateCheckPointMessage	);		// PPCoin
 
@@ -391,10 +384,6 @@ void CoinLink::OnPeriodic() {
 	}
 }
 
-P2P::Message *CoinLink::CreatePingMessage() {
-	return new PingMessage;
-}
-
 void CoinLink::Push(const Inventory& inv) {
 	EXT_LOCK (Mtx) {
 		if (!KnownInvertorySet.count(inv))
@@ -409,9 +398,6 @@ void CoinLink::Send(ptr<P2P::Message> msg) {
 	TRC(1, Peer->get_EndPoint() << " send " << m);
 	
 	Blob blob = EXT_BIN(m);
-#ifdef X_DEBUG//!!!D
-	blob = Blob::FromHexString("711101000100000000000000fd4cf55200000000010000000000000000000000000000000000ffff8974cc9221dc010000000000000000000000000000000000ffff3e85a9db21dc21d533ec25d8d2630b2f4d61783a302e382e392f00000000");
-#endif
 	MemoryStream qs2;
 	BinaryWriter wrQs2(qs2);
 	wrQs2 << eng.ChainParams.ProtocolMagic;
@@ -493,6 +479,30 @@ void MerkleBlockMessage::Process(P2P::Link& link) {
 	EXT_LOCK (eng.Mtx) {
 		eng.CheckedFilteredTxHashes.insert(PartialMT.Items.begin(), PartialMT.Items.end());
 	}
+}
+
+void RejectMessage::Write(BinaryWriter& wr) const {
+	WriteString(wr, Command);
+	wr << (byte)Code;
+	WriteString(wr, Reason);
+	if (Command=="block" || Command=="tx")
+		wr << Hash;
+}
+
+void RejectMessage::Read(const BinaryReader& rd) {
+	Command = ReadString(rd);
+	Code = (RejectReason)rd.ReadByte();
+	Reason = ReadString(rd);
+	if (Command=="block" || Command=="tx")
+		rd >> Hash;
+}
+
+String RejectMessage::ToString() const {
+	ostringstream os;
+	os << "Reject to command " << Command << ": " << Reason;
+	if (Command=="block" || Command=="tx")
+		os << Hash;
+	return String(os.str());
 }
 
 

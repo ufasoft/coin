@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include "coin-model.h"
@@ -47,7 +39,7 @@ public:
 		return Convert::ToString(Timestamp.Ticks)+To.ToString();
 	}
 
-	decimal64 GetDecimalAmount() const { return make_decimal64(Amount, -Eng().ChainParams.CoinValueExp()); }
+	decimal64 GetDecimalAmount() const { return make_decimal64(Amount, -Eng().ChainParams.Log10CoinValue()); }
 };
 
 DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx);
@@ -93,7 +85,7 @@ EXT_DEF_HASH_NS(Coin, Penny);
 */
 
 class Wallet;
-extern EXT_THREAD_PTR(Wallet, t_pWallet);
+extern EXT_THREAD_PTR(Wallet) t_pWallet;
 
 class RescanThread : public Thread {
 	typedef Thread base;
@@ -188,6 +180,11 @@ public:
 	void StartCompactDatabase();
 	void ExportWalletToBdb(RCString filepath);
 	void CancelPendingTxes();
+
+	void OnChange() override {
+		if (m_iiWalletEvents)
+			m_iiWalletEvents->OnStateChanged();
+	}
 protected:
 	pair<Blob, HashValue160> GetReservedPublicKey() override;
 	
@@ -224,10 +221,6 @@ private:
 		Progress = v;
 	}
 
-	void OnChange() override {
-		if (m_iiWalletEvents)
-			m_iiWalletEvents->OnStateChanged();
-	}
 
 	void OnAlert(Alert *alert) override;
 
