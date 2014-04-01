@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include "p2p-peers.h"
@@ -90,7 +82,7 @@ public:
 	int PeerVersion;
 	CBool UseMagic;
 	CBool LineBased;	//!!!TODO
-	
+
 	Link(P2P::NetManager *netManager, thread_group *tr)
 		:	base(netManager, tr)
 		,	PeerVersion(0)
@@ -113,13 +105,7 @@ public:
 	
 	void OnSelfLink();
 
-	void Stop() override {
-#if UCFG_P2P_SEND_THREAD
-		if (SendThread)
-			SendThread->Stop();
-#endif
-		base::Stop();
-	}
+	void Stop() override;
 protected:
 #if UCFG_WIN32
 	void OnAPC() override {
@@ -128,12 +114,9 @@ protected:
 	}
 #endif
 
+	void BeforeStart() override;
 	void Execute() override;	
 	virtual void OnPeriodic() {}
-
-	virtual Message *CreatePingMessage() {
-		return 0;
-	}
 
 	virtual bool OnStartConnection() { return true; }
 
@@ -187,6 +170,7 @@ protected:
 	virtual size_t GetMessageHeaderSize() =0;
 	virtual size_t GetMessagePayloadSize(const ConstBuf& buf) =0;
 	virtual ptr<Message> RecvMessage(Link& link, const BinaryReader& rd) =0;
+	virtual void OnPingTimeout(Link& link) {}
 	virtual void OnInitLink(Link& link) {}
 
 	virtual void OnInitMsgLoop() {}
