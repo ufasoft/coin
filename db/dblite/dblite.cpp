@@ -6,36 +6,6 @@
 namespace Ext { namespace DB { namespace KV {
 
 
-DbCursor::DbCursor(DbTransaction& tx, DbTable& table)
-	:	Path(4)
-{
-	Path.resize(0);
-	DbTransaction::CTables::iterator it = tx.Tables.find(table.Name);
-	if (it != tx.Tables.end())
-		Tree = &it->second;
-	else {
-		BTree btree(tx);
-		btree.Name = table.Name;
-		if (&table == &DbTable::Main)
-			btree.Root = tx.MainTableRoot;
-		else {
-			DbCursor cMain(tx, DbTable::Main);
-			ConstBuf k(table.Name.c_str(), strlen(table.Name.c_str()));
-			if (!cMain.SeekToKey(k))
-				Throw(E_FAIL);
-			TableData& td = *(TableData*)cMain.get_Data().P;
-			btree.SetKeySize(td.KeySize);
-			if (UInt32 pgno = letoh(td.RootPgNo))
-				btree.Root = tx.OpenPage(pgno);
-			else if (tx.ReadOnly) {
-//				TRC(0, "No root for " << table.Name);
-			}
-		}
-		Tree = &tx.Tables.insert(make_pair(table.Name, btree)).first->second;
-	}
-	Tree->Cursors.push_back(_self);
-}
-
 void DbTable::CheckKeyArg(const ConstBuf& k) {
 	if (k.Size == 0 || k.Size > MAX_KEY_SIZE)
 		Throw(E_INVALIDARG);
@@ -44,15 +14,16 @@ void DbTable::CheckKeyArg(const ConstBuf& k) {
 void DbTable::Open(DbTransaction& tx, bool bCreate) {
 	CKVStorageKeeper keeper(&tx.Storage);
 
-	DbCursor cM(tx, DbTable::Main);
+	DbCursor cM(tx, DbTable::Main());
 	ConstBuf k(Name.c_str(), strlen(Name.c_str()));
 	if (!cM.SeekToKey(k)) {
 		if (!bCreate)
 			Throw(E_FAIL);
 		TableData td;
+		td.Type = (byte)Type;
 		td.RootPgNo = 0;
 		td.KeySize = KeySize;
-		DbTable::Main.Put(tx, k, ConstBuf(&td, sizeof td));
+		DbTable::Main().Put(tx, k, ConstBuf(&td, sizeof td));
 	//	cM.SeekToKey(k);		//!!!?
 	}
 }
@@ -62,7 +33,7 @@ void DbTable::Drop(DbTransaction& tx) {
 		Throw(E_ACCESSDENIED);
 	DbCursor(tx, _self).Drop();
 	ConstBuf k(Name.c_str(), strlen(Name.c_str()));
-	DbTable::Main.Delete(tx, k);
+	DbTable::Main().Delete(tx, k);
 }
 
 void DbTable::Put(DbTransaction& tx, const ConstBuf& k, const ConstBuf& d, bool bInsert) {
@@ -103,11 +74,12 @@ void KVStorage::Vacuum() {
 
 			int nProgress = m_stepProgress;
 
-			for (DbCursor ct(txS, DbTable::Main); ct.SeekToNext();) {
+			for (DbCursor ct(txS, DbTable::Main()); ct.SeekToNext();) {
 				String tableName = Encoding::UTF8.GetChars(ct.Key);
 				const TableData& td = *(const TableData*)ct.get_Data().P;
 
 				DbTable tS(tableName), tD(tableName);
+				tD.Type = (TableType)td.Type;
 				tD.KeySize = td.KeySize;
 				tD.Open(txD, true);
 				int n = 0;

@@ -3,6 +3,8 @@
 #include <el/stl/dynamic_bitset>
 #include EXT_HEADER_SHARED_MUTEX
 
+#include EXT_HEADER_FUTURE
+
 #include <el/db/db-itf.h>
 
 #if UCFG_LIB_DECLS
@@ -24,6 +26,7 @@
 #	define UCFG_DBLITE_DEBUG_VERBYTE 0 //!!!D
 #endif
 
+#include "dblite-file-format.h"
 
 namespace Ext { namespace DB { namespace KV {
 
@@ -31,14 +34,14 @@ using Ext::DB::CursorPos;
 using Ext::DB::ITransactionable;
 
 const int DB_MAX_VIEWS = 2048 << UCFG_PLATFORM_64,
-		DB_NUM_DELETE_FROM_LRUVIEW = 8;
+		DB_NUM_DELETE_FROM_CACHE = 16;
 
-const UInt32 DB_DEFAULT_PAGECACHE_SIZE = 1024 << UCFG_PLATFORM_64;
+const UInt32 DB_DEFAULT_PAGECACHE_SIZE = 1024 << (UCFG_PLATFORM_64 * 2);
 
 
 const size_t DEFAULT_PAGE_SIZE = 8192;
 
-const size_t DEFAULT_VIEW_SIZE = DEFAULT_PAGE_SIZE * 64;
+const size_t DEFAULT_VIEW_SIZE = (DEFAULT_PAGE_SIZE * 64) << UCFG_PLATFORM_64;
 
 const size_t MIN_KEYS = 4;
 const size_t MAX_KEY_SIZE = 255;
@@ -51,21 +54,31 @@ class BTree;
 class DbTransaction;
 class DbTable;
 class KVStorage;
+class PagedMap;
 
 class MMView : public Object {
 	typedef MMView class_type;
 	
 //!!!D	DBG_OBJECT_COUNTER(class_type);
 public:
+	typedef Interlocked interlocked_policy;
+
 	KVStorage& Storage;
 	MMView *Next, *Prev;		// for IntrusiveList<>
 
 	MemoryMappedView View;
 	UInt32 N;
+	volatile bool Flushed;
+	bool Removed;
 
 	MMView(KVStorage& storage)
 		:	Storage(storage)
-	{}
+		,	Flushed(false)
+		,	Removed(false)
+		,	Next(0)				// necessary to init
+		,	Prev(0)
+	{
+	}
 
 	~MMView();
 };
@@ -106,12 +119,31 @@ static const byte
 
 class Page : public Pimpl<PageObj> {
 	typedef Page class_type;
+	typedef Pimpl<PageObj> base;
 public:
 	Page() {
 	}
 
 	Page(PageObj *obj) {
 		m_pimpl = obj;
+	}
+
+	Page(const Page& v)
+		:	base(v)
+	{}
+
+	Page(EXT_RV_REF(Page) rv)
+		:	base(static_cast<EXT_RV_REF(base)>(rv))
+	{}	
+
+	Page& operator=(const Page& v) {
+		base::operator=(v);
+		return *this;
+	}
+
+	Page& operator=(EXT_RV_REF(Page) rv) {
+		base::operator=(static_cast<EXT_RV_REF(base)>(rv));
+		return *this;
 	}
 
 	UInt32 get_N() const { return m_pimpl->N; }
@@ -128,7 +160,7 @@ public:
 	byte get_Overflows() const { return m_pimpl->Overflows; }
 	DEFPROP_GET(byte, Overflows);
 
-	bool get_IsBranch() const;
+	bool get_IsBranch() const { return Header().Flags & PAGE_FLAG_BRANCH; }
 	DEFPROP_GET(bool, IsBranch);
 
 	LiteEntry *Entries(byte keySize) const;
@@ -155,6 +187,7 @@ public:
 };
 
 class DBLITE_CLASS KVStorage {
+	typedef KVStorage class_type;
 public:
 	static const size_t HeaderPageSize = 4096;
 
@@ -221,9 +254,17 @@ public:
 
 	TimeSpan CheckpointPeriod;
 	bool Durability;
+	bool UseFlush;					// setting it to FALSE is very dangerous
 	bool ProtectPages;
-	bool m_bOpened;
-	
+	CBool AsyncClose;
+	CBool ReadOnly;
+
+	enum class OpenState {
+		Closed,
+		Closing,
+		Opened
+	};
+
 	KVStorage();
 	~KVStorage();
 	void Create(RCString filepath);
@@ -232,7 +273,7 @@ public:
 	void Vacuum();
 	bool Checkpoint() { return DoCheckpoint(); }
 
-	Page OpenPage(UInt32 pgno);
+	virtual Page OpenPage(UInt32 pgno);
 	Page Allocate(bool bLock = true);
 
 	void SetProgressHandler(int(*pfn)(void*), void* p = 0, int n = 1) {
@@ -248,21 +289,40 @@ public:
 
 	void lock_shared();
 	void unlock_shared();
+
+	UInt32 get_Salt() { return m_salt; }
+	
+	UInt32 put_Salt(UInt32 v) {
+		if (m_state == OpenState::Opened)
+			Throw(E_FAIL);
+		m_salt = v;
+	}
+
+	DEFPROP(UInt32, Salt);
+protected:
+	COrderedPgNos m_nextFreePages;
+	UInt32 m_salt;
+
+	int(*m_pfnProgress)(void*);
+	int m_stepProgress;
+	void *m_ctxProgress;
+
 private:
 	shared_mutex ShMtx;
 
-//!!!R	void ReleaseReader(DbTransaction *dbTx = 0);
+	volatile OpenState m_state;
+	future<void> m_futClose;
 
-	COrderedPgNos m_nextFreePages;
-	int(*m_pfnProgress)(void*);
-	void *m_ctxProgress;
-	int m_stepProgress;
-		
+//!!!R	void ReleaseReader(DbTransaction *dbTx = 0);
+	
 	DateTime m_dtPrevCheckpoint;
 	CBool m_bModified;
+	int m_bitsViewPageRatio;
 
 //!!!R	Page LastFreePoolPage;
 
+	void SetPageSize(size_t v);
+	void DoClose(bool bLock);
 	void WriteHeader();
 	void MapMeta();
 	void AddFullMapping(UInt64 fileLength);
@@ -275,6 +335,7 @@ private:
 	void MarkAllocatedPage(UInt32 pgno);
 
 	friend class DbTransaction;
+	friend class HashTable;
 };
 
 typedef KVStorage DbStorage;
@@ -295,126 +356,122 @@ struct PagePos {
 	bool operator==(const PagePos& v) const { return Page==v.Page && Pos==v.Pos; }
 };
 
-class DBLITE_CLASS DbCursor : noncopyable {
-	typedef DbCursor class_type;
+class CursorObj : public Object {
 public:
-	DbCursor *Next, *Prev;		// for IntrusiveList<>
+	PagedMap *Map;
+	CursorObj *Next, *Prev;		// for IntrusiveList<>
 
-	BTree *Tree;
-	
-	vector<PagePos> Path;
-	CBool Initialized, Eof, IsDbDirty, IsSplitting;
+	CursorObj()
+		:	Map(0)
+	{}
 
-	DbCursor(DbCursor& c);
-	DbCursor(BTree& tree);
-	DbCursor(DbTransaction& tx, DbTable& table);
-	~DbCursor();
-
-	const ConstBuf& get_Key();
-	DEFPROP_GET(const ConstBuf&, Key);
-
-	const ConstBuf& get_Data();
-	DEFPROP_GET(const ConstBuf&, Data);
-
-	PagePos& Top() {
-		ASSERT(!Path.empty());
-		return Path.back();
-	}
-
-	void PageTouch(int height);
-	void Touch();
-	bool SeekToFirst();
-	bool SeekToLast();
-	bool SeekToSibling(bool bToRight);
-	bool SeekToNext();
-	bool SeekToPrev();
-	bool SeekToKey(const ConstBuf& k);
-	bool Seek(CursorPos cPos, const ConstBuf& k = ConstBuf());
-	
-	bool Get(const ConstBuf& k) { return SeekToKey(k); }
-
-	void Put(ConstBuf k, const ConstBuf& d, bool bInsert = false);
-	void PushFront(ConstBuf k, const ConstBuf& d);
-	void Delete();
-private:
-	DbCursor(DbCursor& c, bool bRight, Page& pageSibling);				// make siblig cursor
-
+	~CursorObj() override;
+	virtual PagePos& Top() =0;
+	virtual void SetMap(PagedMap *pMap) { Map = pMap; }
+	virtual void Touch() =0;
+	virtual bool SeekToFirst() =0;
+	virtual bool SeekToLast() =0;
+	virtual bool SeekToSibling(bool bToRight) =0;
+	virtual bool SeekToKey(const ConstBuf& k) =0;
+	virtual bool SeekToNext();
+	virtual bool SeekToPrev();
+	virtual void Delete();
+	virtual void Put(ConstBuf k, const ConstBuf& d, bool bInsert) =0;
+	virtual void PushFront(ConstBuf k, const ConstBuf& d) { Throw(E_NOTIMPL); }
+	virtual void Drop() =0;
+	virtual void Balance() {}
+protected:
 	Blob m_bigData;
 	ConstBuf m_key, m_data;
+	CBool Initialized, Deleted, Eof, IsDbDirty;
 
-	void ClearKeyData() {
+	bool ClearKeyData() {
 		m_bigData = Blob();
 		m_key = m_data = ConstBuf();
+		return true;					// just for method chaining
 	}
 
-	void UpdateKey(const ConstBuf& key);
-	bool PageSearchRoot(const ConstBuf& k, bool bModify);
-	bool PageSearch(const ConstBuf& k, bool bModify = false);
-	void FreeBigdataPages(UInt32 pgno);
 	void DeepFreePage(const Page& page);
-	void Drop();
-	void Balance();
-
 	bool ReturnFromSeekKey(int pos);
-	Page FindLeftSibling();
-	Page FindRightSibling();
-
+	void FreeBigdataPages(UInt32 pgno);
+	virtual CursorObj *Clone() =0;
 	void InsertImpHeadTail(pair<size_t, bool>& ppEntry, ConstBuf k, const ConstBuf& head, UInt64 fullSize, UInt32 pgnoTail, size_t pageSize);
-	void InsertImp(ConstBuf k, const ConstBuf& d);
-	
-	friend class BTree;
-	friend class DbTable;
+
+	const ConstBuf& get_Key();
+	const ConstBuf& get_Data();
+
+	friend class DbCursor;
 };
 
-#pragma pack(push, 1)
-struct PageHeader {
-	UInt16 Num;
-	byte Flags;
-	byte Data[];
-
-};
-#pragma pack(pop)
-
-class BTree {
+class DbCursor : public Pimpl<CursorObj> {
+	typedef DbCursor class_type;
 public:
+	DbCursor(DbTransaction& tx, DbTable& table);
+	DbCursor(DbCursor& c);
+	DbCursor(DbCursor& c, bool bRight, Page& pageSibling);
+
+	const ConstBuf& get_Key() { return m_pimpl->get_Key(); }
+	DEFPROP_GET(const ConstBuf&, Key);
+
+	const ConstBuf& get_Data() { return m_pimpl->get_Data(); }
+	DEFPROP_GET(const ConstBuf&, Data);
+
+	bool SeekToFirst() { return m_pimpl->SeekToFirst(); }
+	bool SeekToLast() { return m_pimpl->SeekToLast(); }
+	bool Seek(CursorPos cPos, const ConstBuf& k = ConstBuf());
+	bool SeekToKey(const ConstBuf& k) { return m_pimpl->SeekToKey(k); }
+	bool SeekToNext() { return m_pimpl->SeekToNext(); }
+	bool SeekToPrev() { return m_pimpl->SeekToPrev(); }
+	bool Get(const ConstBuf& k) { return SeekToKey(k); }
+	void Delete();
+	void Put(ConstBuf k, const ConstBuf& d, bool bInsert = false);
+	void PushFront(ConstBuf k, const ConstBuf& d) { m_pimpl->PushFront(k, d); }
+	void Drop() { m_pimpl->Drop(); }
+private:
+	void AssignImpl(TableType type);
+};
+
+struct TableData;
+
+class PagedMap : public Object {
+public:
+	IntrusiveList<CursorObj> Cursors;
+
 	String Name;
 	DbTransaction& Tx;
-	Page Root;
 	byte KeySize;
 	CBool Dirty;
 
-	BTree(const BTree& v);
-
-	BTree(DbTransaction& tx)
+	PagedMap(DbTransaction& tx)
 		:	Tx(tx)
 		,	KeySize(0)
 		,	m_pfnCompare(&Compare)
 	{}
 
-	~BTree() {
-		ASSERT(Cursors.empty());
-	}
-
 	void SetKeySize(byte keySize) {
 		m_pfnCompare = (KeySize = keySize) ? &::memcmp : &Compare;
 	}
 
-	EntryDesc SetOverflowPages(bool bIsBranch, const ConstBuf& k, const ConstBuf& d, UInt32 pgno, byte flags);
-	static void AddEntry(void *p, bool bIsBranch, const ConstBuf& key, const ConstBuf& data, UInt32 pgno, byte flags);
-	void AddEntry(const PagePos& pagePos, const ConstBuf& key, const ConstBuf& data, UInt32 pgno, byte flags = 0);
-
-private:
-	IntrusiveList<DbCursor> Cursors;
-
+	virtual TableType Type() =0;
+	virtual void Init(const TableData& td);
+	virtual TableData GetTableData();
+	pair<int, bool> EntrySearch(LiteEntry *entries, int nKey, const ConstBuf& key);
+protected:
 	typedef int (__cdecl *PFN_Compare)(const void *p1, const void *p2, size_t size);
 	PFN_Compare m_pfnCompare;
 
 	static int __cdecl Compare(const void *p1, const void *p2, size_t cb2);
-	pair<int, bool> EntrySearch(LiteEntry *entries, int nKey, bool bIsBranch, const ConstBuf& key);
-	void SetRoot(const Page& page);
-	void BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage);
-	friend class DbCursor;
 };
+
+ENUM_CLASS(PageAlloc) {
+	Zero,
+	Nothing,
+	Leaf,
+	Branch,
+	Copy,
+	Move			// Copy and Free source
+} END_ENUM_CLASS(PageAlloc);
+
 
 class DBLITE_CLASS DbTransaction : noncopyable, public ITransactionable {
 public:
@@ -423,7 +480,7 @@ public:
 	Int64 TransactionId;
 	Page MainTableRoot;
 
-	typedef map<String, BTree> CTables;			// map<> has faster dtor than unordered_map<>
+	typedef map<String, ptr<PagedMap>> CTables;			// map<> has faster dtor than unordered_map<>
 	CTables Tables;
 
 	bool ReadOnly;
@@ -435,7 +492,7 @@ public:
 	DbTransaction& Current();
 
 	BTree& Table(RCString name);
-	Page Allocate(bool bBranch = false);
+	Page Allocate(PageAlloc pa, Page *pCopyFrom = 0);
 	vector<UInt32> AllocatePages(int n);
 	Page OpenPage(UInt32 pgno);
 
@@ -457,19 +514,25 @@ private:
 	void Complete();
 
 	friend class BTree;
-	friend class DbCursor;
+	friend class HashTable;
+	friend class BTreeCursor;
+	friend class CursorObj;
+	friend class Filet;
 };
+
 
 class DBLITE_CLASS DbTable {
 public:
-	static DbTable Main;
+	static DbTable& AFXAPI Main();
 
 	String Name;
+	TableType Type;
 	byte KeySize;						// 0=variable
 
-	DbTable(RCString name = nullptr)
+	DbTable(RCString name = nullptr, byte keySize = 0, TableType type = TableType::BTree)
 		:	Name(name)
-		,	KeySize(0)
+		,	KeySize(keySize)
+		,	Type(type)
 	{}
 
 	void Open(DbTransaction& tx, bool bCreate = false);
