@@ -22,7 +22,9 @@ const Blob& TxIn::Script() const {
 		CoinEng& eng = Eng();
 		Tx tx = Tx::FromDb(PrevOutPoint.TxHash);
 		const TxOut& txOut = tx.TxOuts()[PrevOutPoint.Index];
-		Blob pk = eng.GetPkById(txOut.m_idPk);
+		Blob pk = RecoverPubKeyType & 0x40
+			? Sec256Dsa::RecoverPubKey(SignatureHash(txOut.PkScript, *m_pTxo, N, 1), ConstBuf(m_sig.constData()+1, m_sig.Size-1), RecoverPubKeyType&3, RecoverPubKeyType&4)
+			: eng.GetPkById(txOut.m_idPk);
 		byte lenPk = byte(pk.Size);
 		m_script.AssignIfNull(m_sig + ConstBuf(&lenPk, 1) + pk);
 	}
@@ -87,9 +89,78 @@ TxObj::TxObj()
 {
 }
 
+void Tx::WriteTxIns(DbWriter& wr) const {
+	CoinEng& eng = Eng();
+	int nIn = 0;
+	EXT_FOR (const TxIn& txIn, TxIns()) {
+		byte typ = UInt32(-1)==txIn.Sequence ? 0x80 : 0;
+		if (txIn.PrevOutPoint.IsNull())
+			wr.Write7BitEncoded(0);
+		else {
+			ASSERT(txIn.PrevOutPoint.Index >= 0);
+
+			pair<int, int> pp = wr.PTxHashesOutNums->StartingTxOutIdx(txIn.PrevOutPoint.TxHash);
+			if (pp.second >= 0) {
+				wr.Write7BitEncoded(1);			// current block
+			} else {
+				pp = eng.Db->FindPrevTxCoords(wr, Height, txIn.PrevOutPoint.TxHash);
+			}
+			wr.Write7BitEncoded(pp.second + txIn.PrevOutPoint.Index);
+
+			ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
+			if (txIn.RecoverPubKeyType) {
+				typ |= txIn.RecoverPubKeyType;
+				(wr << typ).BaseStream.WriteBuf(Sec256Signature(ConstBuf(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2)).ToCompact());
+				goto LAB_TXIN_WROTE;
+			}
+#if 0 //!!!R
+			if (pk.P && !pk.Size) {
+
+					/*!!!
+					ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);
+					Blob blobPk(pk.P+1, pk.Size-1);		//!!!O
+					HashValue hashSig = SignatureHash(Tx::FromDb(txIn.PrevOutPoint.TxHash).TxOuts()[txIn.PrevOutPoint.Index].PkScript, *m_pimpl, nIn, 1);
+					for (byte recid=0; recid<3; ++recid) {
+						if (Sec256Dsa::RecoverPubKey(hashSig, sig, recid, pk.Size<35) == blobPk) {
+							typ |= 8;
+							subType = byte((pk.Size<35 ? 4 : 0) | recid);
+							goto LAB_RECOVER_OK;
+						}
+					} 
+					{
+						CConnectJob::CMap::iterator it = wr.ConnectJob->Map.find(Hash160(ConstBuf(pk.P+1, pk.Size-1)));
+						if (it == wr.ConnectJob->Map.end() || !it->second.PubKey)
+							break;
+						const TxOut& txOut = wr.ConnectJob->TxMap.GetOutputFor(txIn.PrevOutPoint);
+						if (txOut.m_idPk.IsNull())
+							break;
+					}
+					typ |= 0x40;
+					*/
+				ConstBuf sig(txIn.Script().constData()+5, pk.P-txIn.Script().constData()-6);
+				ASSERT(sig.Size>=63 && sig.Size<71);
+				int len1 = txIn.Script().constData()[4];
+				typ |= 0x10;							// 0.58 bug workaround: typ should not be zero
+				typ |= (len1 & 1) << 5;
+				typ += byte(sig.Size-63);			
+				(wr << typ).Write(sig.P, len1);
+				wr.Write(sig.P+len1+2, sig.Size-len1-2);		// skip "0x02, len2" fields
+				goto LAB_TXIN_WROTE;
+			}
+#endif
+		}
+		wr << byte(typ);		//  | SCRIPT_PKSCRIPT_GEN
+		CoinSerialized::WriteBlob(wr, txIn.Script());
+LAB_TXIN_WROTE:
+		if (txIn.Sequence != UInt32(-1))
+			wr.Write7BitEncoded(UInt32(txIn.Sequence));
+		++nIn;
+	}
+}
+
 void TxObj::ReadTxIns(const DbReader& rd) const {
 	CoinEng& eng = Eng();
-	while (!rd.BaseStream.Eof()) {
+	for (int nIn=0; !rd.BaseStream.Eof(); ++nIn) {
 		Int64 blockordBack = rd.Read7BitEncoded(),
 			 blockHeight = -1;
 		pair<int, OutPoint> pp(-1, OutPoint());
@@ -107,32 +178,69 @@ void TxObj::ReadTxIns(const DbReader& rd) const {
 		switch (typ & 0x7F) {
 		case 0:
 			txIn.m_script = CoinSerialized::ReadBlob(rd);
+#ifdef X_DEBUG//!!!D
+			if (txIn.m_script.Size > 80) {
+				ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
+				if (pk.P) {
+					ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);		
+					Sec256Signature sigObj(sig), sigObj2;
+					sigObj2.AssignCompact(sigObj.ToCompact());
+					Blob ser = sigObj2.Serialize();
+
+					if (!(ser == sig)) {
+						ser = sigObj2.Serialize();
+						ser = ser;
+					}
+
+				}
+			}
+#endif
 			break;
 		case 0x7F:
 			if (eng.LiteMode)
 				break;
 //!!!?			Throw(E_FAIL);
 		default:
-			int len = (typ & 0x07)+63;
-			ASSERT(len>63 || (typ & 0x10));   // WriteTxIns bug workaround
-			Blob sig(0, len+6);
-			byte *data = sig.data();			
+			if (typ & 8) {
+				array<byte, 64> ar;
+				rd.BaseStream.ReadBuffer(ar.data(), ar.size());
+				Sec256Signature sigObj;
+				sigObj.AssignCompact(ar);
+				Blob ser = sigObj.Serialize();
+				Blob sig(0, ser.Size + 2);
+				byte *data = sig.data();
+				data[0] = byte(ser.Size + 1);
+				memcpy(data+1, ser.constData(), ser.Size);
+				data[sig.Size-1] = 1;
+				if (typ & 0x40) {
+					txIn.m_pTxo = this;
+					txIn.N = nIn;
+					txIn.RecoverPubKeyType = byte(typ & 0x4F);
+					txIn.m_sig = sig;
+				} else
+					txIn.m_script = sig;
+			} else {
+				int len = (typ & 0x07)+63;
+				ASSERT(len>63 || (typ & 0x10));   // WriteTxIns bug workaround
+				Blob sig(0, len+6);
+				byte *data = sig.data();
 			
-			data[0] = byte(len+5);
-			data[1] = 0x30;
-			data[2] = byte(len+2);
-			data[3] = 2;
-			data[4] = 0x20 | ((typ & 0x20)>>5);
-			rd.Read(data+5, data[4]);
-			data[5+data[4]] = 2;
-			byte len2 = byte(len-data[4]-2);
-			data[5+data[4]+1] = len2;
-			rd.Read(data+5+data[4]+2, len2);
-			data[5+len] = 1;
-			if (typ & 0x40) {
-				txIn.m_sig = sig;
-			} else
-				txIn.m_script = sig;
+				data[0] = byte(len+5);
+				data[1] = 0x30;
+				data[2] = byte(len+2);
+				data[3] = 2;
+				data[4] = 0x20 | ((typ & 0x20)>>5);
+				rd.Read(data+5, data[4]);
+				data[5+data[4]] = 2;
+				byte len2 = byte(len-data[4]-2);
+				data[5+data[4]+1] = len2;
+				rd.Read(data+5+data[4]+2, len2);
+				data[5+len] = 1;
+				if (typ & 0x40) {
+					txIn.m_sig = sig;
+				} else
+					txIn.m_script = sig;
+			}
 		}
 		txIn.Sequence = (typ & 0x80) ? UInt32(-1) : UInt32(rd.Read7BitEncoded());
 		m_txIns.push_back(txIn);
@@ -173,7 +281,7 @@ void TxObj::Read(const BinaryReader& rd) {
 	m_bLoadedIns = true;
 	CoinSerialized::Read(rd, TxOuts);
 	if (m_txIns.empty() || TxOuts.empty())
-		throw PeerMisbehavingExc(10);
+		throw PeerMisbehavingException(10);
 	LockBlock = rd.ReadUInt32();
 	if (LockBlock >= 500000000)
 		LockTimestamp = DateTime::from_time_t(LockBlock);
@@ -230,7 +338,7 @@ Tx Tx::FromDb(const HashValue& hash) {
 	Coin::Tx r;
 	if (!TryFromDb(hash, &r)) {
 		TRC(2, "NotFound Tx: " << hash);
-		throw TxNotFoundExc(hash);
+		throw TxNotFoundException(hash);
 	}
 	return r;
 }
@@ -468,89 +576,36 @@ const Blob& TxOut::get_PkScript() const {
 	return m_pkScript;
 }
 
+bool IsCanonicalSignature(const ConstBuf& sig) {
+	if (sig.Size<9 || sig.Size>73 || sig.P[0]!=0x30)
+		return false;
+	//!!!TODO
+
+	return true;
+}
 
 ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf) {
 	ConstBuf r(0, 0);
 	if (cbuf.Size > 64) {
 		int len = cbuf.P[0];
-		if (len>64 && len<64+32 && cbuf.P[1]==0x30 && cbuf.P[2]==len-3 && cbuf.P[3]==2 && (cbuf.P[4]==0x20 || cbuf.P[4]==0x21) && cbuf.P[5+cbuf.P[4]] == 2 && cbuf.P[5+cbuf.P[4]+1]+cbuf.P[4]+4 == len-3 && cbuf.P[len]==1) {
-			if (cbuf.Size == len+1)
-				r = ConstBuf(cbuf.P+len+1, 0);
-			else if (cbuf.Size > len+2) {
-				int len2 = cbuf.P[1+len];
-				if ((len2==33 || len2==65) && cbuf.Size == len+len2+2)
-					r = ConstBuf(cbuf.P+len+1, len2+1);
-			}
+		if (len>64 && len<64+32 && cbuf.P[1]==0x30 && cbuf.P[2]==len-3 && cbuf.P[3]==2) {
+			switch (int len1 = cbuf.P[4]) {
+			case 0x1F:
+			case 0x20:
+			case 0x21:
+				if (cbuf.P[5+len1] == 2 && cbuf.P[5+len1+1]+len1+4 == len-3 && cbuf.P[len]==1) {
+					if (cbuf.Size == len+1)
+						r = ConstBuf(cbuf.P+len+1, 0);
+					else if (cbuf.Size > len+2) {
+						int len2 = cbuf.P[1+len];
+						if ((len2==33 || len2==65) && cbuf.Size == len+len2+2)
+							r = ConstBuf(cbuf.P+len+1, len2+1);
+					}
+				}
+			}			
 		}
 	}
 	return r;
-}
-
-void Tx::WriteTxIns(DbWriter& wr) const {
-	CoinEng& eng = Eng();
-
-	EXT_FOR (const TxIn& txIn, TxIns()) {
-		byte typ = UInt32(-1)==txIn.Sequence ? 0x80 : 0;
-
-#ifdef X_DEBUG//!!!D
-		if (Height == 387 && TxIns().size() == 4) {
-			static int s_n = 0;
-			s_n = s_n;
-			if (s_n++ == 3) {
-				s_n = s_n;
-			}
-		}
-#endif
-
-		if (txIn.PrevOutPoint.IsNull())
-			wr.Write7BitEncoded(0);
-		else {
-			ASSERT(txIn.PrevOutPoint.Index >= 0);
-
-			pair<int, int> pp = wr.PTxHashesOutNums->StartingTxOutIdx(txIn.PrevOutPoint.TxHash);
-			if (pp.second >= 0) {
-				wr.Write7BitEncoded(1);			// current block
-			} else {
-				pp = eng.Db->FindPrevTxCoords(wr, Height, txIn.PrevOutPoint.TxHash);
-			}
-			wr.Write7BitEncoded(pp.second + txIn.PrevOutPoint.Index);
-
-			ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
-			while (pk.P) {
-				if (pk.Size) {
-					CConnectJob::CMap::iterator it = wr.ConnectJob->Map.find(Hash160(ConstBuf(pk.P+1, pk.Size-1)));
-					if (it == wr.ConnectJob->Map.end() || !it->second.PubKey) {
-#ifdef X_DEBUG//!!!D
-						if (it != wr.ConnectJob->Map.end()) {
-							Blob blo = it->second.PubKey;
-						}
-#endif
-						break;
-					}
-					const TxOut& txOut = wr.ConnectJob->TxMap.GetOutputFor(txIn.PrevOutPoint);
-					if (txOut.m_idPk.IsNull())
-						break;
-					typ |= 0x40;
-				}
-				ConstBuf sig(txIn.Script().constData()+5, pk.P-txIn.Script().constData()-6);
-				ASSERT(sig.Size>=63 && sig.Size<71);
-				int len1 = txIn.Script().constData()[4];
-				typ |= 0x10;							// 0.58 bug workaround: typ should not be zero
-				typ |= (len1 & 1) << 5;
-				typ += byte(sig.Size-63);			
-				(wr << typ).Write(sig.P, len1);
-				wr.Write(sig.P+len1+2, sig.Size-len1-2);		// skip "0x02, len2" fields
-//!!!R				if (pk.Size)
-//					wr << UInt32(Int64(idPk));
-				goto LAB_TXIN_WROTE;
-			}
-		}
-		wr << byte(typ);		//  | SCRIPT_PKSCRIPT_GEN
-		CoinSerialized::WriteBlob(wr, txIn.Script());
-LAB_TXIN_WROTE:
-		if (txIn.Sequence != UInt32(-1))
-			wr.Write7BitEncoded(UInt32(txIn.Sequence));
-	}
 }
 
 DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
@@ -594,15 +649,6 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 				} else {
 					CConnectJob::CMap::iterator it = wr.ConnectJob->Map.find(hash160);
 					if (it != wr.ConnectJob->Map.end() && !!it->second.PubKey) {
-#ifdef X_DEBUG//!!!D
-						if (tx.Height == 16296 && i==1 && tx.m_pimpl->m_hash.data()[31] == 0xEE) {
-							Blob fpk = it->second.PubKey;
-							HashValue160 hv = Hash160(ToUncompressedKey(fpk));
-							ASSERT(hash160 == hv);
-							i = 1;
-						}
-#endif
-
 						idPk = CIdPk(hash160);
 #if UCFG_COIN_PUBKEYID_36BITS
 						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((Int64(idPk) & 0xF00000000)>>30));

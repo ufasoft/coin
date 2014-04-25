@@ -49,6 +49,7 @@ enum {
 class CoinEng;
 class Block;
 class Tx;
+class TxObj;
 class TxHashesOutNums;
 class CConnectJob;
 
@@ -153,10 +154,14 @@ private:
 public:
 	OutPoint PrevOutPoint;
 	UInt32 Sequence;
+	byte RecoverPubKeyType;
 
 	TxIn()
 		:	Sequence(UINT_MAX)
 		,	m_script(nullptr)
+		,	RecoverPubKeyType(0)
+		,	N(-1)
+		,	m_pTxo(0)
 	{}
 
 	bool IsFinal() const {
@@ -169,6 +174,9 @@ public:
 
 	void Write(BinaryWriter& wr) const;
 	void Read(const BinaryReader& rd);
+private:
+	const TxObj *m_pTxo;
+	int N;
 
 	friend class TxObj;
 };
@@ -268,8 +276,8 @@ protected:
 	const vector<TxIn>& TxIns() const;
 	virtual void CheckCoinStakeReward(Int64 reward, const Target& target) const  {}
 private:
-
 	friend class Tx;
+	friend HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int32 nHashType);
 };
 
 ENUM_CLASS(MinFeeMode) {
@@ -364,7 +372,6 @@ private:
 	friend class EmbeddedMiner;
 	friend COIN_EXPORT HashValue Hash(const Tx& tx);
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
-	friend HashValue SignatureHash(const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType);
 };
 
 COIN_EXPORT HashValue Hash(const CPersistent& pers);
@@ -476,7 +483,7 @@ protected:
 
 	virtual BlockObj *Clone() { return new BlockObj(*this); }
 	void WriteHeader(BinaryWriter& wr) const override;
-	virtual void ReadHeader(const BinaryReader& rd, bool bParent);
+	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
 	virtual void Write(BinaryWriter& wr) const;
 	virtual void Read(const BinaryReader& rd);
 	virtual BigInteger GetWork() const;
@@ -508,7 +515,7 @@ public:
 	Block GetPrevBlock() const;
 	
 	void WriteHeader(BinaryWriter& wr) const { m_pimpl->WriteHeader(wr); }
-	void ReadHeader(const BinaryReader& rd, bool bParent = false) { m_pimpl->ReadHeader(rd, bParent); }
+	void ReadHeader(const BinaryReader& rd, bool bParent = false, const HashValue *pMerkleRoot = 0) { m_pimpl->ReadHeader(rd, bParent, pMerkleRoot); }
 
 	void Write(BinaryWriter& wr) const override { m_pimpl->Write(wr); }
 	void Read(const BinaryReader& rd) override { m_pimpl->Read(rd); }
@@ -647,6 +654,8 @@ public:
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
+	void Write(DbWriter& wr) const;
+	void Read(const DbReader& rd);
 	void Check(const Block& blockAux);
 };
 

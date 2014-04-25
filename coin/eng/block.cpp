@@ -69,7 +69,6 @@ pair<int, OutPoint> TxHashesOutNums::OutPointByIdx(int idx) const {
 }
 
 
-
 BinaryWriter& operator<<(BinaryWriter& wr, const TxHashesOutNums& hons) {
 	EXT_FOR (const TxHashOutNum& hon, hons) {
 		(wr << hon.HashTx).Write7BitEncoded(hon.NOuts);
@@ -264,7 +263,7 @@ void BlockObj::WriteHeader(BinaryWriter& wr) const {
 	}
 }
 
-void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent) {
+void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot) {
 	CoinEng& eng = Eng();
 
 	Ver = rd.ReadUInt32();
@@ -280,9 +279,14 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent) {
 //			Throw(E_COIN_BlockDoesNotHaveOurChainId);
 	}
 
-	HashValue merkleRoot;
-	rd >> PrevBlockHash >> merkleRoot;
-	m_merkleRoot = merkleRoot;
+	rd >> PrevBlockHash;
+	if (pMerkleRoot)
+		m_merkleRoot = *pMerkleRoot;
+	else {
+		HashValue merkleRoot;
+		rd >> merkleRoot;
+		m_merkleRoot = merkleRoot;
+	}
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
@@ -303,7 +307,7 @@ void BlockObj::Read(const BinaryReader& rd) {
 	Int64 pos = rd.BaseStream.Position;
 #endif
 
-	ReadHeader(rd, false);
+	ReadHeader(rd, false, 0);
 	CoinSerialized::Read(rd, m_txes);
 	m_bTxesLoaded = true;
 	for (int i=0; i<m_txes.size(); ++i) {
@@ -435,12 +439,8 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 
 		nInterval = nInterval;
 	}
-#endif
-
-#ifdef X_DEBUG//!!!D
 	String shex = EXT_STR(hex << BigInteger(ChainParams.MaxTarget));
 	int len = strlen(shex);
-
 #endif
 
 	return Target(BigInteger(blockLast.get_DifficultyTarget())*span.get_Ticks()/targetSpan.get_Ticks());
@@ -487,14 +487,8 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 	for (int i=1; i<m_txes.size(); ++i)
 		if (m_txes[i].IsCoinBase())
 			Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
-#ifdef _DEBUG//!!!D
-		int n = 0;
-#endif
 	EXT_FOR (const Tx& tx, m_txes) {
 		tx.Check();
-#ifdef _DEBUG//!!!D
-		++n;
-#endif
 	}
 	if (bCheckMerkleRoot && MerkleRoot(false) != m_merkleRoot.get())
 		Throw(E_COIN_MerkleRootMismatch);
@@ -572,11 +566,11 @@ Int64 RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 			const Tx& tx = ptx;
 			if (Interlocked::Add(job.SigOps, tx.SigOpCount) > MAX_BLOCK_SIGOPS)
 				Throw(E_COIN_TxTooManySigOps);
-			for (int i=0; i<tx.TxIns().size(); ++i) {
+			for (int nIn=0; nIn<tx.TxIns().size(); ++nIn) {
 				if (job.Failed)
 					return fee;
 
-				const TxIn& txIn = tx.TxIns()[i];
+				const TxIn& txIn = tx.TxIns()[nIn];
 				const OutPoint& op = txIn.PrevOutPoint;
 				const Tx& txPrev = job.TxMap.at(op.TxHash);
 
@@ -590,7 +584,7 @@ Int64 RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 					job.Eng.CheckCoinbasedTxPrev(job.Height, txPrev);
 
 				if (job.Eng.BestBlockHeight() > job.Eng.ChainParams.LastCheckpointHeight-INITIAL_BLOCK_THRESHOLD)	// Skip ECDSA signature verification when connecting blocks (fBlock=true) during initial download
-					VerifySignature(txPrev, tx, i);
+					VerifySignature(txPrev, tx, nIn);
 
 				job.Eng.CheckMoneyRange(nValueIn += txOut.Value);
 			}
@@ -602,12 +596,36 @@ Int64 RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 	return fee;
 }
 
-#if UCFG_COIN_PKSCRIPT_FUTURES
-static void CalcPkScript(CoinEng *eng, const TxOut *txOut) {
+static void RecoverPubKey(CoinEng *eng, const TxOut *txOut, TxObj* pTxObj, int nIn) {
 	CCoinEngThreadKeeper engKeeper(eng);
-	txOut->get_PkScript();
+	const Blob& pkScript = txOut->get_PkScript();
+	TxIn& txIn = pTxObj->m_txIns[nIn];
+	ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
+	if (pk.P) {
+		ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);		
+		try {
+			Sec256Signature sigObj;
+			sigObj.AssignCompact(Sec256Signature(sig).ToCompact());
+			Blob ser = sigObj.Serialize();
+			if (ser == sig) {
+				if (!pk.Size)
+					txIn.RecoverPubKeyType = 8;
+				else {
+					HashValue hashSig = SignatureHash(pkScript, *pTxObj, nIn, 1);
+					bool bCompressed = pk.Size<35;
+					for (byte recid=0; recid<3; ++recid) {
+						if (Sec256Dsa::RecoverPubKey(hashSig, sigObj, recid, bCompressed) == ConstBuf(pk.P+1, pk.Size-1)) {
+							txIn.RecoverPubKeyType = byte(0x48 | (int(bCompressed) << 2) | recid);
+							return;
+						}
+					}
+					ASSERT(0);
+				}
+			}
+		} catch (CryptoException&) {
+		}
+	}
 }
-#endif
 
 void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 	vector<future<void>> futsTxOut;
@@ -617,9 +635,8 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 			if (tx.IsCoinStake())
 				tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
 			ptr<ConnectTask> task(new ConnectTask);
-			task->Txes.push_back(tx);
-			for (int i=0; i<tx.TxIns().size(); ++i) {
-				const OutPoint& op = tx.TxIns()[i].PrevOutPoint;
+			for (int nIn=0; nIn<tx.TxIns().size(); ++nIn) {
+				const OutPoint& op = tx.TxIns()[nIn].PrevOutPoint;
 				const HashValue& hashPrev = op.TxHash;
 				CHashToTask::iterator it = HashToTask.find(hashPrev);
 				if (it != HashToTask.end()) {
@@ -634,11 +651,12 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 				} else if (!TxMap.count(hashPrev))
 					TxMap.insert(make_pair(hashPrev, Tx::FromDb(hashPrev)));
 #if UCFG_COIN_PKSCRIPT_FUTURES
-				futsTxOut.push_back(std::async(CalcPkScript, &Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index)));
+				futsTxOut.push_back(std::async(RecoverPubKey, &Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn));
 #else
-				TxMap.at(hashPrev).TxOuts().at(op.Index).get_PkScript();
+				RecoverPubKey(&Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn);
 #endif
 			}
+			task->Txes.push_back(tx);
 			Tasks.insert(task);
 			HashToTask.insert(make_pair(hashTx, task));
 		}
@@ -745,6 +763,7 @@ void CConnectJob::Prepare(const Block& block) {
 					break;
 				}
 			}
+#if 0//!!!R
 			EXT_FOR (const TxIn& txIn, tx.TxIns()) {
 				ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
 				if (pk.P && pk.Size) {
@@ -752,6 +771,7 @@ void CConnectJob::Prepare(const Block& block) {
 					PrepareTask(Hash160(pubKey), pubKey);
 				}
 			}
+#endif
 		}
 	}
 }
@@ -1101,7 +1121,7 @@ void Block::Accept() {
 		if (get_DifficultyTarget() != targetNext) {
 			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(get_DifficultyTarget()));
 			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
-#ifdef X_DEBUG//!!!D
+#ifdef _DEBUG//!!!D
  			eng.GetNextTarget(blockPrev, _self);
 #endif
 			Throw(E_COIN_IncorrectProofOfWork);
@@ -1178,18 +1198,13 @@ void Block::Accept() {
 
 void Block::Process(P2P::Link *link) {
 	CoinEng& eng = Eng();
-#ifdef X_DEBUG//!!!D
-	TRC(1, "Before LogObjectCounters");
-	LogObjectCounters();
-#endif
+	HashValue hash = Hash(_self);	
+	bool bHave = eng.HaveBlock(hash);
 
-	HashValue hash = Hash(_self);
-	
-	if (eng.HaveBlock(hash)) {
-		TRC(3, "Have: " << hash << ", PrevBlock: " << PrevBlockHash);
+	TRC(4, (bHave ? "Have " : "") << hash << "  Prev: " << PrevBlockHash);
+
+	if (bHave)
 		return;
-	}
-	TRC(3, "    " << hash << ", PrevBlock: " << PrevBlockHash);
 
 	try {
 		DBG_LOCAL_IGNORE_NAME(E_COIN_BlockNotFound, ignE_COIN_BlockNotFound);
@@ -1239,7 +1254,7 @@ LAB_FOUND_ORPHAN:
 		if (orphanRoot)
 			link->Send(new GetBlocksMessage(eng.BestBlock(), Hash(orphanRoot)));
 
-		TRC(2, "Added to OrphanBlocks, size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
+		TRC(4, "Added to OrphanBlocks, size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
 	}
 }
 

@@ -51,5 +51,7 @@ const size_t MAX_INV_SZ = 50000;
 #	define UCFG_COIN_PKSCRIPT_FUTURES 1
 #endif
 
-
+#ifndef UCFG_COIN_COMPACT_AUX
+#	define UCFG_COIN_COMPACT_AUX 0					// incompatible space optimization
+#endif
 

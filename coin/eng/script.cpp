@@ -245,7 +245,7 @@ void Vm::Push(const Value& v) {
 	Stack.push_back(v);
 }
 
-static Blob DeleteSubpart(const ConstBuf& mb, const ConstBuf& part) {
+Blob Script::DeleteSubpart(const ConstBuf& mb, const ConstBuf& part) {
 	if (0 == part.Size)
 		return mb;
 	Vm vm;
@@ -265,16 +265,14 @@ static Blob DeleteSubpart(const ConstBuf& mb, const ConstBuf& part) {
 	return r;
 }
 
-HashValue SignatureHash(const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType) {
-	if (nIn >= txTo.TxIns().size())
-		Throw(E_INVALIDARG);
-	Tx txTmp(txTo.m_pimpl->Clone());
+HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int32 nHashType) {
+	Tx txTmp(txoTo.Clone());
 	txTmp.m_pimpl->m_nBytesOfHash = 0;
 	byte opcode = OP_CODESEPARATOR;
-	Blob script1 = DeleteSubpart(script, ConstBuf(&opcode, 1));
+	Blob script1 = Script::DeleteSubpart(script, ConstBuf(&opcode, 1));
 	for (int i=0; i<txTmp.TxIns().size(); ++i)
 		txTmp.m_pimpl->m_txIns.at(i).put_Script(Blob());
-	txTmp.m_pimpl->m_txIns.at(nIn).put_Script(script1);
+	txTmp.m_pimpl->m_txIns.at(nIn).put_Script(script1);					// .at() checks 0<=nIn<size()
 
 	int nOut = -1;
 	switch (nHashType & 0x1f) {
@@ -298,17 +296,30 @@ HashValue SignatureHash(const ConstBuf& script, const Tx& txTo, int nIn, Int32 n
         txTmp.m_pimpl->m_txIns.at(0) = txTmp.TxIns()[nIn];
         txTmp.m_pimpl->m_txIns.resize(1);
     }
-
 	return Hash(EXT_BIN(txTmp << nHashType));
 }
 
+bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType) {
+	if (IsCanonicalSignature(sig)) {
+		try {
+	#define EC_R_INVALID_ENCODING				 102	// OpenSSL
+			DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING), ignEC_R_INVALID_ENCODING);								
 
-
-bool CheckSig(ConstBuf sig, Dsa& dsa, const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType) {
-	if (0 == sig.Size || (nHashType = nHashType ? nHashType : sig.P[sig.Size-1]) != sig.P[sig.Size-1])
-		return false;
-	sig.Size--;
-	return dsa.VerifyHash(SignatureHash(script, txTo, nIn, nHashType), sig);
+	#if UCFG_COIN_ECC=='S'
+			Sec256Dsa dsa;
+			dsa.ParsePubKey(pubKey);
+	#else
+			ECDsa dsa(CngKey::Import(pubKey, CngKeyBlobFormat::OSslEccPublicBlob));
+	#endif
+			if (0 == sig.Size || (nHashType = nHashType ? nHashType : sig.P[sig.Size-1]) != sig.P[sig.Size-1])
+				return false;
+			sig.Size--;
+			return dsa.VerifyHash(SignatureHash(script, *txTo.m_pimpl, nIn, nHashType), sig);
+		} catch (CryptoException& DBG_PARAM(ex)) {
+			TRC(2, ex.Message);
+		}
+	}
+	return false;
 }
 
 bool ToBool(const Vm::Value& v) {
@@ -317,7 +328,6 @@ bool ToBool(const Vm::Value& v) {
 			return i!=v.Size-1 || v.constData()[i]!=0x80;
 	return false;
 }
-
 
 static void MakeSameSize(Vm::Value& v1, Vm::Value& v2) {
 	size_t size = std::max(v1.Size, v2.Size);
@@ -509,12 +519,11 @@ bool Vm::EvalImp(const Tx& txTo, UInt32 nIn, Int32 nHashType) {
 					{
 						Value key = Pop(),
 							sig = Pop();
-						ECDsa dsa(CngKey::Import(key, CngKeyBlobFormat::OSslEccPublicBlob));
-						Blob script = DeleteSubpart(Blob(m_blob.constData()+m_posCodeHash, m_blob.Size-m_posCodeHash), sig);
-						bool b = CheckSig(sig, dsa, script, txTo, nIn, nHashType);
+						Blob script = Script::DeleteSubpart(Blob(m_blob.constData()+m_posCodeHash, m_blob.Size-m_posCodeHash), sig);
+						bool bOk = CheckSig(sig, key, script, txTo, nIn, nHashType);
 						if (OP_CHECKSIG == instr.Opcode)
-							Push(b ? TrueValue : FalseValue);
-						else if (!b)
+							Push(bOk ? TrueValue : FalseValue);
+						else if (!bOk)
 							return false;
 					}
 					break;
@@ -536,21 +545,12 @@ bool Vm::EvalImp(const Tx& txTo, UInt32 nIn, Int32 nHashType) {
 						SkipStack(1);						// one extra unused value, dut to an old bug
 						Blob script(m_blob.constData()+m_posCodeHash, m_blob.Size-m_posCodeHash);
 						EXT_FOR (const Blob& sig, vSig) {
-							script = DeleteSubpart(script, sig);
+							script = Script::DeleteSubpart(script, sig);
 						}
 						bool b = true;
-						for (int i=0, j=0; i<vSig.size() && (b = vSig.size()-i <= vPubKey.size()-j);) {
-//!!!							ECDsa dsa(256);
-							try {
-								#define EC_R_INVALID_ENCODING				 102	// OpenSSL
-								DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING), ignEC_R_INVALID_ENCODING);								
-
-								ECDsa dsa(CngKey::Import(vPubKey[j++], CngKeyBlobFormat::OSslEccPublicBlob));
-								if (CheckSig(vSig[i], dsa, script, txTo, nIn, nHashType))
-									++i;
-							} catch (CryptoExc& DBG_PARAM(ex)) {
-								TRC(2, ex.Message);
-							}
+						for (int i=0, j=0; i<vSig.size() && (b = vSig.size()-i <= vPubKey.size()-j); ++j) {
+							if (CheckSig(vSig[i], vPubKey[j], script, txTo, nIn, nHashType))
+								++i;
 						}
 						if (OP_CHECKMULTISIG == instr.Opcode)
 							Push(b ? TrueValue : FalseValue);

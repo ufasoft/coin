@@ -87,6 +87,28 @@ void AuxPow::Read(const BinaryReader& rd) {
 	ParentBlock.ReadHeader(rd, true);
 }
 
+void AuxPow::Write(DbWriter& wr) const {
+	base::Write(wr);
+	wr << ChainMerkleBranch;
+#if UCFG_COIN_COMPACT_AUX
+	const BlockObj& bo = *ParentBlock.m_pimpl;
+	wr << bo.Ver << bo.PrevBlockHash << (UInt32)to_time_t(bo.Timestamp) << bo.DifficultyTargetBits << bo.Nonce;
+#else
+	ParentBlock.WriteHeader(wr);
+#endif
+}
+
+void AuxPow::Read(const DbReader& rd) {
+	base::Read(rd);
+	rd >> ChainMerkleBranch;
+#if UCFG_COIN_COMPACT_AUX
+	const HashValue merkleRoot = MerkleBranch.Apply(Hash(Tx(_self)));
+	ParentBlock.ReadHeader(rd, true, &merkleRoot);
+#else
+	ParentBlock.ReadHeader(rd, true);
+#endif
+}
+
 int CalcMerkleIndex(int merkleSize, int chainId, UInt32 nonce) {
     return (((nonce * 1103515245 + 12345) + chainId) * 1103515245 + 12345) % merkleSize;
 }

@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/bignum.h>
@@ -182,12 +174,12 @@ struct Instr {
 class Script : public vector<Instr> {
 	typedef Script class_type;
 public:
+	static Blob DeleteSubpart(const ConstBuf& mb, const ConstBuf& part);
+
 	Script() {}
 
 	Script(const ConstBuf& mb);
-
 	void FindAndDelete(const ConstBuf& mb);
-
 	bool IsAddress();
 
 	Blob ToBytes() const {
@@ -205,6 +197,7 @@ int CalcSigOpCount(const Blob& script, const Blob& scriptSig = nullptr);
 int CalcSigOpCount1(const ConstBuf& script, bool bAccurate = false);
 
 bool GetOp(CMemReadStream& stm, LiteInstr& instr);
+bool IsCanonicalSignature(const ConstBuf& sig);
 
 class Vm {
 public:
@@ -234,7 +227,7 @@ private:
 };
 
 bool IsPayToScriptHash(const Blob& script);
-HashValue SignatureHash(const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType);
+HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int32 nHashType);
 void VerifySignature(const Tx& txFrom, const Tx& txTo, UInt32 nIn, Int32 nHashType = 0);
 bool ToBool(const Vm::Value& v);
 BigInteger ToBigInteger(const Vm::Value& v);

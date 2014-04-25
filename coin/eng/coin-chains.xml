@@ -29,11 +29,13 @@
 			CoinValue="1000000" MaxMoney="2000000000" MinTxOutAmount="10000" MinTxFee="10000" AnnualPercentageRate="1"
 			PowOfDifficultyToHalfSubsidy="4"
 			InitBlockValue="9999" MaxTargetHex="1D00FFFF" InitTargetHex="1C00FFFF"
-			ProtocolVersion="60003"  ProtocolMagicHex="E5E9E8E6" DefaultPort="9901"
-			BootUrls="dns://tnseed.ppcoin.net dns://seed.ppcoin.net dns://dnsseed.ppc.altcointech.net" >
+			ProtocolVersion="60004"  ProtocolMagicHex="E5E9E8E6" DefaultPort="9901"
+			BootUrls="dns://tnseed.ppcoin.net dns://seed.ppcoin.net dns://seedppc.ppcoin.net dns://dnsseed.ppc.altcointech.net" >
 
 		<Checkpoint Block="19080" 	Hash="000000000000bca54d9ac17881f94193fd6a270c1bb21c3bf0b37f588a40dbd7" />
 		<Checkpoint Block="30583" 	Hash="d39d1481a7eecba48932ea5913be58ad3894c7ee6d5a8ba8abeb772c66a6696e" />
+		<Checkpoint Block="99999" 	Hash="27fd5e1de16a4270eb8c68dee2754a64da6312c7c3a0e99a7e6776246be1ee3f" />
+
 
 		<AlertPubKey Key="04a0a849dd49b113d3179a332dd77715c43be4d0076e2f19e66de23dd707e56630f792f298dfd209bf042bb3561f4af6983f3d81e439737ab0bf7f898fecd21aab" />
 		<CheckpointMasterPubKey Key="04c0c707c28533fd5c9f79d2d3a2d80dff259ad8f915241cd14608fb9bc07c74830efe8438f2b272a866b4af5e0c2cc2a9909972aefbd976937e39f46bb38c277c" />
@@ -84,17 +86,17 @@
 	</Chain>
 
 	<Chain Name="DogeCoin" Symbol="DOGE" Algo="scrypt" FullPeriod="1" AddressVersion="30"
-			Genesis="1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691" BlockSpan="60" TargetInterval="240" CoinbaseMaturity="30" 
+			Genesis="1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691" BlockSpan="60" TargetInterval="1" CoinbaseMaturity="30" 
 			MaxMoney="10000000000" MinTxFee="100000000"
 			MaxTargetHex="1E0FFFFF"
-			ProtocolVersion="60003" ProtocolMagicHex="C0C0C0C0" DefaultPort="22556"
-			BootUrls="dns://seed.dogecoin.com dns://seed.dogeftw.com">
-		<AlertPubKey Key="040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9" />
+			ProtocolVersion="70002" ProtocolMagicHex="C0C0C0C0" DefaultPort="22556"
+			BootUrls="dns://seed.dogecoin.com dns://seed.dogechain.info dns://seed.mophides.com dns://seed.dglibrary.org">
+		<AlertPubKey Key="04d4da7a5dae4db797d9b0644d57a5cd50e05a70f36091cd62e2fc41c98ded06340be5a43a35e185690cd9cde5d72da8f6d065b499b06f51dcfba14aad859f443a" />
 
-		<Checkpoint Block="42279" 	Hash="8444c3ef39a46222e87584ef956ad2c9ef401578bd8b51e8e4b9a86ec3134d3a" />
 		<Checkpoint Block="42400" 	Hash="557bb7c17ed9e6d4a6f9361cfddf7c1fc0bdc394af7019167442b41f507252b4" />
+		<Checkpoint Block="104679" 	Hash="35eb87ae90d44b98898fec8c39577b76cb1eb08e1261cfc10706c8ce9a1d01cf" />
 
-		<Seed EndPoint="110.113.243.162 114.181.185.146 144.29.85.95" />
+		<Seed EndPoint="" />
 	</Chain>
 
 
@@ -132,6 +134,18 @@
 		<Checkpoint Block="41300" 	Hash="8c4e02f6c0d20e856fd7e952a147fee30ce145ca6932a284f354924362d2b408" />
 	</Chain>
 
+
+	<Chain Name="iXcoin" Symbol="IXC" ChainID="3" AddressVersion="138"
+			Genesis="0000000001534ef8893b025b9c1da67250285e35c9f76cae36a4904fdf72c591" TargetInterval="144"
+			MinTxFee="10000"
+			InitBlockValue="96" HalfLife="210000" MaxTargetHex="1D00FFFF"
+			ProtocolMagicHex="DBB6BAF1" DefaultPort="8337"
+			BootUrls=""
+			MergedMiningStartBlock="45000">
+		<AlertPubKey Key="04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284" />
+		<Checkpoint Block="4500" Hash="00000000de37be98ca45cf0613fa2a321eba28e237543f9fee9b6a7605d03a94" />
+		<Seed EndPoint="24.34.40.175 62.75.167.48 86.93.208.193 142.4.208.71 206.71.179.116" />
+	</Chain>
 
 <!--
 	<Chain Name="MaxCoin" Symbol="MAX" Algo="sha3" AddressVersion="110" ScriptAddressVersion="127" 

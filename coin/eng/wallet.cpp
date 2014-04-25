@@ -106,10 +106,6 @@ bool IsPayToScriptHash(const Blob& script) {
 }
 
 bool VerifyScript(const Blob& scriptSig, const Blob& scriptPk, const Tx& txTo, UInt32 nIn, Int32 nHashType) {
-#ifdef X_DEBUG//!!!D
-	if (scriptSig.Size==0x49 && scriptPk.Size==0x43)
-		nIn = nIn;
-#endif
 	Vm vm;
 	bool r = vm.Eval(scriptSig, txTo, nIn, nHashType);
 	if (r) {
@@ -149,7 +145,7 @@ void VerifySignature(const Tx& txFrom, const Tx& txTo, UInt32 nIn, Int32 nHashTy
 
 void Wallet::Sign(ECDsa *randomDsa, const Blob& pkScript, Tx& txTo, UInt32 nIn, byte nHashType, const Blob& scriptPrereq) {
     TxIn& txIn = txTo.m_pimpl->m_txIns.at(nIn);
-	HashValue hash = SignatureHash(scriptPrereq+pkScript, txTo, nIn, nHashType);
+	HashValue hash = SignatureHash(scriptPrereq+pkScript, *txTo.m_pimpl, nIn, nHashType);
 
 	MyKeyInfo ki;
 	HashValue160 hash160;
@@ -601,7 +597,7 @@ void Wallet::ReacceptWalletTxes() {
 				}
 				m_eng->AddToPool(wtx, vQueue);
 			}
-		} catch (TxNotFoundExc&) {
+		} catch (TxNotFoundException&) {
 		}
 	}
 }
