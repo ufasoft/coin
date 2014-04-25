@@ -20,8 +20,8 @@ public:
 		wr << BirthdayA << BirthdayB;
 	}
 
-	void ReadHeader(const BinaryReader& rd, bool bParent) override {
-		base::ReadHeader(rd, bParent);
+	void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot) override {
+		base::ReadHeader(rd, bParent, pMerkleRoot);
 		rd >> BirthdayA >> BirthdayB;
 	}
 

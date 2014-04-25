@@ -28,8 +28,8 @@ protected:
 		CoinSerialized::WriteBlob(wr, PrimeChainMultiplier.ToBytes());
 	}
 
-	void ReadHeader(const BinaryReader& rd, bool bParent) override {
-		base::ReadHeader(rd, bParent);
+	void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot) override {
+		base::ReadHeader(rd, bParent, pMerkleRoot);
 		Blob blob = CoinSerialized::ReadBlob(rd);
 		PrimeChainMultiplier = BigInteger(blob.constData(), blob.Size);
 

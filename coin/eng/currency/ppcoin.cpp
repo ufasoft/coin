@@ -7,14 +7,17 @@ namespace Coin {
 
 const Version VER_PPCOIN_STAKE_MODIFIER(0, 50);
 
+static DateTime DtV30Switch(2013, 3, 20, 17, 20),
+			DtV40Switch(2014, 5, 5, 14, 26, 40);
+
+
 class PPCoinBlockObj : public PosBlockObj {
 	typedef PPCoinBlockObj class_type;
 	typedef PosBlockObj base;
 public:
 
-	PPCoinBlockObj()
-		:	DtV30Switch(2013, 3, 20, 17, 20)
-	{}
+	PPCoinBlockObj() {
+	}
 
 	bool IsV02Protocol(const DateTime& dt) const {
 		return dt < DtV30Switch;
@@ -36,9 +39,11 @@ public:
 			wr << DifficultyTargetBits;		
 	}
 
-private:
-	DateTime DtV30Switch;
-
+protected:
+	bool StakeEntropyBit() const override {
+		return Timestamp>=DtV40Switch ? base::StakeEntropyBit()
+			:	Hash160(Signature)[19] & 0x80;
+	}
 };
 
 

@@ -32,9 +32,8 @@ protected:
 	}
 
 	bool StakeEntropyBit() const override {
-		if (Height >= 9689)
-			return Hash().data()[0] & 1;
-		return base::StakeEntropyBit();
+		return Height >= 9689 ? base::StakeEntropyBit()
+			:	Hash160(Signature)[19] & 0x80;
 	}
 
 	void CheckSignature() override {
