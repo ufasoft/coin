@@ -12,7 +12,8 @@ namespace Ext { namespace DB { namespace KV {
 typedef vector<pair<Page, int>> PagedPath;
 
 struct  PathVisitor {
-	virtual bool OnPathLevel(int level, Page& page) =0;
+	virtual bool OnPathLevel(int level, Page& page) { Throw(E_NOTIMPL); }
+	virtual bool OnPathLevelFlat(int level, UInt32& pgno) { Throw(E_NOTIMPL); }
 };
 
 class Filet {
@@ -38,12 +39,15 @@ public:
 private:
 	UInt64 m_length;
 
+	UInt32 GetPgNo(UInt32 pgno, int idx) const { return m_tx.Storage.GetUInt32(pgno, idx*4); }
+	
 	UInt32 GetPgNo(Page& page, int idx) const;	
 	int IndirectLevels() const;
 	bool TouchPage(Page& page);
 	void TouchPage(Page& pageData, PagedPath& path);
 	UInt32 RemoveRange(int level, Page& page, UInt32 first, UInt32 last);
 	Page FindPath(UInt64 offset, PathVisitor& visitor) const;
+	byte *FindPathFlat(UInt64 offset, PathVisitor& visitor) const;
 	Page GetPageToModify(UInt64 offset, bool bOptional);
 
 	friend class HashTable;

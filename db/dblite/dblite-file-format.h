@@ -43,7 +43,8 @@ ENUM_CLASS(TableType) {
 } END_ENUM_CLASS(TableType);
 
 ENUM_CLASS(HashType) {
-	MurmurHash3	= 0
+	MurmurHash3	= 0,
+	Identity = 1
 } END_ENUM_CLASS(HashType);
 
 #pragma pack(push, 1)

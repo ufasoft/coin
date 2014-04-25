@@ -21,6 +21,7 @@ void DbTable::Open(DbTransaction& tx, bool bCreate) {
 			Throw(E_FAIL);
 		TableData td;
 		td.Type = (byte)Type;
+		td.HtType = (byte)HtType;
 		td.RootPgNo = 0;
 		td.KeySize = KeySize;
 		DbTable::Main().Put(tx, k, ConstBuf(&td, sizeof td));

@@ -38,7 +38,6 @@ const int DB_MAX_VIEWS = 2048 << UCFG_PLATFORM_64,
 
 const UInt32 DB_DEFAULT_PAGECACHE_SIZE = 1024 << (UCFG_PLATFORM_64 * 2);
 
-
 const size_t DEFAULT_PAGE_SIZE = 8192;
 
 const size_t DEFAULT_VIEW_SIZE = (DEFAULT_PAGE_SIZE * 64) << UCFG_PLATFORM_64;
@@ -200,7 +199,6 @@ public:
 	String FilePath;
 	File DbFile;
 
-	list<ptr<MappedFile>> Mappings;
 
 //!!!R	Blob m_blobDbHeader;
 	AlignedMem m_alignedDbHeader;
@@ -209,6 +207,18 @@ public:
 	//-----------------------------
 	recursive_mutex MtxViews; // used in ~PageObj()
 
+	list<ptr<MappedFile>> Mappings;
+
+	enum class ViewMode {
+		Window,
+		Full
+	};
+
+	ViewMode m_viewMode;
+	list<ptr<MMView>> m_fullViews;
+
+	void* volatile ViewAddress;
+
 	typedef vector<PageObj*> COpenedPages;
 	COpenedPages OpenedPages;
 
@@ -216,7 +226,8 @@ public:
 	UInt32 PageCacheSize, NewPageCount;
 
 	typedef unordered_map<UInt32, ptr<MMView>> CViews;
-	CViews Views;	
+	CViews Views;
+
 
 	//------------------
 	mutex MtxRoot;
@@ -321,6 +332,7 @@ private:
 
 //!!!R	Page LastFreePoolPage;
 
+	UInt32 GetUInt32(UInt32 pgno, int offset);
 	void SetPageSize(size_t v);
 	void DoClose(bool bLock);
 	void WriteHeader();
@@ -336,6 +348,7 @@ private:
 
 	friend class DbTransaction;
 	friend class HashTable;
+	friend class Filet;
 };
 
 typedef KVStorage DbStorage;
@@ -409,6 +422,7 @@ public:
 	DbCursor(DbTransaction& tx, DbTable& table);
 	DbCursor(DbCursor& c);
 	DbCursor(DbCursor& c, bool bRight, Page& pageSibling);
+	~DbCursor();
 
 	const ConstBuf& get_Key() { return m_pimpl->get_Key(); }
 	DEFPROP_GET(const ConstBuf&, Key);
@@ -428,6 +442,8 @@ public:
 	void PushFront(ConstBuf k, const ConstBuf& d) { m_pimpl->PushFront(k, d); }
 	void Drop() { m_pimpl->Drop(); }
 private:
+	UInt64 m_cursorImp[20];
+
 	void AssignImpl(TableType type);
 };
 
@@ -527,12 +543,14 @@ public:
 
 	String Name;
 	TableType Type;
+	HashType HtType;
 	byte KeySize;						// 0=variable
 
 	DbTable(RCString name = nullptr, byte keySize = 0, TableType type = TableType::BTree)
 		:	Name(name)
 		,	KeySize(keySize)
 		,	Type(type)
+		,	HtType(HashType::MurmurHash3)
 	{}
 
 	void Open(DbTransaction& tx, bool bCreate = false);

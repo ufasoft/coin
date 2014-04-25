@@ -15,6 +15,22 @@ HashTable::HashTable(DbTransaction& tx)
 	ASSERT(MaxLevel <= 32);
 }
 
+UInt32 HashTable::Hash(const ConstBuf& key) const {
+   	switch (HtType) {
+   	case HashType::MurmurHash3:
+   		return MurmurHash3_32(key, Tx.Storage.m_salt);
+   	case HashType::Identity:
+		{
+			UInt32 r = 0;
+			for (size_t n=min(key.Size, size_t(4)), i=n; i--;)
+				r |= key.P[n-i-1] << 8*i;
+			return r;
+		}
+   	default:
+   		Throw(E_NOTIMPL);
+   	}
+}
+
 int HashTable::BitsOfHash() const {
 	int r = 0;
 	if (UInt64 nPages = PageMap.Length/4)
@@ -49,7 +65,7 @@ UInt32 HashTable::GetPgno(UInt32 nPage) {
 BTreeSubCursor::BTreeSubCursor(HtCursor& cHT)
 	:	m_btree(cHT.Ht->Tx)
 {
-	Map = &m_btree;
+	SetMap(&m_btree);
 	m_btree.SetKeySize(cHT.Ht->KeySize);
 	m_btree.Root = cHT.m_pagePos.Page;
 }

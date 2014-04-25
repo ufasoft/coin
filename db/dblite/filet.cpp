@@ -48,6 +48,30 @@ Page Filet::FindPath(UInt64 offset, PathVisitor& visitor) const {
 	return page;
 }
 
+byte *Filet::FindPathFlat(UInt64 offset, PathVisitor& visitor) const {
+	UInt32 pn = PageRoot.N, pnPrev = 0;
+	UInt32 pgno = 0;
+	int prevIdx = 0;
+	for (int levels=IndirectLevels(), level=levels; ;) {
+		--level;
+		int bits = PageSizeBits + level*(PageSizeBits-2);
+		if (!visitor.OnPathLevelFlat(levels - level-1, pn))
+			return nullptr;
+		if (pnPrev && pn != pgno) {
+			Throw(E_NOTIMPL);		//!!!TODO
+		}
+		if (level == -1)
+			break;
+		pnPrev = pn;
+		int idx = int (offset >> bits);
+		prevIdx = idx;
+		pgno = GetPgNo(pn, idx);
+		pn = pgno;
+		offset &= (1LL<<bits) - 1;
+	}
+	return pn ? (byte*)m_tx.Storage.ViewAddress + UInt64(pn) * m_tx.Storage.PageSize : nullptr;
+}
+
 bool Filet::TouchPage(Page& page) {
 	if (page.Dirty)
 		return false;
@@ -159,14 +183,24 @@ UInt32 Filet::GetUInt32(UInt64 offset) const {
 		Throw(E_INVALIDARG);
 	if (offset & 3)
 		Throw(E_INVALIDARG);
-	struct GetPathOffVisitor : PathVisitor {
-		bool OnPathLevel(int level, Page& page) override {
-			return bool(page);
-		}
-	} visitor;
-	Page page = FindPath(offset, visitor);
-	UInt32 r = page ? letoh(*(UInt32*)((byte*)page.get_Address() + size_t(offset & (m_tx.Storage.PageSize-1)))) : 0;
-	return r;
+	if (m_tx.Storage.m_viewMode == KVStorage::ViewMode::Full) {
+		struct GetPathOffVisitor : PathVisitor {
+			bool OnPathLevelFlat(int level, UInt32& pgno) override {
+				return bool(pgno);
+			}
+		} visitor;
+		byte *p = FindPathFlat(offset, visitor);
+		return p ? letoh(*(UInt32*)(p + size_t(offset & (m_tx.Storage.PageSize-1)))) : 0;
+	} else {
+		struct GetPathOffVisitor : PathVisitor {
+			bool OnPathLevel(int level, Page& page) override {
+				return bool(page);
+			}
+		} visitor;
+		Page page = FindPath(offset, visitor);
+		UInt32 r = page ? letoh(*(UInt32*)((byte*)page.get_Address() + size_t(offset & (m_tx.Storage.PageSize-1)))) : 0;
+		return r;
+	}
 }
 
 void Filet::PutUInt32(UInt64 offset, UInt32 v) {

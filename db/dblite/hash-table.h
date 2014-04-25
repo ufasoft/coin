@@ -14,17 +14,9 @@ public:
 	HashType HtType;
 	const int MaxLevel;
 
-	UInt32 Hash(const ConstBuf& key) {
-		switch (HtType) {
-		case HashType::MurmurHash3:
-			return MurmurHash3_32(key, Tx.Storage.m_salt);
-		default:
-			Throw(E_NOTIMPL);
-		}
-	}
-
 	HashTable(DbTransaction& tx);
 	TableType Type() override { return TableType::HashTable; }
+	UInt32 Hash(const ConstBuf& key) const;
 	int BitsOfHash() const;
 	Page TouchBucket(UInt32 nPage);
 	UInt32 GetPgno(UInt32 nPage);
