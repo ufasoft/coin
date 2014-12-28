@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include "coin-model.h"
@@ -18,7 +25,7 @@ public:
 	DateTime Timestamp;
 	Address To;
 	Blob ChangePubKey;
-	Int64 Amount;				// negative for Debits in COM transactions
+	int64_t Amount;				// negative for Debits in COM transactions
 //!!!R	int Confirmations;
 	vector<Tx> PrevTxes;
 	String Comment;
@@ -39,7 +46,7 @@ public:
 		return Convert::ToString(Timestamp.Ticks)+To.ToString();
 	}
 
-	decimal64 GetDecimalAmount() const { return make_decimal64(Amount, -Eng().ChainParams.Log10CoinValue()); }
+	decimal64 GetDecimalAmount() const { return make_decimal64((long long)Amount, -Eng().ChainParams.Log10CoinValue()); }
 };
 
 DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx);
@@ -50,7 +57,7 @@ class Penny {
 	typedef Penny class_type;
 public:
 	Coin::OutPoint OutPoint;
-	UInt64 Value;
+	uint64_t Value;
 	Blob PkScript;
 	CBool IsSpent;
 
@@ -62,8 +69,8 @@ public:
 		return OutPoint == v.OutPoint && Value == v.Value;
 	}
 
-	Int64 get_Debit() const;
-	DEFPROP_GET(Int64, Debit);
+	int64_t get_Debit() const;
+	DEFPROP_GET(int64_t, Debit);
 
 	bool get_IsFromMe() const { return Debit > 0; }
 	DEFPROP_GET(bool, IsFromMe);
@@ -91,7 +98,7 @@ class RescanThread : public Thread {
 	typedef Thread base;
 public:
 	Coin::Wallet& Wallet;
-	Int64 m_i, m_count;	
+	int64_t m_i, m_count;	
 	HashValue m_hashFrom;
 
 	RescanThread(Coin::Wallet& wallet, const HashValue& hashFrom);
@@ -103,8 +110,8 @@ class CompactThread : public Thread {
 	typedef Thread base;
 public:
 	Coin::Wallet& Wallet;
-	volatile Int32 m_i;
-	UInt32 m_count;	
+	volatile int32_t m_i;
+	uint32_t m_count;	
 	HashValue m_hashFrom;
 
 	CompactThread(Coin::Wallet& wallet);
@@ -130,7 +137,7 @@ public:
 	mutex MtxCurrentHeight;
 	int CurrentHeight;
 
-	Int32 m_dbNetId;
+	int32_t m_dbNetId;
 	float Progress;
 	CBool m_bLoaded;
 
@@ -150,10 +157,12 @@ public:
 
 	void AddRecipient(const Address& a) override;
 	void RemoveRecipient(RCString s);
-	pair<Int64, int> GetBalanceValueExp();
+	pair<int64_t, int> GetBalanceValueExp();
 
 	decimal64 get_Balance();
 	DEFPROP_GET(decimal64, Balance);
+
+	decimal64 GetDecimalFee(const WalletTx& wtx);
 
 	CBool m_bMiningEnabled;
 
@@ -168,17 +177,17 @@ public:
 	void Rescan();
 	void Close();	
 //!!!	CngKey GetKey(const HashValue160& keyHash);
-	void Sign(ECDsa *randomDsa, const Blob& pkScript, Tx& txTo, UInt32 nIn, byte nHashType = SIGHASH_ALL, const Blob& scriptPrereq = Blob());
-	pair<WalletTx, decimal64> CreateTransaction(ECDsa *randomDsa, const vector<pair<Blob, Int64>>& vSend);															// returns Fee
+	void Sign(ECDsa *randomDsa, const Blob& pkScript, Tx& txTo, uint32_t nIn, byte nHashType = SIGHASH_ALL, const Blob& scriptPrereq = Blob());
+	pair<WalletTx, decimal64> CreateTransaction(ECDsa *randomDsa, const vector<pair<Blob, int64_t>>& vSend);															// returns Fee
 	void Relay(const WalletTx& wtx);
-	Int64 Add(WalletTx& wtx, bool bPending);		
+	int64_t Add(WalletTx& wtx, bool bPending);		
 	void Commit(WalletTx& wtx);
 	const MyKeyInfo *FindMine(const TxOut& txOut);
 	bool IsMine(const Tx& tx);
 	bool IsFromMe(const Tx& tx) override;
 	void OnPeriodic() override;
 	void StartCompactDatabase();
-	void ExportWalletToBdb(RCString filepath);
+	void ExportWalletToBdb(const path& filepath);
 	void CancelPendingTxes();
 
 	void OnChange() override {
@@ -191,6 +200,7 @@ protected:
 	void OnProcessBlock(const Block& block) override;	
 	void OnProcessTx(const Tx& tx) override;
 	void OnEraseTx(const HashValue& hashTx) override;
+	void ProcessPendingTxes();
 	void OnBlockchainChanged() override;
 	void SetNextResendTime(const DateTime& dt);
 	void ResendWalletTxes();
@@ -205,14 +215,14 @@ private:
 	void StartRescan(const HashValue& hashFrom = HashValue());
 	void TryRescanStep();
 
-	Int64 GetTxId(const HashValue& hashTx);
-	bool InsertUserTx(Int64 txid, int nout, Int64 value, const HashValue160& hash160);
+	int64_t GetTxId(const HashValue& hashTx);
+	bool InsertUserTx(int64_t txid, int nout, int64_t value, const HashValue160& hash160);
 	void ProcessMyTx(WalletTx& wtx, bool bPending);
 
 //!!!R	void SaveBlockords();
 	WalletTx GetTx(const HashValue& hashTx);
-	bool SelectCoins(UInt64 amount, UInt64 fee, int nConfMine, int nConfTheirs, pair<unordered_set<Penny>, UInt64>& pp);
-	pair<unordered_set<Penny>, UInt64> SelectCoins(UInt64 amount, UInt64 fee);			// <returns Pennies, RequiredFee>
+	bool SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConfTheirs, pair<unordered_set<Penny>, uint64_t>& pp);
+	pair<unordered_set<Penny>, uint64_t> SelectCoins(uint64_t amount, uint64_t fee);			// <returns Pennies, RequiredFee>
 	bool ProcessTx(const Tx& tx);
 	void SetBestBlockHash(const HashValue& hash);
 	void ReacceptWalletTxes();
@@ -227,7 +237,7 @@ private:
 	friend class RescanThread;
 };
 
-bool VerifyScript(const Blob& scriptSig, const Blob& scriptPk, const Tx& txTo, UInt32 nIn, Int32 nHashType);
+bool VerifyScript(const Blob& scriptSig, const Blob& scriptPk, const Tx& txTo, uint32_t nIn, int32_t nHashType);
 
 class COIN_CLASS WalletEng : public Object {
 public:

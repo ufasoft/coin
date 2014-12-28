@@ -1,4 +1,13 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
+
+using namespace std::placeholders;
 
 #include <el/crypto/hash.h>
 #include <el/crypto/ext-openssl.h>
@@ -14,6 +23,7 @@ using namespace Ext::Num;
 #include "script.h"
 #include "eng.h"
 #include "coin-msg.h"
+#include "coin-model.h"
 
 namespace Coin {
 
@@ -23,7 +33,7 @@ const Blob& TxIn::Script() const {
 		Tx tx = Tx::FromDb(PrevOutPoint.TxHash);
 		const TxOut& txOut = tx.TxOuts()[PrevOutPoint.Index];
 		Blob pk = RecoverPubKeyType & 0x40
-			? Sec256Dsa::RecoverPubKey(SignatureHash(txOut.PkScript, *m_pTxo, N, 1), ConstBuf(m_sig.constData()+1, m_sig.Size-1), RecoverPubKeyType&3, RecoverPubKeyType&4)
+			? Sec256Dsa::RecoverPubKey(SignatureHash(txOut.get_PkScript(), *m_pTxo, N, 1), ConstBuf(m_sig.constData()+1, m_sig.Size-1), RecoverPubKeyType&3, RecoverPubKeyType&4)
 			: eng.GetPkById(txOut.m_idPk);
 		byte lenPk = byte(pk.Size);
 		m_script.AssignIfNull(m_sig + ConstBuf(&lenPk, 1) + pk);
@@ -60,6 +70,22 @@ const TxOut& CTxMap::GetOutputFor(const OutPoint& prev) const {
 	return it->second.TxOuts().at(prev.Index);
 }
 
+bool CoinsView::HasInput(const OutPoint& op) const {
+	bool bHas;
+	if (Lookup(m_outPoints, op, bHas))
+		return bHas;
+	CoinEng& eng = Eng();
+	if (!eng.Db->FindTx(op.TxHash, 0))											//!!! Double find. Should be optimized. But we need this check during Reorganize()
+		Throw(E_COIN_TxNotFound);
+	vector<bool> vSpend = eng.Db->GetCoinsByTxHash(op.TxHash);
+	return m_outPoints[op] = op.Index < vSpend.size() && vSpend[op.Index];
+}
+
+void CoinsView::SpendInput(const OutPoint& op) {
+	m_outPoints[op] = false;
+}
+
+
 //!!! static regex s_rePkScriptDestination("(\\x76\\xA9\\x14([^]{20,20})\\x88\\xAC|(\\x21|\\x41)([^]+)\\xAC)");		// binary, VC don't allows regex for binary data
 
 byte TryParseDestination(const ConstBuf& pkScript, HashValue160& hash160, Blob& pubkey) {
@@ -93,7 +119,7 @@ void Tx::WriteTxIns(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 	int nIn = 0;
 	EXT_FOR (const TxIn& txIn, TxIns()) {
-		byte typ = UInt32(-1)==txIn.Sequence ? 0x80 : 0;
+		byte typ = uint32_t(-1)==txIn.Sequence ? 0x80 : 0;
 		if (txIn.PrevOutPoint.IsNull())
 			wr.Write7BitEncoded(0);
 		else {
@@ -152,8 +178,8 @@ void Tx::WriteTxIns(DbWriter& wr) const {
 		wr << byte(typ);		//  | SCRIPT_PKSCRIPT_GEN
 		CoinSerialized::WriteBlob(wr, txIn.Script());
 LAB_TXIN_WROTE:
-		if (txIn.Sequence != UInt32(-1))
-			wr.Write7BitEncoded(UInt32(txIn.Sequence));
+		if (txIn.Sequence != uint32_t(-1))
+			wr.Write7BitEncoded(uint32_t(txIn.Sequence));
 		++nIn;
 	}
 }
@@ -161,7 +187,7 @@ LAB_TXIN_WROTE:
 void TxObj::ReadTxIns(const DbReader& rd) const {
 	CoinEng& eng = Eng();
 	for (int nIn=0; !rd.BaseStream.Eof(); ++nIn) {
-		Int64 blockordBack = rd.Read7BitEncoded(),
+		int64_t blockordBack = rd.Read7BitEncoded(),
 			 blockHeight = -1;
 		pair<int, OutPoint> pp(-1, OutPoint());
 		TxIn txIn;
@@ -242,7 +268,7 @@ void TxObj::ReadTxIns(const DbReader& rd) const {
 					txIn.m_script = sig;
 			}
 		}
-		txIn.Sequence = (typ & 0x80) ? UInt32(-1) : UInt32(rd.Read7BitEncoded());
+		txIn.Sequence = (typ & 0x80) ? uint32_t(-1) : uint32_t(rd.Read7BitEncoded());
 		m_txIns.push_back(txIn);
 	}
 }
@@ -273,7 +299,7 @@ void TxObj::Write(BinaryWriter& wr) const {
 
 void TxObj::Read(const BinaryReader& rd) {
 	ASSERT(!m_bLoadedIns);
-	DBG_LOCAL_IGNORE_NAME(E_COIN_Misbehaving, ignE_COIN_Misbehaving);
+	DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
 
 	Ver = rd.ReadUInt32();
 	ReadPrefix(rd);
@@ -288,23 +314,24 @@ void TxObj::Read(const BinaryReader& rd) {
 	ReadSuffix(rd);
 }
 
+const DateTime LOCKTIME_THRESHOLD(1985, 11, 5, 0, 53, 20);
+
 bool TxObj::IsFinal(int height, const DateTime dt) const {
-    // Time based nLockTime implemented in 0.1.6
     if (LockTimestamp.Ticks == 0)
         return true;
 /*!!!        if (height == 0)
         nBlockHeight = nBestHeight;
     if (nBlockTime == 0)
         nBlockTime = GetAdjustedTime(); */
-    if (LockTimestamp < (LockTimestamp < DateTime::from_time_t(LOCKTIME_THRESHOLD) ? height : dt))
+    if (LockTimestamp < (LockTimestamp<LOCKTIME_THRESHOLD ? DateTime::from_time_t(height) : dt))
         return true;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
+	return AllOf(TxIns(), bind(&TxIn::IsFinal, _1));
+/*!!!	EXT_FOR (const TxIn& txIn, TxIns()) {
         if (!txIn.IsFinal())
             return false;
 	}
-    return true;
+    return true;*/
 }
-
 
 bool Tx::AllowFree(double priority) {
 	CoinEng& eng = Eng();
@@ -361,7 +388,7 @@ bool Tx::IsNewerThan(const Tx& txOld) const {
 	if (TxIns().size() != txOld.TxIns().size())
 		return false;
 	bool r = false;
-	UInt32 lowest = UINT_MAX;
+	uint32_t lowest = UINT_MAX;
 	for (int i=0; i<TxIns().size(); ++i) {
 		const TxIn &txIn = TxIns()[i],
 			&oldIn = txOld.TxIns()[i];
@@ -438,7 +465,7 @@ PubKeyHash160 DbPubKeyToHashValue160(const ConstBuf& mb) {
 		: PubKeyHash160(ToUncompressedKey(mb));
 }
 
-HashValue160 CoinEng::GetHash160ById(Int64 id) {
+HashValue160 CoinEng::GetHash160ById(int64_t id) {
 	EXT_LOCK (Caches.Mtx) {
 		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);	
 		if (it != Caches.m_cachePkIdToPubKey.end())
@@ -460,7 +487,7 @@ HashValue160 CoinEng::GetHash160ById(Int64 id) {
 		Throw(E_EXT_DB_NoRecord);
 }
 
-Blob CoinEng::GetPkById(Int64 id) {
+Blob CoinEng::GetPkById(int64_t id) {
 	EXT_LOCK (Caches.Mtx) {
 		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);	
 		if (it != Caches.m_cachePkIdToPubKey.end())
@@ -489,13 +516,13 @@ bool CoinEng::GetPkId(const HashValue160& hash160, CIdPk& id) {
 	}
 
 	PubKeyHash160 pkh;
-	Blob pk = Db->FindPubkey((Int64)id);
+	Blob pk = Db->FindPubkey((int64_t)id);
 	if (!!pk) {
 		if ((pkh = DbPubKeyToHashValue160(pk)).Hash160 != hash160)
 			return false;
 	} else {
 		Throw(E_EXT_CodeNotReachable); //!!!
-		Db->InsertPubkey((Int64)id, hash160);
+		Db->InsertPubkey((int64_t)id, hash160);
 		pkh = PubKeyHash160(nullptr, hash160);
 	}
 	EXT_LOCK (Caches.Mtx) {
@@ -515,14 +542,14 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 	id = CIdPk(hash160);
 	Blob compressed;
 	try {
-		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE), ignEC_R_POINT_IS_NOT_ON_CURVE);
-		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB), ignERR_R_EC_LIB);
+		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
+		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
 
 		compressed = ToCompressedKey(cbuf);
 	} catch (RCExc) {
 		return false;
 	}
-	Blob pk = Db->FindPubkey((Int64)id);
+	Blob pk = Db->FindPubkey((int64_t)id);
 	if (!!pk) {
 		ConstBuf mb = pk;
 		if (mb.Size != 20) {
@@ -531,14 +558,14 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 		if (hash160 != HashValue160(mb))
 			return false;
 		Throw(E_EXT_CodeNotReachable); //!!!
-		Db->UpdatePubkey((Int64)id, compressed);
+		Db->UpdatePubkey((int64_t)id, compressed);
 		EXT_LOCK (Caches.Mtx) {
 			Caches.m_cachePkIdToPubKey[id] = PubKeyHash160(cbuf, hash160);
 		}
 		return true;
 	}
 	Throw(E_EXT_CodeNotReachable); //!!!
-	Db->InsertPubkey((Int64)id, compressed);
+	Db->InsertPubkey((int64_t)id, compressed);
 	return true;
 }
 
@@ -618,7 +645,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		wr.Write7BitEncoded(tx.LockBlock);
 		tx.m_pimpl->WriteSuffix(wr);
 	} else {
-		UInt64 v = UInt64(tx.m_pimpl->Ver) << 2;
+		uint64_t v = uint64_t(tx.m_pimpl->Ver) << 2;
 		if (tx.IsCoinBase())
 			v |= 1;
 		if (tx.LockBlock)
@@ -632,9 +659,9 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		for (int i=0; i<tx.TxOuts().size(); ++i) {
 			const TxOut& txOut = tx.TxOuts()[i];
 #if UCFG_COIN_PUBKEYID_36BITS
-			UInt64 valtyp = UInt64(txOut.Value) << 6;
+			uint64_t valtyp = uint64_t(txOut.Value) << 6;
 #else
-			UInt64 valtyp = UInt64(txOut.Value) << 5;
+			uint64_t valtyp = uint64_t(txOut.Value) << 5;
 #endif
 			HashValue160 hash160;
 			Blob pk;
@@ -651,11 +678,11 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 					if (it != wr.ConnectJob->Map.end() && !!it->second.PubKey) {
 						idPk = CIdPk(hash160);
 #if UCFG_COIN_PUBKEYID_36BITS
-						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((Int64(idPk) & 0xF00000000)>>30));
+						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((int64_t(idPk) & 0xF00000000)>>30));
 #else
-						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((Int64(idPk) & 0x700000000)>>30));
+						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((int64_t(idPk) & 0x700000000)>>30));
 #endif
-						wr << UInt32(Int64(txOut.m_idPk = idPk));
+						wr << uint32_t(int64_t(txOut.m_idPk = idPk));
 						break;
 					}
 				}
@@ -671,7 +698,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 	CoinEng& eng = Eng();
 
-	UInt64 v;
+	uint64_t v;
 //!!!?	if (tx.Ver != 1)
 //		Throw(E_EXT_New_Protocol_Version);
 
@@ -679,27 +706,27 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 
 	if (!rd.BlockchainDb) {
 		v = rd.Read7BitEncoded();
-		tx.m_pimpl->Ver = (UInt32)v;
+		tx.m_pimpl->Ver = (uint32_t)v;
 		tx.m_pimpl->ReadPrefix(rd);
 		rd >> tx.m_pimpl->m_txIns >> tx.m_pimpl->TxOuts;
 		tx.m_pimpl->m_bLoadedIns = true;
-		tx.m_pimpl->LockBlock = (UInt32)rd.Read7BitEncoded();
+		tx.m_pimpl->LockBlock = (uint32_t)rd.Read7BitEncoded();
 		tx.m_pimpl->ReadSuffix(rd);
 	} else {
 		v = rd.Read7BitEncoded();
-		tx.m_pimpl->Ver = (UInt32)(v >> 2);
+		tx.m_pimpl->Ver = (uint32_t)(v >> 2);
 		tx.m_pimpl->ReadPrefix(rd);
 		tx.m_pimpl->m_bIsCoinBase = v & 1;
 		if (v & 2)
-			tx.LockBlock = (UInt32)rd.Read7BitEncoded();
+			tx.LockBlock = (uint32_t)rd.Read7BitEncoded();
 		tx.m_pimpl->ReadSuffix(rd);
 
 		while (!rd.BaseStream.Eof()) {
-			UInt64 valtyp = rd.Read7BitEncoded();
+			uint64_t valtyp = rd.Read7BitEncoded();
 #if UCFG_COIN_PUBKEYID_36BITS
-			UInt64 value = valtyp>>6;
+			uint64_t value = valtyp>>6;
 #else
-			UInt64 value = valtyp>>5;
+			uint64_t value = valtyp>>5;
 #endif
 			tx.TxOuts().push_back(TxOut(value, Blob(nullptr)));
 			TxOut& txOut = tx.TxOuts().back();
@@ -714,9 +741,9 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 				txOut.m_typ = typ;
 				txOut.m_pkScript = nullptr;
 #if UCFG_COIN_PUBKEYID_36BITS
-				txOut.m_idPk = CIdPk(Int64(rd.ReadUInt32()) | ((valtyp & 0x3C) << 30));
+				txOut.m_idPk = CIdPk(int64_t(rd.ReadUInt32()) | ((valtyp & 0x3C) << 30));
 #else
-				txOut.m_idPk = CIdPk(Int64(rd.ReadUInt32()) | ((valtyp & 0x1C) << 30));
+				txOut.m_idPk = CIdPk(int64_t(rd.ReadUInt32()) | ((valtyp & 0x1C) << 30));
 #endif
 				break;
 			default:
@@ -734,7 +761,7 @@ void Tx::Check() const {
 
 	if (TxIns().empty() || TxOuts().empty())
 		Throw(E_FAIL);
-	Int64 nOut = 0;
+	int64_t nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
         if (!txOut.IsEmpty()) {
 			if (!IsCoinBase() && txOut.Value < eng.ChainParams.MinTxOutAmount)
@@ -750,9 +777,9 @@ void Tx::Check() const {
 	eng.OnCheck(_self);
 }
 
-void CoinEng::UpdateMinFeeForTxOuts(Int64& minFee, const Int64& baseFee, const Tx& tx) {
-    if (minFee < baseFee) {                   // To limit dust spam, require MIN_TX_FEE/MIN_RELAY_TX_FEE if any output is less than 0.01
-		const Int64 cent = ChainParams.CoinValue / 100;
+void CoinEng::UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx) {
+    if (minFee < baseFee) {                   // To limit dust spam, require MIN_TX_FEE/MIN_RELAY_TX_FEE if any output is less than 0.001		//!!! Bitcoin requires min 0.01
+		const int64_t cent = ChainParams.CoinValue / 1000;
 		EXT_FOR (const TxOut txOut, tx.TxOuts()) {
             if (txOut.Value < cent) {
                 minFee = baseFee;
@@ -762,18 +789,18 @@ void CoinEng::UpdateMinFeeForTxOuts(Int64& minFee, const Int64& baseFee, const T
 	}
 }
 
-UInt32 Tx::GetSerializeSize() const {
+uint32_t Tx::GetSerializeSize() const {
 	return EXT_BIN(_self).Size;
 }
 
-Int64 Tx::GetMinFee(UInt32 blockSize, bool bAllowFree, MinFeeMode mode, UInt32 nBytes) const {
+int64_t Tx::GetMinFee(uint32_t blockSize, bool bAllowFree, MinFeeMode mode, uint32_t nBytes) const {
 	CoinEng& eng = Eng();
-    Int64 nBaseFee = mode==MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
+    int64_t nBaseFee = mode==MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
 
-	if (UInt32(-1) == nBytes)
+	if (uint32_t(-1) == nBytes)
 		nBytes = GetSerializeSize();
-    UInt32 nNewBlockSize = blockSize + nBytes;
-    Int64 nMinFee = (1 + (Int64)nBytes / 1000) * nBaseFee;
+    uint32_t nNewBlockSize = blockSize + nBytes;
+    int64_t nMinFee = (1 + (int64_t)nBytes / 1000) * nBaseFee;
 
     if (bAllowFree) {
         if (blockSize == 1) {          
@@ -799,51 +826,30 @@ Int64 Tx::GetMinFee(UInt32 blockSize, bool bAllowFree, MinFeeMode mode, UInt32 n
     return nMinFee;
 }
 
-Int64 Tx::get_ValueOut() const {
+int64_t Tx::get_ValueOut() const {
 	CoinEng& eng = Eng();
 
-	Int64 r = 0;
+	int64_t r = 0;
 	EXT_FOR (const TxOut& txOut, TxOuts()) {
 		eng.CheckMoneyRange(r += eng.CheckMoneyRange(txOut.Value));
 	}
 	return r;
 }
 
-Int64 Tx::get_Fee() const {
+int64_t Tx::get_Fee() const {
 	if (IsCoinBase())
 		return 0;
-	Int64 sum = 0;
+	int64_t sum = 0;
 	EXT_FOR (const TxIn& txIn, TxIns()) {
 		sum += Tx::FromDb(txIn.PrevOutPoint.TxHash).TxOuts().at(txIn.PrevOutPoint.Index).Value;
 	}
 	return sum - ValueOut;
 }
 
-decimal64 Tx::GetDecimalFee() const {
-	return make_decimal64(Fee, -Coin::Eng().ChainParams.Log10CoinValue());
-}
-
 int Tx::get_DepthInMainChain() const {
 	CoinEng& eng = Eng();
 	Block bestBlock = eng.BestBlock();
 	return Height >= 0 && bestBlock ? bestBlock.Height-Height+1 : 0;
-}
-
-int Tx::get_SigOpCount() const {
-	int r = 0;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
-		if (txIn.PrevOutPoint.Index >= 0)
-			r += CalcSigOpCount1(txIn.Script());
-	}
-	EXT_FOR (const TxOut& txOut, TxOuts()) {
-		try {																		//!!! should be more careful checking
-			DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, ignE_EXT_EndOfStream);
-			
-			r += CalcSigOpCount1(txOut.get_PkScript());
-		} catch (RCExc) {			
-		}
-	}
-	return r;
 }
 
 int Tx::GetP2SHSigOpCount(const CTxMap& txMap) const {
@@ -858,29 +864,28 @@ int Tx::GetP2SHSigOpCount(const CTxMap& txMap) const {
 	return r;
 }
 
-void Tx::CheckInOutValue(Int64 nValueIn, Int64& nFees, Int64 minFee, const Target& target) const {
-	Int64 valOut = ValueOut;
+void Tx::CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const Target& target) const {
+	int64_t valOut = ValueOut;
 	if (IsCoinStake())
 		m_pimpl->CheckCoinStakeReward(valOut - nValueIn, target);
 	else {
 		if (nValueIn < valOut)
 			Throw(E_COIN_ValueInLessThanValueOut);
-		Int64 nTxFee = nValueIn-valOut;
-		if (nTxFee < minFee) {
+		int64_t nTxFee = nValueIn-valOut;
+		if (nTxFee < minFee)
 			Throw(E_COIN_TxFeeIsLow);
-		}
 		nFees = Eng().CheckMoneyRange(nFees + nTxFee);
 	}
 }
 
-void Tx::ConnectInputs(CTxMap& txMap, Int32 height, int& nBlockSigOps, Int64& nFees, bool bBlock, bool bMiner, Int64 minFee, const Target& target) const {
+void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64_t& nFees, bool bBlock, bool bMiner, int64_t minFee, const Target& target) const {
 	CoinEng& eng = Eng();
 
 	HashValue hashTx = Hash(_self);
 	int nSigOp = nBlockSigOps + SigOpCount;
 	if (!IsCoinBase()) {
 		vector<Tx> vTxPrev;
-		Int64 nValueIn = 0;
+		int64_t nValueIn = 0;
 		if (!eng.LiteMode) {
 //			TRC(3, TxIns.size() << " TxIns");
 
@@ -890,8 +895,8 @@ void Tx::ConnectInputs(CTxMap& txMap, Int32 height, int& nBlockSigOps, Int64& nF
 		
 				Tx txPrev;
 				if (bBlock || bMiner) {
-					CTxMap::iterator it = txMap.find(op.TxHash);
-					txPrev = it!=txMap.end() ? it->second : FromDb(op.TxHash);
+					CTxMap::iterator it = view.TxMap.find(op.TxHash);
+					txPrev = it!=view.TxMap.end() ? it->second : FromDb(op.TxHash);
 				} else {
 					EXT_LOCK (eng.TxPool.Mtx) {
 						CoinEng::CTxPool::CHashToTx::iterator it = eng.TxPool.m_hashToTx.find(op.TxHash);
@@ -912,6 +917,10 @@ void Tx::ConnectInputs(CTxMap& txMap, Int32 height, int& nBlockSigOps, Int64& nF
 				if (txPrev.IsCoinBase())
 					eng.CheckCoinbasedTxPrev(height, txPrev);
 
+				if (!view.HasInput(op))
+					Throw(E_COIN_InputsAlreadySpent);
+				view.SpendInput(op);
+
 				if (!bBlock || eng.BestBlockHeight() > eng.ChainParams.LastCheckpointHeight-INITIAL_BLOCK_THRESHOLD)	// Skip ECDSA signature verification when connecting blocks (fBlock=true) during initial download
 					VerifySignature(txPrev, _self, i);
 
@@ -929,7 +938,24 @@ void Tx::ConnectInputs(CTxMap& txMap, Int32 height, int& nBlockSigOps, Int64& nF
 	if (nSigOp > MAX_BLOCK_SIGOPS)
 		Throw(E_COIN_TxTooManySigOps);
 	nBlockSigOps = nSigOp;
-	txMap[hashTx] = _self;
+	view.TxMap[hashTx] = _self;
+}
+
+int Tx::get_SigOpCount() const {
+	int r = 0;
+	EXT_FOR (const TxIn& txIn, TxIns()) {
+		if (txIn.PrevOutPoint.Index >= 0)
+			r += CalcSigOpCount1(txIn.Script());
+	}
+	EXT_FOR (const TxOut& txOut, TxOuts()) {
+		try {																		//!!! should be more careful checking
+			DBG_LOCAL_IGNORE(E_EXT_EndOfStream);
+			
+			r += CalcSigOpCount1(txOut.get_PkScript());
+		} catch (RCExc) {			
+		}
+	}
+	return r;
 }
 
 DbWriter& operator<<(DbWriter& wr, const CTxes& txes) {

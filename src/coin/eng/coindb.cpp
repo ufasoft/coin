@@ -1,10 +1,15 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
 #include <el/crypto/ext-openssl.h>
 
-
-//#include "coineng.h"
 #include "coin-protocol.h"
 #include "script.h"
 #include "eng.h"
@@ -21,7 +26,6 @@ static SqliteMalloc s_sqliteMalloc;
 static SqliteVfs s_sqliteVfs;			// enable atomic writes
 #	endif
 
-//static MMappedSqliteVfs s_sqliteMMappedVfs;	//!!!
 #endif
 
 CoinDb::CoinDb()
@@ -31,11 +35,12 @@ CoinDb::CoinDb()
 	,	CmdGetBalance("SELECT SUM(value) FROM coins INNER JOIN mytxes ON txid=mytxes.id WHERE mytxes.netid=? AND (blockord > -2 OR fromme)"	, m_dbWallet)
 	,	CmdRecipients("SELECT hash160, comment FROM pubkeys WHERE netid=?"																				, m_dbWallet)
 	,	CmdGetTxId("SELECT id FROM mytxes WHERE netid=? AND hash=?"																						, m_dbWallet)
+	,	CmdGetTx("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE netid=? AND hash=?"												, m_dbWallet)
+	,	CmdGetTxes("SELECT mytxes.timestamp, mytxes.data, mytxes.blockord, mytxes.comment, value, addr160 FROM usertxes INNER JOIN mytxes ON txid=mytxes.id WHERE mytxes.netid=? ORDER BY mytxes.timestamp DESC"	, m_dbWallet)
 	,	CmdPendingTxes("SELECT timestamp, data, blockord, comment, fromme FROM mytxes WHERE (blockord BETWEEN -14 AND -1) AND netid=? ORDER BY timestamp"	, m_dbWallet)					//!!! timestamp < " << to_time_t(m_eng->.Chain.DtBestReceived) - 5*60 << " AND
 	,	CmdSetBestBlockHash("UPDATE nets SET bestblockhash=? WHERE netid=?"																				, m_dbWallet)
 	,	CmdFindCoin("SELECT rowid FROM coins WHERE txid=? AND nout=?"																					, m_dbWallet)
 	,	CmdInsertCoin("INSERT INTO coins (txid, nout, value, keyid, pkscript) VALUES(?, ?, ?, ?, ?)"													, m_dbWallet)
-	,	m_cmdIsBanned("SELECT ban FROM peers WHERE ip=?"																								, m_dbPeers)
 	,	CmdPeerByIp("SELECT rowid FROM peers WHERE ip=?"																								, m_dbPeers)
 	,	CmdInsertPeer("INSERT INTO peers (ip, lastlive, ban) VALUES(?, ?, ?)"																			, m_dbPeers)
 	,	CmdUpdatePeer("UPDATE peers SET lastlive=?, ban=? WHERE rowid=?"																				, m_dbPeers)
@@ -47,8 +52,8 @@ CoinDb::CoinDb()
 	SoftPortRestriction = true;
 	IrcManager.m_pTr = &m_tr;
 
-	DbWalletFilePath = Path::Combine(AfxGetCApp()->get_AppDataDir(), "wallet.db");
-	DbPeersFilePath = Path::Combine(AfxGetCApp()->get_AppDataDir(), "peers.db");
+	DbWalletFilePath = AfxGetCApp()->get_AppDataDir() / "wallet.db";
+	DbPeersFilePath = AfxGetCApp()->get_AppDataDir() / "peers.db";
 	MsgLoopThread = new Coin::MsgLoopThread(m_tr, _self);
 }
 
@@ -79,10 +84,10 @@ void CoinDb::InitAes(Aes& aes, RCString password, byte encrtyptAlgo) {
 
 MyKeyInfo& CoinDb::AddNewKey(MyKeyInfo& ki) {
 	Aes aes;
-	if (!m_masterPassword.IsEmpty())
+	if (!m_masterPassword.empty())
 		InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 		
-	CmdAddNewKey.Bind(1, !m_masterPassword.IsEmpty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
+	CmdAddNewKey.Bind(1, !m_masterPassword.empty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
 		.Bind(2, ToCompressedKey(ki.PubKey))
 		.Bind(3, to_time_t(DateTime::UtcNow()))
 		.Bind(4, ki.Comment)
@@ -170,7 +175,7 @@ void CoinDb::CreateDbWallet() {
 	if (NeedPassword)
 		Throw(HRESULT_FROM_WIN32(ERROR_PASSWORD_RESTRICTION));
 	
-	Directory::CreateDirectory(Path::GetDirectoryName(DbWalletFilePath));
+	create_directories(DbWalletFilePath.parent_path());
 	m_dbWallet.Create(DbWalletFilePath);
 
 	try {
@@ -219,12 +224,12 @@ void CoinDb::CreateDbWallet() {
 		SetUserVersion(m_dbWallet);
 
 		RandomRef().NextBytes(Buf(Salt.data(), sizeof Salt));
-		m_dbWallet.ExecuteNonQuery(EXT_STR("INSERT INTO globals (name, value) VALUES(\'salt\', " << *(Int64*)Salt.data() << ")"));
+		m_dbWallet.ExecuteNonQuery(EXT_STR("INSERT INTO globals (name, value) VALUES(\'salt\', " << *(int64_t*)Salt.data() << ")"));
 
 		GenerateNewAddress("", 2);	//!!! reserve more keys
 	} catch (RCExc) {
 		m_dbWallet.Close();
-		File::Delete(DbWalletFilePath);
+		sys::remove(DbWalletFilePath);
 		throw;
 	}
 }
@@ -244,15 +249,8 @@ void CoinDb::CreateDbPeers() {
 		SetUserVersion(m_dbPeers);
 	} catch (RCExc) {
 		m_dbPeers.Close();
-		File::Delete(DbPeersFilePath);
+		sys::remove(DbPeersFilePath);
 		throw;
-	}
-}
-
-bool CoinDb::IsBanned(const IPAddress& ip) {
-	EXT_LOCK (MtxDbPeers) {		
-		DbDataReader dr = m_cmdIsBanned.Bind(1, ip.GetAddressBytes()).ExecuteReader();
-		return dr.Read() && dr.GetInt32(0);
 	}
 }
 
@@ -273,10 +271,8 @@ void CoinDb::UpdateOrInsertPeer(const Peer& peer) {
 }
 
 void CoinDb::BanPeer(Peer& peer) {
-	peer.Banned = true;
-	EXT_LOCK (MtxDbPeers) {
-		UpdateOrInsertPeer(peer);
-	}
+	base::BanPeer(peer);
+	EXT_LOCKED(MtxDbPeers, UpdateOrInsertPeer(peer));
 }
 
 void CoinDb::SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers) {
@@ -292,14 +288,14 @@ void CoinDb::SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers) {
 				DbDataReader dr = CmdEndpointByIp.Bind(1, idPeersNet).Bind(2, blobIp).ExecuteReader();
 				if (dr.Read()) {
 					CmdUpdateEndpoint.Bind(1, peer.get_EndPoint().Port)
-						.Bind(2, (Int64)peer.Services)
+						.Bind(2, (int64_t)peer.Services)
 						.Bind(3, dr.GetInt32(0))
 						.ExecuteNonQuery();
 				} else {
 					CmdInsertEndpoint.Bind(1, idPeersNet)
 						.Bind(2, blobIp)
 						.Bind(3, peer.get_EndPoint().Port)
-						.Bind(4, (Int64)peer.Services)
+						.Bind(4, (int64_t)peer.Services)
 						.ExecuteNonQuery();
 				}
 			}
@@ -316,17 +312,17 @@ void CoinDb::OnIpDetected(const IPAddress& ip) {
 }
 
 bool CoinDb::get_WalletDatabaseExists() {
-	return File::Exists(DbWalletFilePath);
+	return exists(DbWalletFilePath);
 }
 
 bool CoinDb::get_PeersDatabaseExists() {
-	return File::Exists(DbPeersFilePath);
+	return exists(DbPeersFilePath);
 }
 
 void CoinDb::LoadKeys(RCString password) {
 	Aes aesA;
 	Aes aesB;
-	if (!password.IsEmpty()) {
+	if (!password.empty()) {
 		InitAes(aesA, password, 'A');
 		InitAes(aesB, password, 'B');
 	}
@@ -403,11 +399,16 @@ void CoinDb::LoadKeys(RCString password) {
 		}
 #endif
 		Hash160ToMyKey = keys;
-		Filter = new CoinFilter(Hash160ToMyKey.size()*2, 0.01, Ext::Random().Next(), CoinFilter::BLOOM_UPDATE_ALL);
+		Filter = new CoinFilter(Hash160ToMyKey.size()*2, 0.0000001, Ext::Random().Next(), CoinFilter::BLOOM_UPDATE_ALL);
 		EXT_FOR (const CoinDb::CHash160ToMyKey::value_type& kv, Hash160ToMyKey) {
 			Filter->Insert(kv.first);
 			Filter->Insert(kv.second.PubKey);
 		}
+#ifdef X_DEBUG//!!!D
+		EXT_FOR (const CoinDb::CHash160ToMyKey::value_type& kv, Hash160ToMyKey) {
+			ASSERT(Filter->Contains(kv.first) && Filter->Contains(kv.second.PubKey));
+		}
+#endif
 	}
 	if (!NeedPassword)
 		TopUpPool();
@@ -418,7 +419,7 @@ void CoinDb::Load() {
 		m_bLoaded = true;
 		DetectGlobalIp::Start(&m_tr);
 
-		if (!!DbWalletFilePath) {
+		if (!DbWalletFilePath.empty()) {
 			TRC(1, "DbWallet File: " << DbWalletFilePath);
 
 			bool bOpened = false;
@@ -440,11 +441,11 @@ void CoinDb::Load() {
 			m_dbWallet.ExecuteNonQuery("PRAGMA locking_mode=EXCLUSIVE");
 
 			LoadKeys();
-			Int64 salt = SqliteCommand("SELECT value FROM globals WHERE name=\'salt\'", m_dbWallet).ExecuteInt64Scalar();
+			int64_t salt = SqliteCommand("SELECT value FROM globals WHERE name=\'salt\'", m_dbWallet).ExecuteInt64Scalar();
 			memcpy(&Salt[0], &salt, sizeof Salt);
 		}			
 
-		if (!!DbPeersFilePath) {
+		if (!DbPeersFilePath.empty()) {
 			if (PeersDatabaseExists) {
 				m_dbPeers.Open(DbPeersFilePath, FileAccess::ReadWrite, FileShare::None);
 				if (CheckUserVersion(m_dbPeers) < VER_INDEXED_PEERS) {
@@ -458,6 +459,10 @@ void CoinDb::Load() {
 				CreateDbPeers();
 			DateTime now = DateTime::UtcNow();
 			SqliteCommand(EXT_STR("UPDATE peers SET ban=0 WHERE lastlive < " << to_time_t(now-TimeSpan::FromDays(1))), m_dbPeers).ExecuteNonQuery();
+
+			SqliteCommand cmdBanned("SELECT ip FROM peers WHERE ban", m_dbPeers);
+			for (DbDataReader rd=cmdBanned.ExecuteReader(); rd.Read();)
+				BannedIPs.insert(IPAddress(rd.GetBytes(0)));
 		}
 
 		if (ListeningPort != -1)
@@ -495,14 +500,14 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 	CheckPasswordPolicy(newPassword);
 	try {
 		LoadKeys(oldPassword);	
-	} catch (RCExc ex) {
-		if (HResultInCatch(ex) == HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE))
+	} catch (Exception& ex) {
+		if (ex.code() == error_condition(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE), hresult_category()))
 			Throw(HRESULT_FROM_WIN32(ERROR_WRONG_PASSWORD));
 		throw;
 	}
 
 	Aes aes;
-	if (!newPassword.IsEmpty())
+	if (!newPassword.empty())
 		InitAes(aes, newPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 
 	EXT_LOCK (MtxDb) {
@@ -510,7 +515,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		TransactionScope dbtx(m_dbWallet);
 		for (CHash160ToMyKey::iterator it=Hash160ToMyKey.begin(), e=Hash160ToMyKey.end(); it!=e; ++it) {
 			const MyKeyInfo& ki = it->second;
-			cmd.Bind(1, !newPassword.IsEmpty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
+			cmd.Bind(1, !newPassword.empty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
 				.Bind(2, ki.KeyRowid)
 				.ExecuteNonQuery();
 		}

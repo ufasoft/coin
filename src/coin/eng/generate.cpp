@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "coin-protocol.h"
@@ -37,9 +44,9 @@ private:
 
 	vector<WalletBase*> m_childWallets;
 	int m_merkleSize;
-	UInt32 m_merkleNonce;
+	uint32_t m_merkleNonce;
 	DateTime m_dtPrevGetwork;
-	UInt32 m_extraNonce;
+	uint32_t m_extraNonce;
 	Block m_prevBlock;
 	
 	mutex m_mtxMerkleToBlock;
@@ -88,7 +95,7 @@ Block WalletBase::CreateNewBlock() {
 	tx.m_pimpl->m_txIns.resize(1);
 	tx.m_pimpl->m_bLoadedIns = true;
 	tx.TxOuts().resize(1);
-	Int64 nFees = 0;
+	int64_t nFees = 0;
 	EXT_LOCK (m_eng->Mtx) {
 		MemoryStream ms;
 		ScriptWriter wr(ms);
@@ -139,27 +146,28 @@ Block WalletBase::CreateNewBlock() {
 		block.m_pimpl->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
 		block.m_pimpl->Nonce = 0;
 
-		CTxMap txMap;
+		CoinsView view;
 		int nBlockSigOps = 100;
-		for (UInt32 cbBlockSize=1000; !mapPriority.empty();) {
+		for (uint32_t cbBlockSize=1000; !mapPriority.empty();) {
 			auto it = mapPriority.begin();
 			double priority = -it->first;
 			Tx tx = it->second;
 			mapPriority.erase(it);		
 
-			UInt32 cbNewBlockSize = cbBlockSize + tx.GetSerializeSize();
+			uint32_t cbNewBlockSize = cbBlockSize + tx.GetSerializeSize();
 
 			if (cbNewBlockSize < MAX_BLOCK_SIZE_GEN) {
 				bool bAllowFree = cbNewBlockSize<400 || Tx::AllowFree(priority);
-				Int64 minFee = tx.GetMinFee(cbBlockSize, cbNewBlockSize<400 || Tx::AllowFree(priority));
+				int64_t minFee = tx.GetMinFee(cbBlockSize, cbNewBlockSize<400 || Tx::AllowFree(priority));
 
-				CTxMap txMapTmp(txMap);
+				CoinsView viewTmp;
+				viewTmp.TxMap = view.TxMap;
 				try {
-					tx.ConnectInputs(txMapTmp, m_eng->BestBlockHeight()+1, nBlockSigOps, nFees, false, true, minFee, block.DifficultyTarget);
+					tx.ConnectInputs(viewTmp, m_eng->BestBlockHeight()+1, nBlockSigOps, nFees, false, true, minFee, block.DifficultyTarget);
 				} catch (RCExc) {
 					continue;
 				}
-				swap(txMap, txMapTmp);
+				swap(view, viewTmp);
 				block.Add(tx);
 				cbBlockSize = cbNewBlockSize;
 
@@ -206,7 +214,7 @@ LAB_DUP_CHAIN_ID:
 	else {
 		for (m_merkleSize=1; m_childWallets.size()>m_merkleSize;)
 			m_merkleSize *= 2;
-		for (m_merkleNonce=0; m_merkleNonce<=UInt32(-1); ++m_merkleNonce) {						// find non-clashing nonce
+		for (m_merkleNonce=0; m_merkleNonce<=uint32_t(-1); ++m_merkleNonce) {						// find non-clashing nonce
 			set<int> idxes;
 			EXT_FOR (WalletBase *w, m_childWallets) {
 				if (idxes.insert(CalcMerkleIndex(m_merkleSize, w->m_eng->ChainParams.ChainId, m_merkleNonce)).second)
@@ -261,7 +269,7 @@ void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
 		MemoryStream ms;
 		ScriptWriter wr(ms);
 		if (block.Ver >= 2)
-			wr << Int64(block.Height);
+			wr << int64_t(block.Height);
 		wr << BigInteger(to_time_t(block.get_Timestamp())) << BigInteger(m_extraNonce) << OP_2 << blob;
 		Tx& tx = block.GetFirstTxRef();
 		tx.m_pimpl->m_txIns.at(0).put_Script(ms);
@@ -333,14 +341,14 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	if (wd.Data.Size != 128)
 		Throw(E_INVALIDARG);
 	Blob data = wd.Data;
-	UInt32 *pd = (UInt32*)data.data();
+	uint32_t *pd = (uint32_t*)data.data();
 	for (int i=0; i<128/4; ++i)
 		pd[i] = _byteswap_ulong(pd[i]);
 
 	HashValue merkle(ConstBuf(data.constData()+36, 32));
 
 	Block block(nullptr);
-	WalletBase *wb;
+	WalletBase *wb = 0;
 	EXT_LOCK (m_mtxMerkleToBlock) {
 		auto it = m_merkleToBlock.find(merkle);
 		if (it == m_merkleToBlock.end())
@@ -353,7 +361,7 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	block.m_pimpl->m_hash.reset();
 #ifdef X_DEBUG//!!!D
 	HashValue hash = Hash(block);
-	if (*(UInt32*)(hash.data()+28) != 0) {
+	if (*(uint32_t*)(hash.data()+28) != 0) {
 		block.m_pimpl->m_hash.reset();
 		hash = Hash(block);
 	}

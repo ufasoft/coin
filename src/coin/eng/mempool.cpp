@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -36,10 +35,11 @@ bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	tx.Check();
 	if (tx.IsCoinBase())
 		Throw(E_COIN_Misbehaving);
-	UInt32 serSize = tx.GetSerializeSize();
+	uint32_t serSize = tx.GetSerializeSize();
+/*!!!?
 	int sigOpCount = tx.SigOpCount;
 	if (sigOpCount > serSize/34 || serSize < 100)
-		Throw(E_COIN_Misbehaving);
+		Throw(E_COIN_Misbehaving);		*/
 	HashValue hash = Hash(tx);
 
 	if (HaveTxInDb(hash))
@@ -65,10 +65,12 @@ bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 			}
 		}
 	}
-	CTxMap txMap;
+	CoinsView view;
 	int nBlockSigOps = 0;
-	Int64 nFees = 0;
-	tx.ConnectInputs(txMap, BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, AllowFreeTxes, MinFeeMode::Relay), ChainParams.MaxTarget);	//!!!? MaxTarget
+	int64_t nFees = 0;
+	//!!!TODO:  accepts only transaction with inputs already in the DB. view should check inputs in the mem pool too
+	tx.ConnectInputs(view, BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, AllowFreeTxes, MinFeeMode::Relay), ChainParams.MaxTarget);	//!!!? MaxTarget
+
 	if (nFees < tx.GetMinFee(1000, AllowFreeTxes, MinFeeMode::Relay))
 		Throw(E_COIN_TxFeeIsLow);
 	if (nFees < GetMinRelayTxFee()) {
@@ -123,34 +125,38 @@ void CoinEng::AddOrphan(const Tx& tx) {
 
 void TxMessage::Process(P2P::Link& link) {
 	CoinEng& eng = static_cast<CoinEng&>(*link.Net);
+	CoinLink& clink = static_cast<CoinLink&>(link);
 
 	HashValue hash = Hash(Tx);
 		
 	if (eng.LiteMode) {
-		EXT_LOCK (eng.Mtx) {
-			if (!eng.CheckedFilteredTxHashes.count(hash))
-				return;
+		auto it = find(clink.m_curMatchedHashes.begin(), clink.m_curMatchedHashes.end(), hash);
+		if (it != clink.m_curMatchedHashes.end()) {
+			clink.m_curMerkleBlock.m_pimpl->m_txes.push_back(Tx);
+			clink.m_curMatchedHashes.erase(it);
+			if (clink.m_curMatchedHashes.empty()) {
+				Block block = exchange(clink.m_curMerkleBlock, Block(nullptr));
+				block.Process(&link);
+			}
+			return;
 		}
-		if (eng.m_iiEngEvents)
-			eng.m_iiEngEvents->OnProcessTx(Tx);
-		return;
 	}
 
 	vector<HashValue> vQueue;
 
 	EXT_LOCK (eng.TxPool.Mtx) {
 		try {
-			DBG_LOCAL_IGNORE_NAME(E_COIN_TxNotFound, ignE_COIN_TxNotFound);
-			DBG_LOCAL_IGNORE_NAME(E_COIN_Misbehaving, ignE_COIN_Misbehaving);
-			DBG_LOCAL_IGNORE_NAME(E_COIN_TxFeeIsLow, ignE_COIN_TxFeeIsLow);				//!!!T
+			DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
+			DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
+			DBG_LOCAL_IGNORE(E_COIN_TxFeeIsLow);				//!!!T
 
 			if (!eng.AddToPool(Tx, vQueue))
 				return;
-		} catch (const TxNotFoundExc&) {
+		} catch (const TxNotFoundException&) {
 			eng.AddOrphan(Tx);
 			return;
 		}
-		DBG_LOCAL_IGNORE_NAME(E_COIN_TxNotFound, ignE_COIN_TxNotFound);	//!!!T
+		DBG_LOCAL_IGNORE(E_COIN_TxNotFound);	//!!!T
 		for (int i=0; i<vQueue.size(); ++i) {
 			HashValue hash = vQueue[i];
 			pair<CoinEng::CTxPool::CHashToHash::iterator, CoinEng::CTxPool::CHashToHash::iterator> range = eng.TxPool.m_prevHashToOrphanHash.equal_range(hash);

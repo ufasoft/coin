@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include "eng.h"
@@ -13,24 +20,24 @@ public:
 
 	PosTxObj()
 		:	Timestamp(DateTime::UtcNow())
-		,	m_coinAge(numeric_limits<UInt64>::max())
+		,	m_coinAge(numeric_limits<uint64_t>::max())
 	{}
 
-	Int64 GetCoinAge() const override;
+	int64_t GetCoinAge() const override;
 protected:
 	PosTxObj *Clone() const override { return new PosTxObj(_self); }
 
 	void WritePrefix(BinaryWriter& wr) const override {
-		wr << (UInt32)to_time_t(Timestamp);
+		wr << (uint32_t)to_time_t(Timestamp);
 	}
 
 	void ReadPrefix(const BinaryReader& rd) override {
 		Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	}
 
-	void CheckCoinStakeReward(Int64 reward, const Target& target) const override;
+	void CheckCoinStakeReward(int64_t reward, const Target& target) const override;
 private:
-	mutable Int64 m_coinAge;
+	mutable int64_t m_coinAge;
 };
 
 class PosBlockObj : public BlockObj {
@@ -38,7 +45,7 @@ class PosBlockObj : public BlockObj {
 	typedef BlockObj base;
 public:
 	Blob Signature;
-	optional<UInt64> StakeModifier;	
+	optional<uint64_t> StakeModifier;	
 
 	static PosBlockObj& Of(const Block& block) {
 		return *dynamic_cast<PosBlockObj*>(block.m_pimpl.get());
@@ -77,7 +84,7 @@ public:
 	const PosTxObj& GetTxObj(int idx) const { return *(const PosTxObj*)(get_Txes()[idx].m_pimpl.get()); }
 
 	virtual void CheckCoinStakeTimestamp() {
-		DBG_LOCAL_IGNORE_NAME(E_COIN_TimestampViolation, E_COIN_TimestampViolation);
+		DBG_LOCAL_IGNORE(E_COIN_TimestampViolation);
 
 		if (GetTxObj(1).Timestamp != Timestamp)
 			Throw(E_COIN_TimestampViolation);
@@ -99,10 +106,12 @@ public:
 	}
 
 	virtual Target GetTargetLimit(const Block& block) { return Eng().ChainParams.MaxTarget; }
+protected:
+	virtual bool IsV04Protocol() const { return false; }
 private:
 	mutable optional<HashValue> m_hashProofOfStake;
 
-	UInt32 StakeModifierChecksum(UInt64 modifier);
+	uint32_t StakeModifierChecksum(uint64_t modifier);
 	void ComputeStakeModifier();
 };
 
@@ -111,12 +120,12 @@ class PosEng : public CoinEng {
 public:
 	PosEng(CoinDb& cdb);
 
-	virtual Int64 GetProofOfStakeReward(Int64 coinAge, const Target& target, const DateTime& dt);
+	virtual int64_t GetProofOfStakeReward(int64_t coinAge, const Target& target, const DateTime& dt);
 protected:
-	Int64 GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
+	int64_t GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
 	bool MiningAllowed() override { return false; }
-	Int64 GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
-	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
+	int64_t GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
+	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
 
 	TxObj *CreateTxObj() override { return new PosTxObj; }
 	virtual TimeSpan GetTargetSpacingWorkMax(const DateTime& dt) { return TimeSpan::FromHours(2); }

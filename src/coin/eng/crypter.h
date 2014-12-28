@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #pragma once
 
@@ -21,8 +20,8 @@ public:
     std::vector<unsigned char> vchSalt;
     // 0 = EVP_sha512()
     // 1 = scrypt()
-    UInt32 nDerivationMethod;
-    UInt32 nDeriveIterations;
+    uint32_t nDerivationMethod;
+    uint32_t nDeriveIterations;
     // Use this for more parameters to key derivation,
     // such as the various parameters to scrypt
     std::vector<unsigned char> vchOtherDerivationParameters;
@@ -45,8 +44,8 @@ typedef Blob CKeyingMaterial;
 class CWalletKey : public CPersistent {
 public:
 	Blob vchPrivKey;
-    Int64 nTimeCreated;
-    Int64 nTimeExpires;
+    int64_t nTimeCreated;
+    int64_t nTimeExpires;
     String strComment;
 
 	void Write(BinaryWriter& wr) const override;

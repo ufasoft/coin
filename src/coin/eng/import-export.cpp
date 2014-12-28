@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 #include <el/xml.h>
@@ -40,7 +39,7 @@ static pair<String, Blob> SplitKey(const ConstBuf& cbuf) {
 		if (k == "tx")
 			r.second = rd.ReadBytes(32);
 		else if (k == "pool") {
-			Int64 idx = rd.ReadInt64();
+			int64_t idx = rd.ReadInt64();
 		} else if (k=="name" || k=="key" || k=="ckey" || k=="mkey" || k=="setting")
 			r.second = CoinSerialized::ReadBlob(rd);
 		else if (k=="version" ||
@@ -80,7 +79,7 @@ void CoinDb::ImportXml(RCString filepath) {
 		ki.Timestamp = DateTime::ParseExact(rd.GetAttribute("timestamp"), "u");
 
 		String s = rd.GetAttribute("comment");
-		if (!s.IsEmpty())
+		if (!s.empty())
 			ki.Comment = s;
 		if (rd.GetAttribute("reserved") == "1")
 			ki.Comment = nullptr;
@@ -112,7 +111,7 @@ void CoinDb::ImportDat(RCString filepath, RCString password) {
 	set<Blob> setPrivKeys;
 	vector<MyKeyInfo> myKeys;
 	unordered_map<HashValue160, Address> pubkeyToAddress;
-	unordered_map<UInt32, CMasterKey> masterKeys;
+	unordered_map<uint32_t, CMasterKey> masterKeys;
 	vector<pair<Blob, Blob>> ckeys;
 	unordered_set<HashValue160> setReserved;
 	
@@ -133,7 +132,7 @@ void CoinDb::ImportDat(RCString filepath, RCString password) {
 					pubkeyToAddress.insert(make_pair(h160, a));
 				}
 			} else if (pp.first == "mkey") {
-				UInt32 id = *(UInt32*)pp.second.data();
+				uint32_t id = *(uint32_t*)pp.second.data();
 				CMasterKey mkey;
 				BinaryReader(CMemReadStream(val)) >> mkey;
 				masterKeys.insert(make_pair(id, mkey));
@@ -170,7 +169,7 @@ void CoinDb::ImportDat(RCString filepath, RCString password) {
 	}
 
 	if (!masterKeys.empty()) {
-		if (password.IsEmpty())
+		if (password.empty())
 			Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
 
 		CCrypter crypter;
@@ -237,11 +236,11 @@ LAB_DECRYPTED:
 						if (eng.m_iiEngEvents) {
 							try {
 								TRC(2, a.Comment);
-								DBG_LOCAL_IGNORE_NAME(E_COIN_RecipientAlreadyPresents, ignE_COIN_RecipientAlreadyPresents);
-								DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, 19), ignDup);
+								DBG_LOCAL_IGNORE(E_COIN_RecipientAlreadyPresents);
+								DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, 19));
 								eng.m_iiEngEvents->AddRecipient(a);
-							} catch (RCExc ex) {
-								if (HResultInCatch(ex) != E_COIN_RecipientAlreadyPresents)
+							} catch (Exception& ex) {
+								if (ToHResult(ex) != E_COIN_RecipientAlreadyPresents)
 									throw;
 							}
 						}
@@ -253,19 +252,19 @@ LAB_DECRYPTED:
 	}
 }
 
-void CoinDb::ImportWallet(RCString filepath, RCString password) {
-	if (Path::GetExtension(filepath).ToUpper() == ".XML")
+void CoinDb::ImportWallet(const path& filepath, RCString password) {
+	if (ToLower(filepath.extension()) == ".xml")
 		ImportXml(filepath);
 	else
 		ImportDat(filepath, password);
 	//TODO Start rescans	
 }
 
-void CoinDb::ExportWalletToXml(RCString filepath) {
+void CoinDb::ExportWalletToXml(const path& filepath) {
 	if (NeedPassword)
 		Throw(HRESULT_FROM_WIN32(ERROR_PWD_TOO_SHORT));
 	
-	ofstream ofs(filepath.ToOsString());	
+	ofstream ofs(String(filepath).ToOsString());	
 	XmlTextWriter w(ofs);
 	w.Formatting = XmlFormatting::Indented;
 	w.WriteStartDocument();
@@ -283,7 +282,7 @@ void CoinDb::ExportWalletToXml(RCString filepath) {
 				xoKey["timestamp"] = ki.Timestamp.ToString("u");
 				if (dr.GetInt32(1))
 					xoKey["reserved"] = "1";
-				if (!ki.Comment.IsEmpty()) {
+				if (!ki.Comment.empty()) {
 					xoKey["comment"] = ki.Comment;
 				}
 			}
@@ -296,7 +295,7 @@ void CoinDb::ExportWalletToXml(RCString filepath) {
 				xo["netname"] = dr.GetString(2);
 				xo["hash160"] = EXT_STR(Blob(dr.GetBytes(0)));
 				String comment = dr.GetString(1);
-				if (!comment.IsEmpty())
+				if (!comment.empty())
 					xo["comment"] = comment;
 			}
 		}
@@ -309,7 +308,7 @@ void CoinDb::ExportWalletToXml(RCString filepath) {
 				xo["timestamp"] = DateTime::from_time_t(dr.GetInt64(1)).ToString("u");
 				xo["netname"] = dr.GetString(2);
 				String comment = dr.GetString(3);
-				if (!comment.IsEmpty())
+				if (!comment.empty())
 					xo["comment"] = comment;
 			}
 		}

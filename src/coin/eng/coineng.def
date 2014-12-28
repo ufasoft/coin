@@ -2,30 +2,43 @@ LIBRARY
 
 EXPORTS
 
-CoinCreateObj													@ 9
+CoinCreateObj																									@ 9
 
-?CreateNewBlock@WalletBase@Coin@@UAE?AVBlock@2@XZ				@ 20 NONAME
-??0CoinDb@Coin@@QAE@XZ											@ 21 NONAME
-??1CoinDb@Coin@@QAE@XZ											@ 22 NONAME
-??0CCoinEngThreadKeeper@Coin@@QAE@PAVCoinEng@1@@Z				@ 23 NONAME
-?LookupBlock@CoinEng@Coin@@QAE?AVBlock@2@ABVHashValue@2@@Z		@ 24 NONAME
-?GetBlockByHeight@CoinEng@Coin@@QAE?AVBlock@2@I@Z				@ 25 NONAME
-?BestBlockHeight@CoinEng@Coin@@QAEHXZ							@ 26 NONAME
-;??0Address@Coin@@QAE@ABVString@Ext@@PAVCoinEng@1@@Z				@ 27 NONAME
-?get_ValueOut@Tx@Coin@@QBE_JXZ									@ 28 NONAME
-?Read@Tx@Coin@@UAEXABVBinaryReader@Ext@@@Z						@ 29 NONAME
-?Write@Tx@Coin@@UBEXAAVBinaryWriter@Ext@@@Z						@ 30 NONAME
-??0Target@Coin@@QAE@I@Z											@ 31 NONAME
-??1CCoinEngThreadKeeper@Coin@@QAE@XZ							@ 32 NONAME
-?Stop@CoinEng@Coin@@QAEXXZ										@ 33 NONAME
-?BestBlock@CoinEng@Coin@@QAE?AVBlock@2@XZ						@ 34 NONAME
-;??0Address@Coin@@QAE@ABVHashValue160@1@ABVString@Ext@@@Z		@ 35 NONAME
-?get_Txes@BlockObj@Coin@@QBEABVCTxes@2@XZ						@ 36 NONAME
-?GetSerializeSize@Tx@Coin@@QBEIXZ								@ 37 NONAME
-?get_PkScript@TxOut@Coin@@QBEABVBlob@Ext@@XZ					@ 38 NONAME
-?TryFromDb@Tx@Coin@@SA_NABVHashValue@2@PAV12@@Z					@ 39 NONAME
-?FromDb@Tx@Coin@@SA?AV12@ABVHashValue@2@@Z						@ 40 NONAME
+?CreateNewBlock@WalletBase@Coin@@UAE?AVBlock@2@XZ																@ 20 NONAME
+??0CoinDb@Coin@@QAE@XZ																							@ 21 NONAME
+??1CoinDb@Coin@@QAE@XZ																							@ 22 NONAME
+??0CCoinEngThreadKeeper@Coin@@QAE@PAVCoinEng@1@@Z																@ 23 NONAME
+?LookupBlock@CoinEng@Coin@@QAE?AVBlock@2@ABVHashValue@2@@Z														@ 24 NONAME
+?GetBlockByHeight@CoinEng@Coin@@QAE?AVBlock@2@I@Z																@ 25 NONAME
+?BestBlockHeight@CoinEng@Coin@@QAEHXZ																			@ 26 NONAME
+??0Block@Coin@@QAE@XZ																							@ 27 NONAME
+?get_ValueOut@Tx@Coin@@QBE_JXZ																					@ 28 NONAME
+?Read@Tx@Coin@@UAEXABVBinaryReader@Ext@@@Z																		@ 29 NONAME
+?Write@Tx@Coin@@UBEXAAVBinaryWriter@Ext@@@Z																		@ 30 NONAME
+??0Target@Coin@@QAE@I@Z																							@ 31 NONAME
+??1CCoinEngThreadKeeper@Coin@@QAE@XZ																			@ 32 NONAME
+?Stop@CoinEng@Coin@@QAEXXZ																						@ 33 NONAME
+?BestBlock@CoinEng@Coin@@QAE?AVBlock@2@XZ																		@ 34 NONAME
+?LoadToMemory@Block@Coin@@QAEXXZ																				@ 35 NONAME
+?get_Txes@BlockObj@Coin@@QBEABVCTxes@2@XZ																		@ 36 NONAME
+?GetSerializeSize@Tx@Coin@@QBEIXZ																				@ 37 NONAME
+?get_PkScript@TxOut@Coin@@QBEABVBlob@Ext@@XZ																	@ 38 NONAME
+?TryFromDb@Tx@Coin@@SA_NABVHashValue@2@PAV12@@Z																	@ 39 NONAME
+?FromDb@Tx@Coin@@SA?AV12@ABVHashValue@2@@Z																		@ 40 NONAME
+?Process@Block@Coin@@QAEXPAVLink@P2P@Inet@Ext@@@Z																@ 41 NONAME
+?FindStandardHashAllSigPubKey@Coin@@YA?AUConstBuf@Ext@@ABU23@@Z													@ 42 NONAME
+?Read@MerkleBlockMessage@Coin@@UAEXABVBinaryReader@Ext@@@Z														@ 43 NONAME
+?Process@MerkleBlockMessage@Coin@@UAEXAAVLink@P2P@Inet@Ext@@@Z													@ 44 NONAME
+?Write@CoinMessage@Coin@@UBEXAAVBinaryWriter@Ext@@@Z															@ 45 NONAME
+?Read@CoinMessage@Coin@@UAEXABVBinaryReader@Ext@@@Z																@ 46 NONAME
+?ToString@CoinMessage@Coin@@MBE?AVString@Ext@@XZ																@ 47 NONAME
+?put_Mode@CoinEng@Coin@@QAEXW4EngMode@2@@Z																		@ 48 NONAME
+?Process@BlockMessage@Coin@@MAEXAAVLink@P2P@Inet@Ext@@@Z														@ 49 NONAME
+?Write@MerkleBlockMessage@Coin@@UBEXAAVBinaryWriter@Ext@@@Z														@ 50 NONAME
+?ToString@BlockMessage@Coin@@MBE?AVString@Ext@@XZ																@ 51 NONAME
+?Load@CoinDb@Coin@@QAEXXZ																						@ 52 NONAME
+?NamecoinDb@NamecoinEng@Coin@@QAEAAUINamecoinDb@2@XZ															@ 53 NONAME
 
-?TryParseDestination@Coin@@YAEABUConstBuf@Ext@@AAVHashValue160@1@AAVBlob@3@@Z																						@ 50 NONAME
-?TxIns@TxObj@Coin@@IBEABV?$vector@VTxIn@Coin@@V?$allocator@VTxIn@Coin@@@ExtSTL@@@ExtSTL@@XZ																			@ 51 NONAME
-?CreateObject@CoinEng@Coin@@SA?AV?$ptr@VCoinEng@Coin@@VNonInterlocked@Ext@@@Ext@@AAVCoinDb@2@ABVString@4@V?$ptr@VIBlockChainDb@Coin@@VNonInterlocked@Ext@@@4@@Z		@ 52 NONAME
+?TryParseDestination@Coin@@YAEABUConstBuf@Ext@@AAVHashValue160@1@AAVBlob@3@@Z									@ 60 NONAME
+?TxIns@TxObj@Coin@@IBEABV?$vector@VTxIn@Coin@@V?$allocator@VTxIn@Coin@@@ExtSTL@@@ExtSTL@@XZ						@ 61 NONAME
+?CreateObject@CoinEng@Coin@@SA?AV?$ptr@VCoinEng@Coin@@VNonInterlocked@Ext@@@Ext@@AAVCoinDb@2@ABVString@4@@Z		@ 62 NONAME
