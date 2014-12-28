@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #pragma once
 
@@ -69,7 +68,7 @@ ENUM_CLASS(HashAlgo) {
 
 HashAlgo StringToAlgo(RCString s);
 
-class HashValue : public std::array<byte, 32> {
+class HashValue : public std::array<byte, 32>, totally_ordered<HashValue> {
 public:
 	HashValue() {
 		memset(data(), 0, 32);
@@ -81,14 +80,11 @@ public:
 
 	HashValue(const ConstBuf& mb);
 	explicit HashValue(RCString s);
-	static HashValue FromDifficultyBits(UInt32 bits);
-	UInt32 ToDifficultyBits() const;
+	static HashValue FromDifficultyBits(uint32_t bits);
+	uint32_t ToDifficultyBits() const;
 	static HashValue FromShareDifficulty(double difficulty, HashAlgo algo);
 
 	bool operator<(const HashValue& v) const;
-	bool operator>(const HashValue& v) const { return v < *this; }
-	bool operator<=(const HashValue& v) const { return !(v < *this); }
-	bool operator>=(const HashValue& v) const { return !operator<(v); }
 
 	static HashValue Combine(const HashValue& h1, const HashValue& h2);
 
@@ -128,12 +124,12 @@ public:
 class ReducedHashValue {
 public:
 	ReducedHashValue(const HashValue& hash)
-		:	m_val(letoh(*(Int64*)hash.data()))
+		:	m_val(letoh(*(int64_t*)hash.data()))
 	{
 	}
 
 /*	ReducedHashValue(const HashValue160& hash)
-		:	m_val(letoh(*(Int64*)hash.data()))
+		:	m_val(letoh(*(int64_t*)hash.data()))
 	{
 	} */
 
@@ -141,25 +137,25 @@ public:
 		return m_val == v.m_val;
 	}
 
-	operator Int64() const { return m_val; }
+	operator int64_t() const { return m_val; }
 private:
-	Int64 m_val;
+	int64_t m_val;
 };
 
 #if UCFG_COIN_PUBKEYID_36BITS
-	const Int64 PUBKEYID_MASK = 0xFFFFFFFFFLL;
+	const int64_t PUBKEYID_MASK = 0xFFFFFFFFFLL;
 #else
-	const Int64 PUBKEYID_MASK = 0x7FFFFFFFFLL;
+	const int64_t PUBKEYID_MASK = 0x7FFFFFFFFLL;
 #endif
 
 class CIdPk {
 public:
 	explicit CIdPk(const HashValue160& hash)
-		:	m_val(letoh(*(Int64*)(hash.data()+12)) & PUBKEYID_MASK)				//	Use last bytes. First bytes are not random, because many generated addresses are like "1ReadableWord..."
+		:	m_val(letoh(*(int64_t*)(hash.data()+12)) & PUBKEYID_MASK)				//	Use last bytes. First bytes are not random, because many generated addresses are like "1ReadableWord..."
 	{
 	}
 
-	explicit CIdPk(Int64 val = -1)
+	explicit CIdPk(int64_t val = -1)
 		:	m_val(val)
 	{
 	}
@@ -168,7 +164,7 @@ public:
 		return m_val == v.m_val;
 	}
 
-	operator Int64() const { 
+	operator int64_t() const { 
 		if (IsNull())
 			Throw(E_FAIL);
 		return m_val;
@@ -176,7 +172,7 @@ public:
 
 	bool IsNull() const { return m_val == -1; }
 private:
-	Int64 m_val;
+	int64_t m_val;
 };
 
 
@@ -207,27 +203,28 @@ COIN_UTIL_EXPORT Blob CalcSha256Midstate(const ConstBuf& mb);
 COIN_UTIL_EXPORT  HashValue ScryptHash(const ConstBuf& mb);
 HashValue SolidcoinHash(const ConstBuf& cbuf);
 HashValue MetisHash(const ConstBuf& cbuf);
+HashValue NeoScryptHash(const ConstBuf& cbuf, int profile);
 
-bool MomentumVerify(const HashValue& hash, UInt32 a, UInt32 b);
+bool MomentumVerify(const HashValue& hash, uint32_t a, uint32_t b);
 
 struct SCoinMessageHeader {
-	UInt32 Magic;
+	uint32_t Magic;
 	char Command[12];
-	UInt32 PayloadSize;
+	uint32_t PayloadSize;
 };
 
 
 
 class CoinSerialized {
 public:
-	UInt32 Ver;
+	uint32_t Ver;
 
 	CoinSerialized()
 		:	Ver(1)
 	{}
 
-	static void WriteVarInt(BinaryWriter& wr, UInt64 v);
-	static UInt64 ReadVarInt(const BinaryReader& rd);
+	static void WriteVarInt(BinaryWriter& wr, uint64_t v);
+	static uint64_t ReadVarInt(const BinaryReader& rd);
 	static String ReadString(const BinaryReader& rd);
 	static void WriteString(BinaryWriter& wr, RCString s);
 	static void WriteBlob(BinaryWriter& wr, const ConstBuf& mb);
@@ -254,17 +251,17 @@ public:
 
 	HashValue PrevBlockHash;
 	DateTime Timestamp;
-	UInt32 DifficultyTargetBits;
-	UInt32 Ver;
-	UInt32 Height;
-	UInt32 Nonce;
+	uint32_t DifficultyTargetBits;
+	uint32_t Ver;
+	uint32_t Height;
+	uint32_t Nonce;
 	mutable optional<Coin::HashValue> m_merkleRoot;
 	
 //!!!R	mutable CBool m_bMerkleCalculated;
 
 	BlockBase()
 		:	Ver(2)
-		,	Height(UInt32(-1))
+		,	Height(uint32_t(-1))
 	{}
 
 	virtual void WriteHeader(BinaryWriter& wr) const;
@@ -284,19 +281,21 @@ BinaryWriter& operator<<(BinaryWriter& wr, const CCoinMerkleBranch& branch);
 const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch);
 
 struct ShaConstants {
-	const UInt32 *pg_sha256_hinit,
+	const uint32_t *pg_sha256_hinit,
 		*pg_sha256_k;
-	const UInt32 (*pg_4sha256_k)[4];
+	const uint32_t (*pg_4sha256_k)[4];
 };
 
 ShaConstants GetShaConstants();
 
-void BitsToTargetBE(UInt32 bits, byte target[32]);
+void BitsToTargetBE(uint32_t bits, byte target[32]);
 
-pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json);
+pair<uint32_t, uint32_t> FromOptionalNonceRange(const VarValue& json);
 
-static const int PASSWORD_ENCRYPT_ROUNDS_A = 1000,
+const int PASSWORD_ENCRYPT_ROUNDS_A = 1000,
 			PASSWORD_ENCRYPT_ROUNDS_B = 100*1000;
+
+const char DEFAULT_PASSWORD_ENCRYPT_METHOD = 'B';
 
 
 class HasherEng : public Object {

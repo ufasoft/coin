@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -20,6 +19,38 @@ static struct CCoinutilInit {
 		CMessageProcessor::RegisterModule((DWORD)E_COIN_BASE, (DWORD)E_COIN_UPPER, VER_INTERNALNAME_STR);
 	}
 } s_coinutilInit;
+
+static const uint32_t s_sha256_hinit[8] = {
+	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+};
+
+static const uint32_t g_sha256_k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, //  0
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, //  8
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, // 16
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, // 24
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, // 32
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, // 40
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, // 48
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, // 56
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+DECLSPEC_ALIGN(64) uint32_t g_4sha256_k[64][4];
+
+static struct Sha256SSEInit {
+	Sha256SSEInit() {
+		for (int i=0; i<64; ++i)
+			g_4sha256_k[i][0] = g_4sha256_k[i][1] = g_4sha256_k[i][2] = g_4sha256_k[i][3] = g_sha256_k[i];
+	}
+} s_sha256SSEInit;
 
 HashAlgo StringToAlgo(RCString s) {
 	String ua = s.ToUpper();
@@ -41,7 +72,7 @@ HashAlgo StringToAlgo(RCString s) {
    		throw Exception(E_INVALIDARG, "Unknown hashing algorithm "+s);
 }
 
-void BitsToTargetBE(UInt32 bits, byte target[32]) {
+void BitsToTargetBE(uint32_t bits, byte target[32]) {
 	memset(target, 0, 32);
 	int off = byte(bits>>24)-3;
 	if (off < 30 && off >= -2)
@@ -58,37 +89,37 @@ HashValue::HashValue(const ConstBuf& mb) {
 	memcpy(data(), mb.P, mb.Size);
 }
 
-HashValue HashValue::FromDifficultyBits(UInt32 bits) {
+HashValue HashValue::FromDifficultyBits(uint32_t bits) {
 	HashValue r;
 	BitsToTargetBE(bits, r.data());
 	std::reverse(r.data(), r.data()+32);
 	return r;
 }
 
-UInt32 HashValue::ToDifficultyBits() const {
+uint32_t HashValue::ToDifficultyBits() const {
 	int i = 31;
 	for (; i>=3; --i) {
 		if (data()[i] || (data()[i-1] & 0x80))
 			break;
 	}
-	return UInt32(((i+1) << 24) | (int(data()[i]) << 16) | (int(data()[i-1]) << 8) | int(data()[i-2]));
+	return uint32_t(((i+1) << 24) | (int(data()[i]) << 16) | (int(data()[i-1]) << 8) | int(data()[i-2]));
 }
 
 HashValue HashValue::FromShareDifficulty(double difficulty, HashAlgo algo) {
-	UInt64 leTarget;
+	uint64_t leTarget;
 	HashValue r;
 	switch (algo) {
 	case HashAlgo::Momentum:
-		memcpy(r.data()+24, &(leTarget = htole(UInt64(0x00000000FFFF0000ULL / difficulty))), 8);
+		memcpy(r.data()+24, &(leTarget = htole(uint64_t(0x00000000FFFF0000ULL / difficulty))), 8);
 		break;
 	case HashAlgo::SCrypt:
-		memcpy(r.data()+23, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+		memcpy(r.data()+23, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 		break;
 	case HashAlgo::Metis:
-		memcpy(r.data()+22, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+		memcpy(r.data()+22, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 		break;
 	default:
-		memcpy(r.data()+21, &(leTarget = htole(UInt64(0x00FFFF0000000000ULL / difficulty))), 8);
+		memcpy(r.data()+21, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 	}
 	return r;
 }
@@ -132,37 +163,37 @@ COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
 }
 
 Blob CalcSha256Midstate(const ConstBuf& mb) {
-	UInt32 w[64];
-	UInt32 *pw = (UInt32*)mb.P;
+	uint32_t w[64];
+	uint32_t *pw = (uint32_t*)mb.P;
 	for (int i=0; i<16; ++i)
 		w[i] = letoh(pw[i]);
-	Blob r(Ext::Crypto::g_sha256_hinit, 8*sizeof(UInt32));
-	UInt32 *pv = (UInt32*)r.data();
-	SHA256().HashBlock(pv, (const byte*)w, 0);				// BitcoinSha256().CalcRounds(w, Ext::Crypto::g_sha256_hinit, pv, 16, 0, 64);
+	Blob r(s_sha256_hinit, 8*sizeof(uint32_t));
+	uint32_t *pv = (uint32_t*)r.data();
+	SHA256().HashBlock(pv, (const byte*)w, 0);				// BitcoinSha256().CalcRounds(w, s_sha256_hinit, pv, 16, 0, 64);
 	for (int i=0; i<8; ++i)
 		pv[i] = htole(pv[i]);
 	return r;
 }
 
 HashValue ScryptHash(const ConstBuf& mb) {
-	array<UInt32, 8> ar = CalcSCryptHash(mb);
+	array<uint32_t, 8> ar = CalcSCryptHash(mb);
 	HashValue r;
 	memcpy(r.data(), ar.data(), 32);
 	return r;
 }
 
-void CoinSerialized::WriteVarInt(BinaryWriter& wr, UInt64 v) {
+void CoinSerialized::WriteVarInt(BinaryWriter& wr, uint64_t v) {
 	if (v < 0xFD)
 		wr << byte(v);
 	else if (v <= 0xFFFF)
-		wr << byte(0xFD) << UInt16(v);
+		wr << byte(0xFD) << uint16_t(v);
 	else if (v <= 0xFFFFFFFFUL)
-		wr << byte(0xFE) << UInt32(v);
+		wr << byte(0xFE) << uint32_t(v);
 	else
 		wr << byte(0xFF) << v;
 }
 
-UInt64 CoinSerialized::ReadVarInt(const BinaryReader& rd) {
+uint64_t CoinSerialized::ReadVarInt(const BinaryReader& rd) {
 	switch (byte pref = rd.ReadByte()) {
 	case 0xFD:	return rd.ReadUInt16();
 	case 0xFE:	return rd.ReadUInt32();
@@ -191,13 +222,16 @@ void CoinSerialized::WriteBlob(BinaryWriter& wr, const ConstBuf& mb) {
 }
 
 Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
-	Blob r(0, (size_t)ReadVarInt(rd));
+	size_t size = (size_t)ReadVarInt(rd);
+	if (size > 100000000)	//!!!
+		Throw(E_EXT_Protocol_Violation);
+	Blob r(0, size);
 	rd.Read(r.data(), r.Size);
 	return r;
 }
 
 void BlockBase::WriteHeader(BinaryWriter& wr) const {
-	wr << Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << DifficultyTargetBits << Nonce;
+	wr << Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << DifficultyTargetBits << Nonce;
 }
 
 HashValue BlockBase::GetHash() const {
@@ -210,7 +244,7 @@ Blob Swab32(const ConstBuf& buf) {
 	if (buf.Size % 4)
 		Throw(E_INVALIDARG);
 	Blob r(buf);
-	UInt32 *p = (UInt32*)r.data();
+	uint32_t *p = (uint32_t*)r.data();
 	for (int i=0; i<buf.Size/4; ++i)
 		p[i] = _byteswap_ulong(p[i]);
 	return r;
@@ -218,18 +252,18 @@ Blob Swab32(const ConstBuf& buf) {
 
 void FormatHashBlocks(void* pbuffer, size_t len) {
     byte* pdata = (byte*)pbuffer;
-    UInt32 blocks = 1 + ((len + 8) / 64);
+    uint32_t blocks = 1 + ((len + 8) / 64);
     pdata[len] = 0x80;
     memset(pdata + len+1, 0, 64 * blocks - len-1);
-    UInt32* pend = (UInt32*)(pdata + 64 * blocks);
-	pend[-1] = htobe(UInt32(len * 8));
-	for (UInt32 *p=(UInt32*)pbuffer; p!=pend; ++p)
+    uint32_t* pend = (uint32_t*)(pdata + 64 * blocks);
+	pend[-1] = htobe(uint32_t(len * 8));
+	for (uint32_t *p=(uint32_t*)pbuffer; p!=pend; ++p)
 		*p = _byteswap_ulong(*p);
 }
 
 BinaryWriter& operator<<(BinaryWriter& wr, const CCoinMerkleBranch& branch) {
 	CoinSerialized::Write(wr, branch.Vec);	
-	return wr << Int32(branch.Index);
+	return wr << int32_t(branch.Index);
 }
 
 const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch) {
@@ -280,20 +314,20 @@ MerkleBranch MerkleTree::GetBranch(int idx) {
 */
 
 ShaConstants GetShaConstants() {
-	ShaConstants r = { 	g_sha256_hinit, g_sha256_k, g_4sha256_k };
+	ShaConstants r = { 	s_sha256_hinit, g_sha256_k, g_4sha256_k };
 	return r;
 }
 
-pair<UInt32, UInt32> FromOptionalNonceRange(const VarValue& json) {
+pair<uint32_t, uint32_t> FromOptionalNonceRange(const VarValue& json) {
 	if (VarValue vNonceRange = json["noncerange"]) {
 		Blob blob = Blob::FromHexString(vNonceRange.ToString());
 		if (blob.Size == 8)
-			return make_pair(betoh(*(UInt32*)blob.constData()), betoh(*(UInt32*)(blob.constData()+4)));
+			return make_pair(betoh(*(uint32_t*)blob.constData()), betoh(*(uint32_t*)(blob.constData()+4)));
 	}
-	return pair<UInt32, UInt32>(0, 0xFFFFFFFF);
+	return pair<uint32_t, uint32_t>(0, 0xFFFFFFFF);
 }
 
-EXT_THREAD_PTR(HasherEng, t_pHasherEng);
+EXT_THREAD_PTR(HasherEng) t_pHasherEng;
 
 HasherEng *HasherEng::GetCurrent() {
 	return t_pHasherEng;
