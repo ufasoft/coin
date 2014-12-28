@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 // Support of device "BitFORCE SHA256 Single"  http://butterflylabs.com/products/
 
@@ -79,14 +78,14 @@ protected:
 	}
 
 	void CommunicateDevice() override {
-		UInt32 portion = FULL_TASK;
+		uint32_t portion = FULL_TASK;
 
 		String id = Command("ZGX");
 		if (id == ">>>ID: BitFORCE SHA256 Version 1.0>>>") {
 			Detected = true;
 			CreateDeviceObject();
 			m_evDetected.Set();
-			m_evStartMining.Lock();
+			m_evStartMining.lock();
 			char bufData[8+32+12+8];
 			memset(bufData, '>', sizeof bufData);
 			for (ptr<BitcoinWorkData> wd; !m_bStop && (wd = Miner.GetWorkForThread(_self, portion, false));) {
@@ -111,7 +110,7 @@ protected:
 					break;
 				TRC(3, "Reply: " << reply);
 				if (reply.Left(12) == "NONCE-FOUND:") {
-					vector<String> nn = reply.Substring(12).Split(",");
+					vector<String> nn = reply.substr(12).Split(",");
 					for (int i=0; i<nn.size(); ++i)
 						Miner.TestAndSubmit(wd, Convert::ToUInt32(nn[i], 16));
 				} else if (reply != "NO-NONCE") {
@@ -164,7 +163,7 @@ protected:
 			t->m_devpath = devpaths[i];
 			t->AutoStart = AutoStart;
 			t->Start();
-			t->m_evDetected.Lock(1000);
+			t->m_evDetected.lock(1000);
 			if (!t->Detected)
 				t->Stop();
 		}
@@ -180,8 +179,12 @@ private:
 
 	vector<String> GetPossibleDevicePaths(BitcoinMiner& miner) {
 		vector<String> r;
-#if UCFG_USE_POSIX		
-		r = Directory::GetFiles("/dev", "ttyUSB*");
+#if UCFG_USE_POSIX
+		for (directory_iterator it("/dev"), e; it!=e; ++it) {
+			path p = it->path();
+			if (p.stem().native().find("ttyUSB") == 0)
+				r.push_back(p);
+		}
 #else
 		r = SerialPort::GetPortNames();
 		for (int i=0; i<r.size(); ++i)
@@ -203,4 +206,5 @@ private:
 } g_bitforceArchitecture;
 
 } // Coin::
+
 

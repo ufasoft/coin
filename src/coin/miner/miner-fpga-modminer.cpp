@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 // Support of device "BPCFPGA ModMiner QUAD
 
@@ -31,7 +30,7 @@ const int DEFAULT_FPGA_FREQUENCY = 220; // MHz
 
 static const String BITSTREAM_FILENAME = "fpgaminer_x6500-overclocker-0402.bit";
 static const String BITSTREAM_URL = String(MANUFACTURER_HTTP_URL) + "/files/bitstreams/" + BITSTREAM_FILENAME;
-static const UInt32 BISTREAM_USER_ID = 0x42240402;
+static const uint32_t BISTREAM_USER_ID = 0x42240402;
 static const Blob BITSTREAM_SHA256SUM = Blob::FromHexString("2f90ac200f33d89ac2d00f56123269a6f8265b86873e7c125380eee9cd0274a6");
 
 class MmqDevice;
@@ -128,9 +127,9 @@ public:
 		return r;	
 	}
 
-	UInt32 GetUserId(byte devid) {
+	uint32_t GetUserId(byte devid) {
 		byte cmd[2] = { 4, devid};
-		return letoh(*(UInt32*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
+		return letoh(*(uint32_t*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
 	}
 
 	static const byte DEVID_ALL = 4;
@@ -163,9 +162,9 @@ public:
 		Command(ConstBuf(cmd, sizeof cmd));
 	}
 
-	UInt32 GetNonce(byte devid) {
+	uint32_t GetNonce(byte devid) {
 		byte cmd[2] = { 9, devid};
-		return letoh(*(UInt32*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
+		return letoh(*(uint32_t*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
 	}
 };
 
@@ -192,13 +191,13 @@ public:
 			Resource res(resId, RT_RCDATA);
 			blob = res;
 #else
-			blob = File::ReadAllBytes(Path::Combine(Path::GetDirectoryName(System.ExeFilePath), BITSTREAM_FILENAME));
+			blob = File::ReadAllBytes(System.GetExeDir() / BITSTREAM_FILENAME);
 #endif
 		} catch (RCExc) {
 			*miner.m_pTraceStream << "Bitstream file " << BITSTREAM_FILENAME << " not found" << endl;
-			String filename = Path::Combine(AfxGetCApp()->AppDataDir, BITSTREAM_FILENAME);
+			path filename = AfxGetCApp()->get_AppDataDir() / BITSTREAM_FILENAME;
 			
-			if (File::Exists(filename))
+			if (exists(filename))
 				blob = File::ReadAllBytes(filename);
 			else {
 				*miner.m_pTraceStream << "Downloading Bitstream: " << BITSTREAM_URL << endl;
@@ -231,7 +230,7 @@ protected:
 			ptr<MmqThread> t = new MmqThread(*dev, miner, miner.m_tr);
 			dev->m_thread = t.get();
 			t->Start();
-			t->m_evDetected.Lock(100000);
+			t->m_evDetected.lock(100000);
 			if (!t->Detected)
 				t->Stop();
 			else {
@@ -272,7 +271,11 @@ private:
 			r.push_back(dev.DevNode);
 		}
 #else
-		r = Directory::GetFiles("/dev", "ttyACM*");
+		for (directory_iterator it("/dev"), e; it!=e; ++it) {
+			path p = it->path();
+			if (p.stem().native().find("ttyACM") == 0)
+				r.push_back(p);
+		}
 #endif
 
 //		TRC(2, r);
@@ -321,11 +324,11 @@ void MmqThread::CommunicateDevice() {
 #endif
 	Detected = true;
 	m_evDetected.Set();
-	m_evStartMining.Lock();
+	m_evStartMining.lock();
 	if (m_bStop)
 		return;
 	for (byte devid=0; devid < n; ++devid) {
-		UInt32 userId = GetUserId(devid);
+		uint32_t userId = GetUserId(devid);
 		if (userId != BISTREAM_USER_ID) {
 			*Miner.m_pTraceStream << Dev.Chips[devid]->Name << " has not BITSTREAM uploaded" << endl;
 			UploadBitstream(DEVID_ALL, g_mmqArchitecture.LoadBitstream(Miner));
@@ -357,7 +360,7 @@ void MmqThread::CommunicateDevice() {
 				MmqChip& chip = *Dev.Chips[devid];
 				hashrate += chip.GetClock();
 				int nTotal = 0, nErr = 0;
-				for (UInt32 nonce; (nonce=GetNonce(devid))!=0xFFFFFFFF;) {
+				for (uint32_t nonce; (nonce=GetNonce(devid))!=0xFFFFFFFF;) {
 #ifdef X_DEBUG//!!!D
 						cerr <<  "\nNONCE: " << hex << nonce << "\n" << endl;
 #endif
@@ -404,7 +407,7 @@ void MmqThread::CommunicateDevice() {
 		}
 
 		if (dtPrev != DateTime())
-			Interlocked::Add(Miner.HashCount, Int32(Int64((now - dtPrev).TotalMilliseconds)  * hashrate * 1000 / UCFG_BITCOIN_NPAR));
+			Interlocked::Add(Miner.HashCount, int32_t(int64_t((now - dtPrev).TotalMilliseconds)  * hashrate * 1000 / UCFG_BITCOIN_NPAR));
 		dtPrev = now;
 
 		Thread::Sleep(100);
@@ -425,4 +428,5 @@ void MmqChip::ChangeFrequency(int units) {
 }
 
 } // Coin::
+
 

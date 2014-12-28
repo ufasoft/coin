@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #pragma once
 
@@ -43,7 +42,7 @@ const float MAX_FPGA_TEMPERATURE = 60; // Celsius
 
 const int BITCOIN_DEFAULT_GPU_IDLE_MILLISECONDS = 100;
 
-const UInt32 FULL_TASK = UInt32(0x100000000ULL / UCFG_BITCOIN_NPAR);
+const uint32_t FULL_TASK = uint32_t(0x100000000ULL / UCFG_BITCOIN_NPAR);
 
 const int MIN_GETWORK_QUEUE = 3,
 			MAX_GETWORK_QUEUE = 5;
@@ -61,21 +60,21 @@ public:
 	DateTime Timestamp;
 	Blob Midstate, Data, Hash1;
 	HashValue HashTarget;
-	UInt32 FirstNonce, LastNonce;
-	UInt32 Height;
-	UInt16 RollNTime;
+	uint32_t FirstNonce, LastNonce;
+	uint32_t Height;
+	uint16_t RollNTime;
 	Coin::HashAlgo HashAlgo;
 
 	BitcoinWorkData()
 		:	FirstNonce(0)
-		,	LastNonce(UInt32(-1))
+		,	LastNonce(uint32_t(-1))
 		,	RollNTime(0)
 		,	HashAlgo(Coin::HashAlgo::Sha256)
-		,	Height(UInt32(-1))
+		,	Height(uint32_t(-1))
 	{}
 
 	bool IsFull() const {
-		return FirstNonce==0 && LastNonce == UInt32(-1);
+		return FirstNonce==0 && LastNonce == uint32_t(-1);
 	}
 
 	virtual BitcoinWorkData *Clone() const { return new BitcoinWorkData(*this); }
@@ -83,9 +82,9 @@ public:
 	static ptr<BitcoinWorkData> FromJson(RCString sjson, Coin::HashAlgo algo);
 	void SetRollNTime(WebClient& wc);
 
-	UInt32 get_Version() const { return htobe(*(UInt32*)Data.constData()); }
-	void put_Version(UInt32 v) { *(UInt32*)Data.data() = htobe(v); }
-	DEFPROP(UInt32, Version);
+	uint32_t get_Version() const { return htobe(*(uint32_t*)Data.constData()); }
+	void put_Version(uint32_t v) { *(uint32_t*)Data.data() = htobe(v); }
+	DEFPROP(uint32_t, Version);
 
 	HashValue get_PrevBlockHash() const;
 	void put_PrevBlockHash(const HashValue& v);
@@ -95,19 +94,19 @@ public:
 	void put_MerkleRoot(const HashValue& v);
 	DEFPROP(HashValue, MerkleRoot);
 
-	DateTime get_BlockTimestamp() const { return DateTime::from_time_t(htobe(*(UInt32*)(Data.constData()+68))); }
-	void put_BlockTimestamp(const DateTime& dt) { *(UInt32*)(Data.constData()+68) = betoh((UInt32)to_time_t(dt)); }
+	DateTime get_BlockTimestamp() const { return DateTime::from_time_t(htobe(*(uint32_t*)(Data.constData()+68))); }
+	void put_BlockTimestamp(const DateTime& dt) { *(uint32_t*)(Data.constData()+68) = betoh((uint32_t)to_time_t(dt)); }
 	DEFPROP(DateTime, BlockTimestamp);
 
-	UInt32 get_Bits() const { return htobe(*(UInt32*)(Data.constData()+72)); }
-	void put_Bits(UInt32 v) { *(UInt32*)(Data.data()+72) = betoh(v); }
-	DEFPROP(UInt32, Bits);
+	uint32_t get_Bits() const { return htobe(*(uint32_t*)(Data.constData()+72)); }
+	void put_Bits(uint32_t v) { *(uint32_t*)(Data.data()+72) = betoh(v); }
+	DEFPROP(uint32_t, Bits);
 
-	UInt32 get_Nonce() const { return htobe(*(UInt32*)(Data.constData() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76))); }
-	void put_Nonce(UInt32 v) { *(UInt32*)(Data.data() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76)) = betoh(v); }
-	DEFPROP(UInt32, Nonce);
+	uint32_t get_Nonce() const { return htobe(*(uint32_t*)(Data.constData() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76))); }
+	void put_Nonce(uint32_t v) { *(uint32_t*)(Data.data() + (HashAlgo==Coin::HashAlgo::Solid ? 84 : 76)) = betoh(v); }
+	DEFPROP(uint32_t, Nonce);
 
-	bool TestNonceGivesZeroH(UInt32 nonce);
+	bool TestNonceGivesZeroH(uint32_t nonce);
 
 };
 
@@ -118,7 +117,7 @@ public:
 	ptr<Object> Miner;
 	String Name, Description;
 	Ext::Temperature Temperature;
-	volatile Int32 HwErrors;
+	volatile int32_t HwErrors;
 	CBool IsAmdGpu;
 //!!!	int Index;
 
@@ -168,9 +167,9 @@ class WorkerThreadBase : public Thread {
 	typedef Thread base;
 public:
 	BitcoinMiner& Miner;
-	Int64 m_prevTsc;
+	int64_t m_prevTsc;
 	condition_variable CvComplete;
-	UInt32 DevicePortion;
+	uint32_t DevicePortion;
 	ptr<ComputationDevice> Device;
 
 	WorkerThreadBase(BitcoinMiner& miner, thread_group *tr)
@@ -186,7 +185,7 @@ public:
 	virtual String GetDeviceName() { return nullptr; };
 	void Stop() override;
 
-	void CompleteRound(UInt64 nHashes);
+	void CompleteRound(uint64_t nHashes);
 
 	void StartRound() {
 		m_dtStartRound = DateTime::UtcNow();
@@ -194,7 +193,7 @@ public:
 protected:
 	WebClient *CurrentWebClient;
 	TimeSpan m_span;
-	UInt64 m_nHashes;
+	uint64_t m_nHashes;
 
 #if UCFG_WIN32
 	void OnAPC() override {
@@ -343,10 +342,10 @@ class MINER_CLASS BitcoinMiner : public IMiner {
 public:
 	int GetworkPeriod;
 	float Speed;		// float to be atomic
-	Int64 EntireHashCount;
+	int64_t EntireHashCount;
 	float CPD; //!!! should be atomic
 	DateTime DtStart;
-	volatile UInt32 MaxHeight;
+	volatile uint32_t MaxHeight;
 
 	mutex m_csGetWork;
 	ManualResetEvent m_evDataReady;
@@ -368,9 +367,9 @@ public:
 	int m_msWait;
 	int NPAR;
 	
-	volatile Int32 HashCount;
+	volatile int32_t HashCount;
 	volatile float ChainsExpectedCount;
-	volatile Int32 SubmittedCount, AcceptedCount;
+	volatile int32_t SubmittedCount, AcceptedCount;
 
 	CInt<int> Intensity;
 	int Verbosity;
@@ -415,7 +414,7 @@ public:
 	void Release() override { delete this; }
 
 	void InitDevices(vector<String>& selectedDevs);
-	ptr<BitcoinWorkData> GetWorkForThread(WorkerThreadBase& wt, UInt32 portion, bool bAllHashAlgoAllowed);
+	ptr<BitcoinWorkData> GetWorkForThread(WorkerThreadBase& wt, uint32_t portion, bool bAllHashAlgoAllowed);
 	virtual BitcoinWebClient GetWebClient(WorkerThreadBase *wt);
 //!!!	void SetNewData(const BitcoinWorkData& wd);
 	void SetNewData(const BitcoinWorkData& wd, bool bClearOld = false);
@@ -432,7 +431,7 @@ public:
 		Intensity = v;
 	}
 
-	bool TestAndSubmit(BitcoinWorkData *wd, UInt32 nonce);
+	bool TestAndSubmit(BitcoinWorkData *wd, uint32_t nonce);
 	virtual String GetCalIlCode(bool bEvergreen);
 	virtual String GetOpenclCode();
 	virtual String GetCudaCode();
@@ -504,7 +503,7 @@ public:
 class GpuMiner : public Object {
 public:
 	BitcoinMiner& Miner;
-	UInt32 DevicePortion;
+	uint32_t DevicePortion;
 	CBool m_bIsVector2;
 
 	GpuMiner(BitcoinMiner& miner)
@@ -532,7 +531,7 @@ struct CalEngineWrap {
 	CalEngine Engine;
 
 	static mutex s_cs;
-	static volatile Int32 RefCount;
+	static volatile int32_t RefCount;
 	static CalEngineWrap *I;
 	
 	static CalEngineWrap *Get() {
@@ -577,11 +576,11 @@ public:
 
 	virtual HashValue CalcHash(const ConstBuf& cbuf) { Throw(E_NOTIMPL); }
 	virtual HashValue CalcWorkDataHash(const BitcoinWorkData& wd);
-	virtual UInt32 MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd);
+	virtual uint32_t MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd);
 protected:
 	virtual size_t GetDataSize() noexcept { return 80; }
-	virtual void SetNonce(UInt32 *buf, UInt32 nonce) noexcept;
-	virtual void MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, UInt32 *buf, UInt32 nonce);
+	virtual void SetNonce(uint32_t *buf, uint32_t nonce) noexcept;
+	virtual void MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, uint32_t *buf, uint32_t nonce);
 };
 
 

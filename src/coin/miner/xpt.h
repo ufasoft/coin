@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #pragma once
 
@@ -26,7 +25,7 @@ const byte XPT_OPC_C_AUTH_REQ 	= 1,
 	XPT_OPC_S_MESSAGE			= 7,
 	XPT_OPC_S_PING				= 8;
 
-const UInt32 XPT_ERROR_NONE = 0,
+const uint32_t XPT_ERROR_NONE = 0,
 			XPT_ERROR_INVALID_LOGIN = 1,
 			XPT_ERROR_INVALID_WORKLOAD = 2,
 			XPT_ERROR_INVALID_COINTYPE = 3;
@@ -73,11 +72,11 @@ public:
 class AuthXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
-	UInt32 ProtocolVersion;
+	uint32_t ProtocolVersion;
 	String Username, Password, ClientVersion;
-	UInt32 PayloadNum;
+	uint32_t PayloadNum;
 	
-	vector<pair<UInt16, HashValue160>> DevFees;
+	vector<pair<uint16_t, HashValue160>> DevFees;
 
 	AuthXptMessage()
 		:	ProtocolVersion(6)
@@ -94,7 +93,7 @@ public:
 class AuthAckXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
-	UInt32 ErrorCode;
+	uint32_t ErrorCode;
 	String Reason;
 	HashAlgo Algo;
 
@@ -114,13 +113,13 @@ class Workdata1XptMessage : public XptMessage {
 public:
 	struct ShareBundle {
  		vector<HashValue> PayloadMerkles;
-		UInt32 Version, Height, Bits, BitsForShare;
+		uint32_t Version, Height, Bits, BitsForShare;
 		DateTime Timestamp;
 		HashValue PrevBlockHash;
-		UInt32 FixedPrimorialMultiplier, FixedHashFactor;
-		UInt32 SieveSizeMin, SieveSizeMax;
-		UInt32 PrimesToSieveMin, PrimesToSieveMax;
-		UInt32 NonceMin, NonceMax;		
+		uint32_t FixedPrimorialMultiplier, FixedHashFactor;
+		uint32_t SieveSizeMin, SieveSizeMax;
+		uint32_t PrimesToSieveMin, PrimesToSieveMax;
+		uint32_t NonceMin, NonceMax;		
 		byte BundleFlags;
 		byte SieveChainLength;
 
@@ -144,7 +143,7 @@ public:
 	DateTime Timestamp;							// hash priority over MinerBlock->Timestamp
 	Blob ExtraNonce1;
 	HashValue HashTargetShare;
-	UInt32 BitsForShare;				// Primecoin
+	uint32_t BitsForShare;				// Primecoin
 	vector<ShareBundle> Bundles;
 	float EarnedShareValue;
 
@@ -166,11 +165,11 @@ public:
 	}
 
 	CPointer<XptClient> Client;
-	UInt32 BitsForShare, SieveSize, SieveCandidate;
-	UInt32 FixedPrimorialMultiplier, FixedHashFactor;
-	UInt32 SieveSizeMin, SieveSizeMax;
-	UInt32 PrimesToSieveMin, PrimesToSieveMax;
-	UInt32 SieveChainLength;
+	uint32_t BitsForShare, SieveSize, SieveCandidate;
+	uint32_t FixedPrimorialMultiplier, FixedHashFactor;
+	uint32_t SieveSizeMin, SieveSizeMax;
+	uint32_t PrimesToSieveMin, PrimesToSieveMax;
+	uint32_t SieveChainLength;
 	bool TimestampRoll, Interruptible;
 	BigInteger FixedMultiplier, ChainMultiplier;
 
@@ -184,7 +183,7 @@ class SubmitShareXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
 	ptr<Coin::MinerShare> MinerShare;
-	UInt32 Cookie;
+	uint32_t Cookie;
 	
 	SubmitShareXptMessage()
 		:	Cookie(0)
@@ -200,7 +199,7 @@ public:
 class ShareAckXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
-	UInt32 ErrorCode;
+	uint32_t ErrorCode;
 	String Reason;
 	float ShareValue;
 
@@ -216,9 +215,9 @@ public:
 };   
 
 struct NonceRange {
-	UInt32 ChainLength;
-	UInt32 Multiplier;
-	UInt32 Nonce, NonceEnd;
+	uint32_t ChainLength;
+	uint32_t Multiplier;
+	uint32_t Nonce, NonceEnd;
 	byte Depth;
 	PrimeChainType ChainType;
 
@@ -234,7 +233,7 @@ struct Pow {
 	HashValue PrevBlockHash,
 			MerkleRoot;
 	DateTime DtStart;
-	UInt32 SieveSize, PrimesToSieve;
+	uint32_t SieveSize, PrimesToSieve;
 	vector<NonceRange> Ranges;
 
 	void Write(BinaryWriter& wr) const;
@@ -274,10 +273,10 @@ public:
 class PingXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
-	UInt32 Version;
-	UInt64 TimestampMs;
+	uint32_t Version;
+	uint64_t TimestampMs;
 
-	PingXptMessage(UInt64 timestampMs = 0)
+	PingXptMessage(uint64_t timestampMs = 0)
 		:	Version(0)
 		,	TimestampMs(timestampMs)
 	{
@@ -292,12 +291,12 @@ public:
 class XptPeer : public P2P::Link {
 	typedef P2P::Link base;
 public:
-	UInt32 ProtocolVersion;
+	uint32_t ProtocolVersion;
 	HashAlgo Algo;
 	BinaryWriter W;
 	BinaryReader R;
 
-	XptPeer(thread_group *tr);
+	XptPeer(thread_group *tr = 0);
 	void Send(ptr<P2P::Message> m) override;
 protected:
 	mutex MtxSend;
@@ -305,8 +304,8 @@ protected:
 	virtual void SendBuf(const ConstBuf& cbuf);
 };
 
-class XptClient : public XptPeer, public ConnectionClient {
-	typedef XptPeer base;
+class XptClient : public SocketThreadWrap<XptPeer>, public ConnectionClient {
+	typedef SocketThreadWrap<XptPeer> base;
 public:
 	IPEndPoint EpServer;
 
@@ -319,7 +318,7 @@ public:
 	CPowMap m_powMap;
 	//----------------------------------------------------------------
 
-	array<volatile Int32, 20> LenStats;
+	array<volatile int32_t, 20> LenStats;
 	CBool ConnectionEstablished;	
 
 	XptClient(Coin::BitcoinMiner& miner);

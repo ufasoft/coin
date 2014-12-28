@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -60,18 +59,18 @@ String TargetToString(CALtarget target) {
 
 
 mutex CalEngineWrap::s_cs;
-volatile Int32 CalEngineWrap::RefCount;
+volatile int32_t CalEngineWrap::RefCount;
 CalEngineWrap *CalEngineWrap::I;
 
-void MemToResource(CalResource<UInt32>& res, const UInt32 *data, size_t size) {
-	CalResMap<UInt32> map(res);
+void MemToResource(CalResource<uint32_t>& res, const uint32_t *data, size_t size) {
+	CalResMap<uint32_t> map(res);
 	for (int i=0; i<size; ++i)
 		*(map+i*4) = *(map+i*4+1) = *(map+i*4+2) = *(map+i*4+3) = data[i];
 }
 
-void MemToResourceCompact(CalResource<UInt32>& res, const UInt32 *data, size_t size) {
-	CalResMap<UInt32> map(res);
-	memcpy(map, data, size*sizeof(UInt32));
+void MemToResourceCompact(CalResource<uint32_t>& res, const uint32_t *data, size_t size) {
+	CalResMap<uint32_t> map(res);
+	memcpy(map, data, size*sizeof(uint32_t));
 }
 
 bool StartCal() {
@@ -97,13 +96,13 @@ public:
 	AmdGpuMiner& GpuMiner;
 #if UCFG_BITCOIN_USE_CAL
 	CalContext Ctx;
-	CalResource<UInt32> m_resI;
-	CalResource<UInt32> m_resM3;
-	CalGlobalResource<UInt32> m_resO;	
+	CalResource<uint32_t> m_resI;
+	CalResource<uint32_t> m_resM3;
+	CalGlobalResource<uint32_t> m_resO;	
 	CALprogramGrid m_grid;
 	CALevent m_calEvent;
 	CalModule Module;
-	ResourceBinder<CalGlobalResource<UInt32> > m_bind;
+	ResourceBinder<CalGlobalResource<uint32_t> > m_bind;
 #endif
 
 	AmdGpuTask(AmdGpuMiner& gpuMiner);
@@ -127,7 +126,7 @@ public:
 	CALdeviceinfo DeviceInfo;
 	CALdeviceattribs DeviceAttribs;
 	CalImage Image;
-//	CalResource<UInt32> m_resCB5;
+//	CalResource<uint32_t> m_resCB5;
 	int CalWidth;
 	int Index;
 	CBool m_bEvergreen;
@@ -199,19 +198,19 @@ void AmdGpuTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) {
 	m_w[3] = wd.FirstNonce;
 //			sha.m_w[3] = 0x8D9CB675;		//!!!D
 
-	UInt32 w[16];
-	memcpy(w, m_w+1, sizeof(UInt32)*15);
-	memcpy(w+15, m_w, sizeof(UInt32)*1);
+	uint32_t w[16];
+	memcpy(w, m_w+1, sizeof(uint32_t)*15);
+	memcpy(w+15, m_w, sizeof(uint32_t)*1);
 	MemToResourceCompact(m_resI, w, 16);
 
-	UInt32 cb3[16];
-	memcpy(cb3, m_midstate_after_3, sizeof(UInt32)*8);
-	memcpy(cb3+8, m_midstate, sizeof(UInt32)*8);
+	uint32_t cb3[16];
+	memcpy(cb3, m_midstate_after_3, sizeof(uint32_t)*8);
+	memcpy(cb3+8, m_midstate, sizeof(uint32_t)*8);
 	MemToResourceCompact(m_resM3, cb3, 16);	
 
 	/*!!!
 	{ //!!!D
-		CalResMap<UInt32> m(m_resCB5);
+		CalResMap<uint32_t> m(m_resCB5);
 		*(m + 0) = 3;
 		*(m + 1) = 64;
 		*(m + 2) = 0;
@@ -260,8 +259,8 @@ bool AmdGpuTask::IsComplete() {
 
 int AmdGpuTask::ParseResults() {
 	int r = 0;
-	CalResMap<UInt32> mapO(m_resO);
-	UInt32 *p = mapO;
+	CalResMap<uint32_t> mapO(m_resO);
+	uint32_t *p = mapO;
 
 	bool bUseVector = GpuMiner.UseVector();
 #if RESULT_BUFFER_SIZE
@@ -326,11 +325,11 @@ int AmdGpuMiner::Run(const BitcoinWorkData& wd, WorkerThreadBase *pwt) {
 	
 //			cerr << npar << " complete\n";
 /*!!!D
-	memcpy(sha.m_w1, sha.m_midstate_after_3, 8*sizeof(UInt32));		
+	memcpy(sha.m_w1, sha.m_midstate_after_3, 8*sizeof(uint32_t));		
 	sha.CalcRoundsTest(sha.m_w, sha.m_midstate, sha.m_w1, 16, 3, 64);
-	UInt32 v[8];
-	memcpy(v, g_sha256_hinit, 8*sizeof(UInt32));
-	UInt32 ee = sha.CalcRoundsTest(sha.m_w1, v, v, 16, 0, 61);				// We enough this
+	uint32_t v[8];
+	memcpy(v, g_sha256_hinit, 8*sizeof(uint32_t));
+	uint32_t ee = sha.CalcRoundsTest(sha.m_w1, v, v, 16, 0, 61);				// We enough this
 	*/
 
 }
