@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <boost/random/mersenne_twister.hpp>
@@ -22,25 +29,33 @@ public:
 	DogeCoinEng(CoinDb& cdb)
 		:	base(cdb)
 	{
+		MaxBlockVersion = 6;
 	}
 protected:
 	bool MiningAllowed() override { return false; }
 
-	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
-		long seed7 = int(letoh(*(UInt64*)(prevBlockHash.data()+24)) >> 8) & 0xFFFFFFF,		//!!!TODO O
-			seed6 = int(letoh(*(UInt64*)(prevBlockHash.data()+24)) >> 12) & 0xFFFFFFF;
-		Int64 nSubsidy =
-			  height < 100000 ? GenerateMTRandom(seed7, 999999)
-			: height < 200000 ? GenerateMTRandom(seed7, 499999)
-			: height < 300000 ? GenerateMTRandom(seed6, 249999)
-			: height < 400000 ? GenerateMTRandom(seed7, 124999)
-			: height < 500000 ? GenerateMTRandom(seed7, 62499)
-			: height < 600000 ? GenerateMTRandom(seed6, 31249)
-			: 10000;
-		return nSubsidy  * ChainParams.CoinValue;
+	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
+		return ChainParams.CoinValue * (
+			height >= 600000 ? 10000
+			: height >=145000 ? 500000 >> (height / 100000)
+			: GenerateMTRandom(int(letoh(*(uint64_t*)(prevBlockHash.data()+24)) >> 8) & 0xFFFFFFF, height>=100000 ? 499999 : 999999));
+	}
+
+	int GetIntervalForModDivision(int height) override {
+		return height<144999 ? 240 : base::GetIntervalForModDivision(height);
+	}
+
+	int GetIntervalForCalculatingTarget(int height) override {
+		return GetIntervalForModDivision(height);
 	}
 
 	TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) override {
+		if (height > 144998) {
+			int secTarget = (int)targetSpan.get_TotalSeconds(),
+				secActual = (int)span.get_TotalSeconds();
+			TimeSpan spanAct = TimeSpan::FromSeconds(secTarget + (secActual-secTarget)/8);
+			return clamp(spanAct, targetSpan - targetSpan/4, targetSpan + targetSpan/2);
+		}
 		return height+1 > 10000 ? base::AdjustSpan(height, span, targetSpan)
 			: height+1 > 5000 ? clamp(span, targetSpan/8, targetSpan*4)
 			: clamp(span, targetSpan/16, targetSpan*4);

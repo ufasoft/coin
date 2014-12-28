@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include EXT_HEADER_FUTURE
@@ -81,7 +88,7 @@ const BinaryReader& operator>>(const BinaryReader& rd, TxHashesOutNums& hons) {
 	hons.reserve(size_t(rd.BaseStream.Length / (32+1)));				// heuristic upper bound
 	while  (!rd.BaseStream.Eof()) {
 		TxHashOutNum hon;
-		hon.NOuts = (UInt32)(rd >> hon.HashTx).Read7BitEncoded();
+		hon.NOuts = (uint32_t)(rd >> hon.HashTx).Read7BitEncoded();
 		hons.push_back(hon);
 	}
 	return rd;
@@ -94,13 +101,13 @@ TxHashesOutNums::TxHashesOutNums(const ConstBuf& buf) {
 	while (!rd.BaseStream.Eof()) {
 		TxHashOutNum hon;
 		stm.ReadBuffer(hon.HashTx.data(), 32);
-		hon.NOuts = (UInt32)rd.Read7BitEncoded();
+		hon.NOuts = (uint32_t)rd.Read7BitEncoded();
 		push_back(hon);
 	}
 }
 
-Target::Target(UInt32 v) {
-	Int32 m = Int32(v << 8) >> 8;
+Target::Target(uint32_t v) {
+	int32_t m = int32_t(v << 8) >> 8;
 //	if (m < 0x8000)			// namecoin violates spec
 //		Throw(E_INVALIDARG);	
 	m_value = v;
@@ -120,7 +127,7 @@ Target::Target(const BigInteger& bi) {
 }
 
 Target::operator BigInteger() const {
-	return BigInteger(Int32(m_value << 8) >> 8) << 8*((m_value >> 24)-3);
+	return BigInteger(int32_t(m_value << 8) >> 8) << 8*((m_value >> 24)-3);
 }
 
 bool Target::operator<(const Target& t) const {
@@ -148,10 +155,6 @@ const CTxes& BlockObj::get_Txes() const {
 		}
 	}
 	return m_txes;
-}
-
-HashValue Identity(const HashValue& hash) {
-	return hash;
 }
 
 HashValue TxHashOf(const TxHashOutNum& hon, int n) {
@@ -224,7 +227,7 @@ HashValue BlockObj::MerkleRoot(bool bSave) const {
 
 HashValue BlockObj::Hash() const {
 	if (!m_hash) {
-		Blob hdata = EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce);
+		Blob hdata = EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce);
 		switch (Eng().ChainParams.HashAlgo) {
 		case HashAlgo::Sha3:
 			m_hash = HashValue(SHA3<256>().ComputeHash(hdata));
@@ -239,9 +242,9 @@ HashValue BlockObj::Hash() const {
 	return m_hash.get();
 }
 
-HashValue BlockObj::PowHash(CoinEng& eng) const {
-	return eng.ChainParams.HashAlgo == HashAlgo::SCrypt
-		? ScryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce))
+HashValue BlockObj::PowHash() const {
+	return Eng().ChainParams.HashAlgo == HashAlgo::SCrypt
+		? ScryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce))
 		: Hash();
 }
 
@@ -269,7 +272,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue 
 	Ver = rd.ReadUInt32();
 
 	if (!eng.ChainParams.IsTestNet) {
-		UInt16 ver = (Ver & 0xFF);
+		uint16_t ver = (Ver & 0xFF);
 		if (ver > 112)															//!!!?
 			Throw(E_EXT_Protocol_Violation);
 		else if (ver < 1 || ver > eng.MaxBlockVersion)
@@ -304,7 +307,7 @@ void BlockObj::Write(BinaryWriter& wr) const {
 
 void BlockObj::Read(const BinaryReader& rd) {
 #ifdef X_DEBUG//!!!D
-	Int64 pos = rd.BaseStream.Position;
+	int64_t pos = rd.BaseStream.Position;
 #endif
 
 	ReadHeader(rd, false, 0);
@@ -318,7 +321,7 @@ void BlockObj::Read(const BinaryReader& rd) {
 //!!!R	m_bMerkleCalculated = true;
 	m_hash.reset();
 #ifdef X_DEBUG//!!!D
-	Int64 len = rd.BaseStream.Position-pos;
+	int64_t len = rd.BaseStream.Position-pos;
 	rd.BaseStream.Position = pos;
 	Blob br(0, (size_t)len);
 	rd.BaseStream.ReadBuffer(br.data(), (size_t)len);
@@ -330,7 +333,9 @@ void BlockObj::Write(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 
 	CoinSerialized::WriteVarInt(wr, Ver);
-	wr << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
+	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
+	if (eng.LiteMode)
+		wr << MerkleRoot();
 	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 		AuxPow->Write(wr);
 }
@@ -338,11 +343,16 @@ void BlockObj::Write(DbWriter& wr) const {
 void BlockObj::Read(const DbReader& rd) {
 	CoinEng& eng = Eng();
 
-	Ver = (UInt32)CoinSerialized::ReadVarInt(rd);
+	Ver = (uint32_t)CoinSerialized::ReadVarInt(rd);
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
-	m_merkleRoot.reset();
+	if (eng.LiteMode) {
+		HashValue merkleRoot;
+		rd >> merkleRoot;
+		m_merkleRoot = merkleRoot;
+	} else
+		m_merkleRoot.reset();
 	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 		(AuxPow = new Coin::AuxPow)->Read(rd);
 }
@@ -353,9 +363,9 @@ BigInteger BlockObj::GetWork() const {
 
 void BlockObj::CheckPow(const Target& target) {
 	if (ProofType() == ProofOf::Work) {
-		Hash();
+		HashValue hashPow = PowHash();
 		byte ar[33];
-		memcpy(ar, m_hash.get().data(), 32);
+		memcpy(ar, hashPow.data(), 32);
 		ar[32] = 0;
 		if (BigInteger(ar, sizeof ar) >= BigInteger(target))
 			Throw(E_COIN_ProofOfWorkFailed);
@@ -394,7 +404,11 @@ TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInt
 	int r = bo.Height - nInterval + 1;
 	if (bo.Height >= ChainParams.AuxPowStartBlock || (ChainParams.FullPeriod && r>0))
 		--r;
-	return bo.Timestamp - GetBlockByHeight(r).Timestamp;					//!!! should use curchain instead of main chain, but will fail only for forks longer than TargetInterval
+	Block b = LookupBlock(bo.PrevBlockHash);
+	ASSERT(b.Height >= r);
+	while (b.Height > r)
+		b = b.IsInMainChain() ? GetBlockByHeight(r) : b.GetPrevBlock();
+	return bo.Timestamp - b.Timestamp;
 }
 
 TimeSpan CoinEng::AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) {
@@ -451,9 +465,9 @@ Target CoinEng::GetNextTarget(const Block& blockLast, const Block& block) {
 }
 
 void BlockObj::Check(bool bCheckMerkleRoot) {
-	if (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE)
-		Throw(E_COIN_SizeLimits);
 	CoinEng& eng = Eng();
+	if (!eng.LiteMode && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
+		Throw(E_COIN_SizeLimits);
 
 	if (Height != -1) {
 		if (Height >= eng.ChainParams.AuxPowStartBlock) {
@@ -470,7 +484,7 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 		if (eng.ChainParams.HashAlgo == HashAlgo::Sha256 || eng.ChainParams.HashAlgo == HashAlgo::Prime)
 			CheckPow(DifficultyTarget);
 		else if (Hash() != eng.ChainParams.Genesis) {
-			HashValue hash = PowHash(eng);
+			HashValue hash = PowHash();
 			byte ar[33];
 			memcpy(ar, hash.data(), 32);
 			ar[32] = 0;
@@ -482,31 +496,46 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 	if (Timestamp > DateTime::UtcNow()+TimeSpan::FromSeconds(MAX_FUTURE_SECONDS))
 		Throw(E_COIN_BlockTimestampInTheFuture);
 
-	if (!m_txes[0].IsCoinBase())
-		Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);
-	for (int i=1; i<m_txes.size(); ++i)
-		if (m_txes[i].IsCoinBase())
-			Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
-	EXT_FOR (const Tx& tx, m_txes) {
-		tx.Check();
+	if (!eng.LiteMode) {
+		if (!m_txes[0].IsCoinBase())
+			Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);
+		for (int i=1; i<m_txes.size(); ++i)
+			if (m_txes[i].IsCoinBase())
+				Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
+		EXT_FOR (const Tx& tx, m_txes) {
+			tx.Check();
+		}
+		if (bCheckMerkleRoot && MerkleRoot(false) != m_merkleRoot.get())
+			Throw(E_COIN_MerkleRootMismatch);
 	}
-	if (bCheckMerkleRoot && MerkleRoot(false) != m_merkleRoot.get())
-		Throw(E_COIN_MerkleRootMismatch);
 	CheckSignature();
 }
 
-void BlockObj::CheckCoinbaseTx(Int64 nFees) {
+void Block::Check(bool bCheckMerkleRoot) const {
+	if (!Eng().LiteMode)
+		get_Txes();
+	m_pimpl->Check(bCheckMerkleRoot);
+}
+
+void BlockObj::CheckCoinbaseTx(int64_t nFees) {
 	CoinEng& eng = Eng();
 
 	if (!eng.LiteMode) {
-#ifdef X_DEBUG//!!!D
-		auto proofType = ProofType();
-#endif
-		Int64 valueOut = m_txes[0].ValueOut;
+		int64_t valueOut = m_txes[0].ValueOut;
 		if (valueOut > eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true)+nFees) {
 			Throw(E_COIN_SubsidyIsVeryBig);
 		}
 	}
+}
+
+int BlockObj::GetBlockHeightFromCoinbase() const {
+	ConstBuf cbuf = get_Txes()[0].TxIns()[0].Script();
+	if (cbuf.P[0] > 4)
+		return -1;
+	CMemReadStream stm(cbuf);
+	BigInteger bi;
+	BinaryReader(stm) >> bi;
+	return explicit_cast<int>(bi);
 }
 
 void Block::LoadToMemory() {							//!!! Really don't loads TxIn Scripts
@@ -518,34 +547,6 @@ void Block::LoadToMemory() {							//!!! Really don't loads TxIn Scripts
 	}
 }
 
-bool Block::HasBestChainWork() const {
-	CoinEng& eng = Eng();
-
-	if (!eng.BestBlock())
-		return true;
-	Block prevBlock = _self;
-	BigInteger work = 0, forkWork = 0;
-
-	Block forkBlock = eng.BestBlock();
-#ifdef X_DEBUG //!!!D
-	BigInteger maxTarg = eng.ChainParams.MaxTarget;
-	BigInteger thisDiff = DifficultyTarget;
-	BigInteger chainDiff = eng.Chain.BestBlock.DifficultyTarget;
-#endif
-
-	while (true) {
-		while (prevBlock.Height > forkBlock.Height) {
-			work += prevBlock.GetWork();
-			prevBlock = prevBlock.GetPrevBlock();
-		}
-		if (Hash(forkBlock) == Hash(prevBlock))
-			break;
-		forkWork += forkBlock.GetWork();
-		forkBlock = forkBlock.GetPrevBlock();
-	}
-	return work > forkWork;
-}
-
 Block Block::GetOrphanRoot() const {					// ASSERT(eng.Caches.Mtx is locked)
 	CoinEng& eng = Eng();
 	const Block *r = this;
@@ -554,15 +555,15 @@ Block Block::GetOrphanRoot() const {					// ASSERT(eng.Caches.Mtx is locked)
 	return *r;
 }
 
-Int64 RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
+int64_t RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 	const CConnectJob& job = *pjob;
 	const ConnectTask& task = *ptask;
 	CCoinEngThreadKeeper engKeeper(&job.Eng);
 	t_bPayToScriptHash = (void*)(bool)job.PayToScriptHash;
-	Int64 fee = 0;
+	int64_t fee = 0;
 	try {
 		EXT_FOR (const Tx& ptx, task.Txes) {
-			Int64 nValueIn = 0;
+			int64_t nValueIn = 0;
 			const Tx& tx = ptx;
 			if (Interlocked::Add(job.SigOps, tx.SigOpCount) > MAX_BLOCK_SIGOPS)
 				Throw(E_COIN_TxTooManySigOps);
@@ -666,7 +667,7 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 		fut.wait();
 	}
 
-	vector<future<Int64>> futures;
+	vector<future<int64_t>> futures;
 	futures.reserve(Tasks.size());
 	EXT_FOR (const ptr<ConnectTask>& task, Tasks) {
 		futures.push_back(std::async(RunConnectTask, this, task.get()));
@@ -680,9 +681,9 @@ void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKe
 		return;
 	Blob compressed;
 	try {
-		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING), ignEC_R_INVALID_ENCODING);
-		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE), ignEC_R_POINT_IS_NOT_ON_CURVE);
-		DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB), ignERR_R_EC_LIB);
+		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
+		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
+		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
 		compressed = ToCompressedKey(pubKey);
 	} catch (RCExc) {
 		return;
@@ -703,7 +704,7 @@ void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKe
 			}
 		}
 	} else {
-		Int64 id = CIdPk(hash160);
+		int64_t id = CIdPk(hash160);
 		PubKeyData pkd;
 		pkd.PubKey = compressed;
 		Blob pk(nullptr);
@@ -744,7 +745,7 @@ void CConnectJob::Prepare(const Block& block) {
 				case 20:
 					if (!Map.count(hash160)) {
 						PubKeyData pkd;
-						Int64 id = CIdPk(hash160);
+						int64_t id = CIdPk(hash160);
 						if (!!(pk = Eng.Db->FindPubkey(id))) {
 							pkd.PubKey = (pkd.IsTask = pk.Size != 20) || HashValue160(pk)==hash160 ? pk : Blob(nullptr);
 							Map.insert(make_pair(hash160, pkd));
@@ -811,7 +812,7 @@ public:
 
 	~CoinEngTransactionScope() {
 		if (!m_bCommitted) {
-			if (std::uncaught_exception()) {
+			if (InException) {
 				m_db.Rollback();
 				Eng.Rollback();
 			} else {
@@ -827,16 +828,17 @@ public:
 		m_bCommitted = true;
 	}
 private:
+	CInException InException;
 	CBool m_bCommitted;
 };
 
 
 void Block::Connect() const {
-	TRC(3, " " << Hash(_self) << " Height: " << Height << "  " << get_Txes().size() << " Txes");
+	CoinEng& eng = Eng();
+	TRC(3, " " << Hash(_self) << " Height: " << Height << "  " << (eng.LiteMode ? 0 : get_Txes().size()) << " Txes");
 
 	Check(false);		// Check Again without bCheckMerkleRoot
-	Int64 nFees = 0;
-	CoinEng& eng = Eng();
+	int64_t nFees = 0;
 
 	t_bPayToScriptHash = (void*)(Height >= eng.ChainParams.PayToScriptHashHeight);
 
@@ -850,10 +852,10 @@ void Block::Connect() const {
 		if (job.Failed)
 			Throw(E_COIN_ProofOfWorkFailed);
 		nFees = job.Fee;
-	}
 
-	job.Prepare(_self);
-	job.Calculate();
+		job.Prepare(_self);
+		job.Calculate();
+	}
 
 	CBoolKeeper keepDisabledPkCache(eng.Caches.PubkeyCacheEnabled, false);
 	{
@@ -862,15 +864,15 @@ void Block::Connect() const {
 
 		for (CConnectJob::CMap::iterator it=job.Map.begin(), e=job.Map.end(); it!=e; ++it) {
 			if (it->second.Insert) {
-				eng.Db->InsertPubkey(Int64(CIdPk(it->first)), it->second.PubKey);
+				eng.Db->InsertPubkey(int64_t(CIdPk(it->first)), it->second.PubKey);
 			} else if (it->second.Update)
-				eng.Db->UpdatePubkey(Int64(CIdPk(it->first)), it->second.PubKey);
+				eng.Db->UpdatePubkey(int64_t(CIdPk(it->first)), it->second.PubKey);
 		}
 
 		EXT_LOCK (eng.Caches.Mtx) {
 			for (CConnectJob::CMap::iterator it=job.Map.begin(), e=job.Map.end(); it!=e; ++it) {				//!!!? necessary to sync cache
 				if (it->second.Update) {
-					Int64 id = CIdPk(it->first);
+					int64_t id = CIdPk(it->first);
 					eng.Caches.m_cachePkIdToPubKey.erase(id);													// faster than call ToUncompressedKey()
 /*!!!R 				ChainCaches::CCachePkIdToPubKey::iterator j = eng.Caches.m_cachePkIdToPubKey.find(id);	
 					if (j != eng.Caches.m_cachePkIdToPubKey.end())
@@ -879,13 +881,7 @@ void Block::Connect() const {
 			}
 		}
 
-		if (eng.LiteMode) {
-			CTxMap txMap;
-			int nBlockSigOps = 0;
-			EXT_FOR (const Tx& tx, get_Txes()) {
-				tx.ConnectInputs(txMap, Height, nBlockSigOps, nFees, true, false, eng.AllowFreeTxes ? 0 : tx.GetMinFee(1, false), DifficultyTarget);
-			}
-		} else {
+		if (!eng.LiteMode) {
 			EXT_FOR (const Tx& tx, get_Txes()) {
 				if (!tx.IsCoinBase()) {
 					vector<Tx> vTxPrev;
@@ -910,8 +906,6 @@ void Block::Connect() const {
 		ofsapp << "\nBlock  " << Hash(_self) << " Height: " << Height << "  " << get_Txes().size() << " Txes\n";
 #endif
 
-		vector<HashValue> prevTxHashes;
-		prevTxHashes.reserve(m_pimpl->m_txes.size());
 		Coin::TxHashesOutNums txHashOutNums;
 		for (int i=0; i<m_pimpl->m_txes.size(); ++i) {
 			if (!eng.Runned)
@@ -922,7 +916,6 @@ void Block::Connect() const {
 #ifdef X_DEBUG//!!!D
 				ofsapp << "  " << i << "\t" << txHash << "\n";
 #endif
-				prevTxHashes.push_back(txHash);
 
 				MemoryStream msTx;
 				DbWriter dw(msTx);
@@ -932,23 +925,20 @@ void Block::Connect() const {
 				DbWriter wrIns(msTxIns);
 				wrIns.PCurBlock = this;
 				wrIns.ConnectJob = &job;
-				if (!eng.LiteMode) {
-					wrIns.PTxHashesOutNums = &txHashOutNums;
-					tx.WriteTxIns(wrIns);
-				}
+				wrIns.PTxHashesOutNums = &txHashOutNums;
+				tx.WriteTxIns(wrIns);
 				eng.Db->InsertTx(tx, txHashOutNums, txHash, Height, msTxIns, CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), msTx);
-				if (!eng.LiteMode) {
-					TxHashOutNum hom = { txHash, (UInt32)tx.TxOuts().size() };
-					txHashOutNums.push_back(hom);
-				}
 
-				if (!eng.LiteMode) {
-					if (!tx.IsCoinBase()) {
-						EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-							vector<bool> vSpend = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
-							vSpend.at(txIn.PrevOutPoint.Index) = false;
-							eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vSpend);
-						}
+				TxHashOutNum hom = { txHash, (uint32_t)tx.TxOuts().size() };
+				txHashOutNums.push_back(hom);
+
+				if (!tx.IsCoinBase()) {
+					EXT_FOR (const TxIn& txIn, tx.TxIns()) {
+						vector<bool> vSpend = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
+						if (txIn.PrevOutPoint.Index >= vSpend.size() || !vSpend[txIn.PrevOutPoint.Index])
+							Throw(E_COIN_InputsAlreadySpent);
+						vSpend[txIn.PrevOutPoint.Index] = false;
+						eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vSpend);
 					}
 				}
 			}
@@ -968,54 +958,15 @@ void Block::Connect() const {
 
 #ifdef X_DEBUG//!!!D
 	static FileStream g_fs("c:\\work\\coin\\Bitcoin-testnet2.dump", FileMode::Create, FileAccess::Write);
-	BinaryWriter(g_fs) << UInt32(eng.ChainParams.ProtocolMagic) << UInt32(m_pimpl->Binary.Size);
+	BinaryWriter(g_fs) << uint32_t(eng.ChainParams.ProtocolMagic) << uint32_t(m_pimpl->Binary.Size);
 	g_fs.WriteBuf(m_pimpl->Binary);
 	g_fs.Flush();
 #endif
 
 
-#ifdef X_DEBUG//!!!D
-		EXT_LOCK (eng.Caches.Mtx) {
-			eng.Caches.HashToTxCache.clear();
-		}
-		int h = Height;
-		vector<Blob> txblobs;
-		if (h == 11116296) {
-			EXT_FOR (const Tx& tx, Txes) {
-				txblobs.push_back(EXT_BIN(tx));
-			}
-			cout << "\n\n";
-			MemoryStream mst;
-			BinaryWriter(mst) << Txes[11].TxOuts()[1];
-			cout << Blob(mst);
-		}
-		Block block = eng.Db->FindBlock(h);
-		block.LoadToMemory();
-		EXT_FOR (const Tx& tx, block.Txes) {
-			tx.m_pimpl->m_nBytesOfHash = 0;
-		}	
-		block.m_pimpl->m_hash.reset();
-		block.m_pimpl->m_txHashesOutNums.clear();
-		MemoryStream ms1;
-		if (h == 11116296) {
-			cout << "\n\n";
-			MemoryStream mst;
-			BinaryWriter(mst) << block.Txes[11].TxOuts()[1];
-			cout << Blob(mst);
-			h = h;
-		}
-		BinaryWriter(ms1) << block;
-		HashValue hash = Hash(block);
-		ASSERT(!hash.data()[31]);
-#endif
-
 		if (eng.m_iiEngEvents)
 			eng.m_iiEngEvents->OnBlockConnectDbtx(_self);
 	}
-#ifdef X_DEBUG//!!!D
-	TRC(1, "Before LogObjectCounters");
-	LogObjectCounters();
-#endif
 	eng.SetBestBlock(_self);
 
 	if (eng.m_iiEngEvents) {
@@ -1028,25 +979,27 @@ void Block::Connect() const {
 void Block::Disconnect() const {
 	CoinEng& eng = Eng();
 	
-	vector<Int64> txids;
+	vector<int64_t> txids;
 	txids.reserve(get_Txes().size());
 
 	eng.EnsureTransactionStarted();
 	CoinEngTransactionScope scopeBlockSavepoint(eng);
 
-	for (int i=get_Txes().size(); i--;) {		// reverse order is important
-		const Tx& tx = get_Txes()[i];
-		Coin::HashValue txhash = Coin::Hash(tx);
-		txids.push_back(letoh(*(Int64*)txhash.data()));
+	if (!eng.LiteMode) {
+		for (int i=get_Txes().size(); i--;) {		// reverse order is important
+			const Tx& tx = get_Txes()[i];
+			Coin::HashValue txhash = Coin::Hash(tx);
+			txids.push_back(letoh(*(int64_t*)txhash.data()));
 
-		eng.OnDisconnectInputs(tx);
+			eng.OnDisconnectInputs(tx);
 
-		if (!tx.IsCoinBase()) {
-			EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-				vector<bool> vec = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
-				vec.resize(std::max(vec.size(), size_t(txIn.PrevOutPoint.Index+1)));
-				vec[txIn.PrevOutPoint.Index] = true;
-				eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vec);
+			if (!tx.IsCoinBase()) {
+				EXT_FOR (const TxIn& txIn, tx.TxIns()) {
+					vector<bool> vec = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
+					vec.resize(std::max(vec.size(), size_t(txIn.PrevOutPoint.Index+1)));
+					vec[txIn.PrevOutPoint.Index] = true;
+					eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vec);
+				}
 			}
 		}
 	}
@@ -1075,29 +1028,29 @@ void Block::Reorganize() {
 	vector<Block> vConnect;
 	list<Tx> vResurrect;
 	while (true) {
-		while (prevBlock.Height > forkBlock.Height) {
-			vConnect.push_back(prevBlock);
-			prevBlock = prevBlock.GetPrevBlock();
-		}
+		while (prevBlock.Height > forkBlock.Height)
+			vConnect.push_back(exchange(prevBlock, prevBlock.GetPrevBlock()));
 		if (Hash(forkBlock) == Hash(prevBlock))
 			break;
+		forkBlock.LoadToMemory();
 		forkBlock.Disconnect();
 		const CTxes& txes = forkBlock.get_Txes();
 		for (CTxes::const_reverse_iterator it=txes.rbegin(); it!=txes.rend(); ++it) {
 			if (!it->IsCoinBase())
 				vResurrect.push_front(*it);
 		}
+		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.insert(make_pair(Hash(forkBlock), forkBlock)));
 		forkBlock = forkBlock.GetPrevBlock();
 	}
-	EXT_LOCK (eng.Caches.Mtx) {
-		eng.Caches.HeightToHashCache.clear();
-		eng.Caches.HashToAlternativeChain.clear();
-	}
+	TRC(1, "Fork Block: " << Hash(forkBlock) << "  H: " << forkBlock.Height);
+
+	EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HeightToHashCache.clear());
 
 	for (int i=vConnect.size(); i--;) {
 		Block& block = vConnect[i];
 		block.Connect();
 		eng.Caches.m_bestBlock = block;
+		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.erase(Hash(block)));
 		EXT_FOR (const Tx& tx, block.get_Txes()) {
 			eng.RemoveFromMemory(tx);
 		}
@@ -1105,8 +1058,35 @@ void Block::Reorganize() {
 
 	vector<HashValue> vQueue;
 	EXT_FOR (const Tx& tx, vResurrect) {
-		eng.AddToPool(tx, vQueue);
+		try {
+			DBG_LOCAL_IGNORE(E_COIN_InputsAlreadySpent);
+			DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
+
+			eng.AddToPool(tx, vQueue);
+		} catch (system_error& ex) {
+			switch (ToHResult(ex)) {
+			case E_COIN_InputsAlreadySpent:
+			case E_COIN_TxNotFound:
+				break;
+			default:
+				throw;
+			}
+		}
 	}
+}
+
+bool Block::HasBestChainWork() const {
+	CoinEng& eng = Eng();
+
+	if (!eng.BestBlock())
+		return true;
+	BigInteger work = 0, forkWork = 0;
+	Block blockRoot;
+	for (blockRoot=_self; !blockRoot.IsInMainChain();)
+		forkWork += exchange(blockRoot, blockRoot.GetPrevBlock()).GetWork();
+	for (Block b=eng.BestBlock(); Hash(b)!=Hash(blockRoot) && forkWork>work;)
+		work += exchange(b, b.GetPrevBlock()).GetWork();
+	return forkWork > work;
 }
 
 void Block::Accept() {
@@ -1133,29 +1113,28 @@ void Block::Accept() {
 		m_pimpl->Height = blockPrev.Height+1;
 	}
 
-	for (int i=0; i<m_pimpl->m_txes.size(); ++i)
-		m_pimpl->m_txes[i].Height = m_pimpl->Height;
-
-	EXT_FOR (const Tx& tx, get_Txes()) {
+	EXT_FOR (Tx& tx, m_pimpl->m_txes) {
+		tx.Height = Height;
 		if (!tx.IsFinal(Height, Timestamp))
 			Throw(E_COIN_ContainsNonFinalTx);
 	}
 
 	HashValue hash = Hash(_self);
-
 	m_pimpl->ComputeAttributes();
 
 	ChainParams::CCheckpoints::iterator itCheckPoint = eng.ChainParams.Checkpoints.find(Height);
 	if (itCheckPoint != eng.ChainParams.Checkpoints.end() && itCheckPoint->second != hash)
 		Throw(E_COIN_RejectedByCheckpoint);
 
+//!!!T	if (Ver >= 2 && IsSuperMajority(2, 750, 1000) && Height != m_pimpl->GetBlockHeightFromCoinbase())				// very expensive check
+//		Throw(E_COIN_BlockHeightMismatchInCoinbase);
+
 	EXT_LOCK (eng.Mtx) {
 		if (Height <= eng.BestBlockHeight() && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
 		if (!HasBestChainWork()) {
-			EXT_LOCK (eng.Caches.Mtx) {
-				eng.Caches.HashToAlternativeChain.insert(make_pair(hash, _self));
-			}
+			TRC(2, "Fork detected: " << hash << "  Height: " << Height);
+			EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.insert(make_pair(hash, _self)));
 		} else {
 			if (eng.BestBlock() && Hash(eng.BestBlock()) != get_PrevBlockHash())
 				Reorganize();
@@ -1170,12 +1149,14 @@ void Block::Accept() {
 #endif
 				}
 
-				EXT_FOR (const Tx& tx, get_Txes()) {
-					eng.RemoveFromMemory(tx);
+				if (!eng.LiteMode) {
+					EXT_FOR (const Tx& tx, get_Txes()) {
+						eng.RemoveFromMemory(tx);
+					}
 				}
 			}
 		
-			Inventory inv(InventoryType::MSG_BLOCK, hash);
+			Inventory inv(eng.LiteMode ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, hash);
 
 			EXT_LOCK (eng.MtxPeers) {
 				for (CoinEng::CLinks::iterator it=begin(eng.Links); it!=end(eng.Links); ++it) {
@@ -1201,18 +1182,21 @@ void Block::Process(P2P::Link *link) {
 	HashValue hash = Hash(_self);	
 	bool bHave = eng.HaveBlock(hash);
 
-	TRC(4, (bHave ? "Have " : "") << hash << "  Prev: " << PrevBlockHash);
+	TRC(8, (bHave ? "Have " : "") << hash << "  Prev: " << PrevBlockHash);		//!!!D was 8
 
 	if (bHave)
 		return;
 
 	try {
-		DBG_LOCAL_IGNORE_NAME(E_COIN_BlockNotFound, ignE_COIN_BlockNotFound);
+		DBG_LOCAL_IGNORE(E_COIN_BlockNotFound);
 
 		Check(true);
-	} catch (RCExc ex) {
-		if (HResultInCatch(ex) == E_COIN_BlockNotFound)
+	} catch (Exception& ex) {
+		switch (ToHResult(ex)) {
+		case E_COIN_BlockNotFound:
+		case E_COIN_TxNotFound:					// possible in PoS blocks
 			return;
+		}
 		throw;
 	}
 	if (hash==eng.ChainParams.Genesis || eng.HaveBlockInMainTree(PrevBlockHash)) {

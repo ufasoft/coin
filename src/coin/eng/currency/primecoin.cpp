@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "../util/prime-util.h"
@@ -33,7 +40,7 @@ protected:
 		Blob blob = CoinSerialized::ReadBlob(rd);
 		PrimeChainMultiplier = BigInteger(blob.constData(), blob.Size);
 
-		TRC(4, "PrimeChainMultiplier: " << PrimeChainMultiplier);
+		TRC(6, "PrimeChainMultiplier: " << PrimeChainMultiplier);
 	}
 
 	using base::Write;
@@ -62,12 +69,12 @@ protected:
 		return m_hash.get();
 	}
 
-	HashValue PowHash(CoinEng& eng) const override {
-		return Coin::Hash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce));
+	HashValue PowHash() const override {
+		return Coin::Hash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce));
 	}
 
 	void CheckPow(const Target& target) override {
-		HashValue hashPow = PowHash(Eng());
+		HashValue hashPow = PowHash();
 		BigInteger bnHash = HashValueToBigInteger(hashPow);
 		BigInteger origin = bnHash * PrimeChainMultiplier;
 
@@ -99,6 +106,7 @@ public:
 	PrimeCoinEng(CoinDb& cdb)
 		:	base(cdb)
 	{
+		MaxBlockVersion = 5;
 	}
 
 	void SetChainParams(const Coin::ChainParams& p) override {
@@ -113,8 +121,8 @@ protected:
 		return double(target.m_value)/(1 << FRACTIONAL_BITS);
 	}
 
-	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
-		Int64 cents = (Int64)floor(999 * 100 / (difficulty*difficulty));
+	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
+		int64_t cents = (int64_t)floor(999 * 100 / (difficulty*difficulty));
 		return cents * (ChainParams.CoinValue/100);
 	}
 
@@ -127,8 +135,8 @@ protected:
 			double d = GetFractionalDifficulty(targ);
 			int nTargetSpacing = (int)ChainParams.BlockSpan.get_TotalSeconds();
 			
-			BigInteger bn = BigInteger((Int64)floor(d * (1ULL << 32))) * (INTERVAL+1) * nTargetSpacing / ((INTERVAL-1) * nTargetSpacing + 2 * nActualSpacing);
-			d = double(explicit_cast<Int64>(bn)) / (1ULL << 32); 
+			BigInteger bn = BigInteger((int64_t)floor(d * (1ULL << 32))) * (INTERVAL+1) * nTargetSpacing / ((INTERVAL-1) * nTargetSpacing + 2 * nActualSpacing);
+			d = double(explicit_cast<int64_t>(bn)) / (1ULL << 32); 
 
 			d = max(1., min(double(1 << FRACTIONAL_BITS), d));
 			r = targ;
@@ -139,7 +147,7 @@ protected:
 			else
 				r = floor(targ) + DifficultyToFractional(d);
 		}
-		return Target((UInt32)ceil(r * 0x1000000));
+		return Target((uint32_t)ceil(r * 0x1000000));
 	}
 
 	Target GetNextTarget(const Block& blockLast, const Block& block) override {

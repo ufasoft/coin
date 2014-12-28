@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -265,7 +272,7 @@ Blob Script::DeleteSubpart(const ConstBuf& mb, const ConstBuf& part) {
 	return r;
 }
 
-HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int32 nHashType) {
+HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int32_t nHashType) {
 	Tx txTmp(txoTo.Clone());
 	txTmp.m_pimpl->m_nBytesOfHash = 0;
 	byte opcode = OP_CODESEPARATOR;
@@ -299,11 +306,11 @@ HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int
 	return Hash(EXT_BIN(txTmp << nHashType));
 }
 
-bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, Int32 nHashType) {
+bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, int32_t nHashType) {
 	if (IsCanonicalSignature(sig)) {
 		try {
 	#define EC_R_INVALID_ENCODING				 102	// OpenSSL
-			DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING), ignEC_R_INVALID_ENCODING);								
+			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
 
 	#if UCFG_COIN_ECC=='S'
 			Sec256Dsa dsa;
@@ -335,7 +342,7 @@ static void MakeSameSize(Vm::Value& v1, Vm::Value& v2) {
 	v2.Size = size;
 }
 
-bool Vm::EvalImp(const Tx& txTo, UInt32 nIn, Int32 nHashType) {
+bool Vm::EvalImp(const Tx& txTo, uint32_t nIn, int32_t nHashType) {
 	bool r = true;
 	vector<bool> vExec;
 	vector<Value> altStack;
@@ -709,10 +716,10 @@ bool Vm::EvalImp(const Tx& txTo, UInt32 nIn, Int32 nHashType) {
 					GetStack(0) = FromBigInteger(!!ToBigInteger(GetStack(0)));
 					break;
 				case OP_SIZE:
-					Push(FromBigInteger(BigInteger((Int64)GetStack(0).Size)));
+					Push(FromBigInteger(BigInteger((int64_t)GetStack(0).Size)));
 					break;
 				case OP_DEPTH:
-					Push(FromBigInteger(BigInteger((Int64)Stack.size())));
+					Push(FromBigInteger(BigInteger((int64_t)Stack.size())));
 					break;
 				case OP_CODESEPARATOR:
 					m_posCodeHash = (int)m_stm->Position;
@@ -746,7 +753,7 @@ void Vm::Init(const ConstBuf& mbScript) {
 	m_posCodeHash = 0;
 }
 
-bool Vm::Eval(const ConstBuf& mbScript, const Tx& txTo, UInt32 nIn, Int32 nHashType) {
+bool Vm::Eval(const ConstBuf& mbScript, const Tx& txTo, uint32_t nIn, int32_t nHashType) {
 	Init(mbScript);
 	try {
 		return EvalImp(txTo, nIn, nHashType);
@@ -758,16 +765,17 @@ bool Vm::Eval(const ConstBuf& mbScript, const Tx& txTo, UInt32 nIn, Int32 nHashT
 const double LN2 = log(2.),
 	MINUS_ONE_DIV_LN2SQUARED = -1 / (LN2*LN2);
 
-CoinFilter::CoinFilter(int nElements, double falsePostitiveRate, UInt32 tweak, byte flags)
+CoinFilter::CoinFilter(int nElements, double falsePostitiveRate, uint32_t tweak, byte flags)
 	:	Tweak(tweak)
 	,	Flags(flags)
 {
-	Bitset.resize(min(MAX_BLOOM_FILTER_SIZE, size_t(MINUS_ONE_DIV_LN2SQUARED * nElements * log(falsePostitiveRate))));
+	Bitset.resize(8 * min(MAX_BLOOM_FILTER_SIZE, size_t(MINUS_ONE_DIV_LN2SQUARED * nElements * log(falsePostitiveRate))/8));
+	ASSERT((Bitset.size() & 7) == 0);
 	HashNum = min(MAX_HASH_FUNCS, int(Bitset.size()/nElements * LN2));
 }
 
 size_t CoinFilter::Hash(const ConstBuf& cbuf, int n) const {
-	return MurmurHash3_32(cbuf, HashNum * 0xFBA4C795 + Tweak) % Bitset.size();
+	return MurmurHash3_32(cbuf, n * 0xFBA4C795 + Tweak) % Bitset.size();
 }
 
 ConstBuf CoinFilter::FindScriptData(const ConstBuf& script) const {
@@ -782,7 +790,7 @@ void CoinFilter::Write(BinaryWriter& wr) const {
 	vector<byte> v;
 	to_block_range(Bitset, back_inserter(v));
 	CoinSerialized::WriteBlob(wr, Blob(&v[0], v.size()));
-	wr << UInt32(HashNum) << Tweak << Flags;
+	wr << uint32_t(HashNum) << Tweak << Flags;
 }
 
 void CoinFilter::Read(const BinaryReader& rd) {

@@ -1,35 +1,35 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "filet.h"
 
 namespace Ext { namespace DB { namespace KV {
 
-int Filet::IndirectLevels() const {
-	if (Length == 0)
-		return 0;
-	int bits = max(0, BitOps::ScanReverse(UInt32((Length-1) >> PageSizeBits))-1);
-	return bits/(PageSizeBits-2) + 1;
-}
-
-UInt64 Filet::GetPagesForLength(UInt64 len) const {
+uint64_t Filet::GetPagesForLength(uint64_t len) const {
 	const size_t pageSize = m_tx.Storage.PageSize;
 	return (len + pageSize - 1) >> PageSizeBits;
 }
 
-UInt32 Filet::GetPgNo(Page& page, int idx) const {
-	return letoh(((UInt32*)page.get_Address())[idx]);
+uint32_t Filet::GetPgNo(Page& page, int idx) const {
+	return letoh(((uint32_t*)page.get_Address())[idx]);
 }
 
-void Filet::PutPgNo(Page& page, int idx, UInt32 pgno) const {
+void Filet::PutPgNo(Page& page, int idx, uint32_t pgno) const {
 	ASSERT(page.Dirty);
-	((UInt32*)page.get_Address())[idx] = htole(pgno);
+	((uint32_t*)page.get_Address())[idx] = htole(pgno);
 }
 
-Page Filet::FindPath(UInt64 offset, PathVisitor& visitor) const {
+Page Filet::FindPath(uint64_t offset, PathVisitor& visitor) const {
 	Page page = PageRoot, pagePrev;
-	UInt32 pgno = 0;
+	uint32_t pgno = 0;
 	int prevIdx = 0;
-	for (int levels=IndirectLevels(), level=levels; ;) {
+	for (int levels=IndirectLevels, level=levels; ;) {
 		--level;
 		int bits = PageSizeBits + level*(PageSizeBits-2);
 		if (!visitor.OnPathLevel(levels - level-1, page))
@@ -38,21 +38,17 @@ Page Filet::FindPath(UInt64 offset, PathVisitor& visitor) const {
 			PutPgNo(pagePrev, prevIdx, page.N);
 		if (level == -1)
 			break;
-		pagePrev = page;
-		int idx = int (offset >> bits);
-		prevIdx = idx;
-		pgno = GetPgNo(page, idx);
-		page = pgno ? m_tx.OpenPage(pgno) : nullptr;
+		pagePrev = exchange(page, (pgno = GetPgNo(page, prevIdx = int(offset >> bits))) ? m_tx.OpenPage(pgno) : nullptr);
 		offset &= (1LL<<bits) - 1;
 	}
 	return page;
 }
 
-byte *Filet::FindPathFlat(UInt64 offset, PathVisitor& visitor) const {
-	UInt32 pn = PageRoot.N, pnPrev = 0;
-	UInt32 pgno = 0;
+byte *Filet::FindPathFlat(uint64_t offset, PathVisitor& visitor) const {
+	uint32_t pn = PageRoot.N, pnPrev = 0;
+	uint32_t pgno = 0;
 	int prevIdx = 0;
-	for (int levels=IndirectLevels(), level=levels; ;) {
+	for (int levels=IndirectLevels, level=levels; ;) {
 		--level;
 		int bits = PageSizeBits + level*(PageSizeBits-2);
 		if (!visitor.OnPathLevelFlat(levels - level-1, pn))
@@ -69,31 +65,34 @@ byte *Filet::FindPathFlat(UInt64 offset, PathVisitor& visitor) const {
 		pn = pgno;
 		offset &= (1LL<<bits) - 1;
 	}
-	return pn ? (byte*)m_tx.Storage.ViewAddress + UInt64(pn) * m_tx.Storage.PageSize : nullptr;
+	return pn ? (byte*)m_tx.Storage.ViewAddress + uint64_t(pn) * m_tx.Storage.PageSize : nullptr;
 }
 
 bool Filet::TouchPage(Page& page) {
 	if (page.Dirty)
 		return false;
-	page = m_tx.Allocate(PageAlloc::Move, &page);
+	page = dynamic_cast<DbTransaction&>(m_tx).Allocate(PageAlloc::Move, &page);
 	return true;
 }
 
 void Filet::TouchPage(Page& pageData, PagedPath& path) {
 	TouchPage(pageData);
-	UInt32 pgno = pageData.N;
+	uint32_t pgno = pageData.N;
 	bool bDirty = false;
 	for (size_t level=path.size(); !bDirty && level--;) {
 		Page& page = path[level].first;
 		bDirty = page.Dirty;
 		TouchPage(page);
 		if (level == 0)
-			PageRoot = page;
+			SetRoot(page);
 		PutPgNo(page, path[level].second, exchange(pgno, page.N));
 	}
 }
 
-Page Filet::GetPageToModify(UInt64 offset, bool bOptional) {
+Page Filet::GetPageToModify(uint64_t offset, bool bOptional) {
+#if UCFG_DB_TLB
+	ClearTlbs();							//!!!?
+#endif
 	struct PutVisitor : PathVisitor {
 		Filet *pFilet;
 		bool Optional;
@@ -102,11 +101,11 @@ Page Filet::GetPageToModify(UInt64 offset, bool bOptional) {
 			if (!page) {
 				if (Optional)
 					return false;
-				page = pFilet->m_tx.Allocate(PageAlloc::Zero);
+				page = dynamic_cast<DbTransaction&>(pFilet->m_tx).Allocate(PageAlloc::Zero);
 				if (0 == level)
-					pFilet->PageRoot = page;
+					pFilet->SetRoot(page);
 			} else if (pFilet->TouchPage(page) && 0==level)
-				pFilet->PageRoot = page;
+				pFilet->SetRoot(page);
 			return true;
 		}
 	} visitor;
@@ -115,23 +114,24 @@ Page Filet::GetPageToModify(UInt64 offset, bool bOptional) {
 	return FindPath(offset, visitor);
 }
 
-UInt32 Filet::RemoveRange(int level, Page& page, UInt32 first, UInt32 last) {
+uint32_t Filet::RemoveRange(int level, Page& page, uint32_t first, uint32_t last) {
 	int bits = level*(PageSizeBits-2);
-	UInt32 from = first >> bits,
+	uint32_t from = first >> bits,
 			to = last >> bits;
 	bool bHasData = false;
-	UInt32 *p = (UInt32*)page.get_Address();
-	for (int i=0, n=int(m_tx.Storage.PageSize/4); i<n; ++i) {
-		if (UInt32 pgno = letoh(p[i])) {
+	uint32_t *p = (uint32_t*)page.get_Address();
+	DbTransaction& tx = dynamic_cast<DbTransaction&>(m_tx);
+	for (int i=0, n=int(tx.Storage.PageSize/4); i<n; ++i) {
+		if (uint32_t pgno = letoh(p[i])) {
 			if (i>=from && i<=to) {
 				if (0 == level) {
-					m_tx.FreePage(exchange(pgno, 0));				
+					tx.FreePage(exchange(pgno, 0));				
 				} else {
-					Page subPage = m_tx.OpenPage(pgno);
-					UInt32 offset = (i << bits);
+					Page subPage = tx.OpenPage(pgno);
+					uint32_t offset = (i << bits);
 					if (pgno = RemoveRange(level-1, subPage, first-offset, last-offset)) {
 						if (TouchPage(page))
-							p = (UInt32*)page.get_Address();
+							p = (uint32_t*)page.get_Address();
 						*p = htole(pgno);
 					}
 				}
@@ -141,74 +141,101 @@ UInt32 Filet::RemoveRange(int level, Page& page, UInt32 first, UInt32 last) {
 	}
 	if (bHasData)
 		return page.N;
-	m_tx.FreePage(page);
+	tx.FreePage(page);
 	page = nullptr;
 	return 0;
 }
 
-void Filet::put_Length(UInt64 v) {
-	UInt64 prevLen = Length;
-	int levels = IndirectLevels();
+void Filet::SetLength(uint64_t v) {
+	m_length = v;
+	IndirectLevels = !m_length ? 0 : max(0, BitOps::ScanReverse(uint32_t((Length-1) >> PageSizeBits))-1)/(PageSizeBits-2) + 1;
+}
 
-	UInt64 nPages = GetPagesForLength(v),
+void Filet::put_Length(uint64_t v) {
+	uint64_t prevLen = Length;
+	int levels = IndirectLevels;
+
+	uint64_t nPages = GetPagesForLength(v),
 		nHasPages = GetPagesForLength(Length);
 	if (nPages < nHasPages) {
-		RemoveRange(levels, PageRoot, UInt32(nPages), UInt32(nHasPages-1));
+		RemoveRange(levels, PageRoot, uint32_t(nPages), uint32_t(nHasPages-1));
 	}
-	m_length = v;
-	int levelsNew=IndirectLevels();
+	SetLength(v);
+	int levelsNew = IndirectLevels;
+	DbTransaction& tx = dynamic_cast<DbTransaction&>(m_tx);
 	for (; levelsNew>levels; --levelsNew) {
-		Page newRoot = m_tx.Allocate(PageAlloc::Zero);
+		Page newRoot = tx.Allocate(PageAlloc::Zero);
 		if (PageRoot)
 			PutPgNo(newRoot, 0, PageRoot.N);
-		PageRoot = newRoot;
+		SetRoot(newRoot);
 	}
 	for (; levelsNew<levels; ++levelsNew) {
-		UInt32 pgno = PageRoot ? GetPgNo(PageRoot, 0) : 0;
+		uint32_t pgno = PageRoot ? GetPgNo(PageRoot, 0) : 0;
 		if (PageRoot)
-			m_tx.FreePage(PageRoot);
-		PageRoot = pgno ? m_tx.OpenPage(pgno) : nullptr;
+			tx.FreePage(PageRoot);
+		SetRoot(pgno ? tx.OpenPage(pgno) : nullptr);
 	}
 
 	if (v > prevLen) {
 		if (Page page = GetPageToModify(prevLen, true)) {
-			size_t off = size_t(prevLen & (m_tx.Storage.PageSize-1));
+			size_t off = size_t(prevLen & (tx.Storage.PageSize-1));
 			memset((byte*)page.get_Address() + off, 0, m_tx.Storage.PageSize-off);
 		}
 	}
 }
 
-UInt32 Filet::GetUInt32(UInt64 offset) const {
-	if (offset+sizeof(UInt32) > Length)
-		Throw(E_INVALIDARG);
+uint32_t Filet::GetUInt32(uint64_t offset) const {
+	if (offset+sizeof(uint32_t) > Length)
+		Throw(errc::invalid_argument);
 	if (offset & 3)
-		Throw(E_INVALIDARG);
-	if (m_tx.Storage.m_viewMode == KVStorage::ViewMode::Full) {
+		Throw(errc::invalid_argument);
+	uint32_t vpage = uint32_t(offset >> PageSizeBits);
+	size_t off = size_t(offset & (m_tx.Storage.PageSize-1));
+
+	if (m_tx.Storage.m_accessViewMode == KVStorage::ViewMode::Full) {
+#if UCFG_DB_TLB
+		CTlbAddress::iterator it = TlbAddress.find(vpage);
+		if (it != TlbAddress.end())
+			return it->second.first ? letoh(*(uint32_t*)(it->second.first + off)) : 0;
+#endif
+
 		struct GetPathOffVisitor : PathVisitor {
-			bool OnPathLevelFlat(int level, UInt32& pgno) override {
+			bool OnPathLevelFlat(int level, uint32_t& pgno) override {
 				return bool(pgno);
 			}
 		} visitor;
 		byte *p = FindPathFlat(offset, visitor);
-		return p ? letoh(*(UInt32*)(p + size_t(offset & (m_tx.Storage.PageSize-1)))) : 0;
+#if UCFG_DB_TLB
+		TlbAddress.insert(make_pair(vpage, p));
+#endif
+		return p ? letoh(*(uint32_t*)(p + off)) : 0;
 	} else {
+#if UCFG_DB_TLB
+		CTlbPage::iterator it = TlbPage.find(vpage);
+		if (it != TlbPage.end())
+			return it->second.first ? letoh(*(uint32_t*)((byte*)it->second.first.get_Address() + off)) : 0;
+#endif
+
 		struct GetPathOffVisitor : PathVisitor {
 			bool OnPathLevel(int level, Page& page) override {
 				return bool(page);
 			}
 		} visitor;
 		Page page = FindPath(offset, visitor);
-		UInt32 r = page ? letoh(*(UInt32*)((byte*)page.get_Address() + size_t(offset & (m_tx.Storage.PageSize-1)))) : 0;
+#if UCFG_DB_TLB
+		TlbPage.insert(make_pair(vpage, page));
+#endif
+		uint32_t r = page ? letoh(*(uint32_t*)((byte*)page.get_Address() + off)) : 0;
 		return r;
 	}
 }
 
-void Filet::PutUInt32(UInt64 offset, UInt32 v) {
-	if (offset+sizeof(UInt32) > Length)
-		Length = offset+sizeof(UInt32);
+void Filet::PutUInt32(uint64_t offset, uint32_t v) {
+	if (offset+sizeof(uint32_t) > Length)
+		Length = offset+sizeof(uint32_t);
 	if (offset & 3)
-		Throw(E_INVALIDARG);
-	*(UInt32*)((byte*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize-1))) = htole(v);
+		Throw(errc::invalid_argument);
+	*(uint32_t*)((byte*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize-1))) = htole(v);
 }
 
 

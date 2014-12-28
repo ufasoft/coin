@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #pragma once
 
@@ -31,14 +30,14 @@ public:
 	TimeSpan ServerTimeOffset;
 	DateTime MyExpireTime;
 	Blob CoinbaseTxn;
-	Int64 CoinbaseValue;
+	int64_t CoinbaseValue;
 	size_t SizeExtraNonce2;
 	Blob ExtraNonce2; //!!!?
 	Blob Coinb1, ExtraNonce1, CoinbaseAux, Coinb2;
 	CCoinMerkleBranch MerkleBranch;
 	HashValue HashTarget;
-	UInt32 SizeLimit, SigopLimit;
-	pair<UInt32, UInt32> NonceRange;
+	uint32_t SizeLimit, SigopLimit;
+	pair<uint32_t, uint32_t> NonceRange;
 	HashAlgo Algo;
 
 	MinerBlock()
@@ -78,13 +77,13 @@ class MinerShare : public BlockBase {
 public:
 	HashAlgo Algo;
 	HashValue MerkleRootOriginal;
-	UInt32 BirthdayA, BirthdayB;
+	uint32_t BirthdayA, BirthdayB;
 	Blob ExtraNonce;
 	
 	void WriteHeader(BinaryWriter& wr) const override;
 	HashValue GetHash() const override;
 	Coin::HashValue MerkleRoot(bool bSave) const override { return m_merkleRoot.get(); }
-	virtual UInt32 GetDifficulty() const { Throw(E_NOTIMPL); }
+	virtual uint32_t GetDifficulty() const { Throw(E_NOTIMPL); }
 	virtual Coin::HashValue GetHashPow() const;
 protected:
 };
@@ -97,11 +96,11 @@ public:
 	}
 
 	BigInteger FixedMultiplier, PrimeChainMultiplier;
-	UInt32 SieveSize, SieveCandidate;
+	uint32_t SieveSize, SieveCandidate;
 
 protected:
 	void WriteHeader(BinaryWriter& wr) const override;
-	UInt32 GetDifficulty() const override;
+	uint32_t GetDifficulty() const override;
 };
 
 

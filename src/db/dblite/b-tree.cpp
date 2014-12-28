@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -11,38 +18,33 @@ int NumKeys(const Page& page) {
 }
 
 
-
-size_t CalculateLocalDataSize(UInt64 dataSize, size_t keyFullSize, size_t pageSize) {
-	if (dataSize > pageSize || dataSize+keyFullSize>(pageSize-3)) {
+size_t CalculateLocalDataSize(uint64_t dataSize, size_t cbExtendedPrefix, size_t pageSize) {
+	if (dataSize+cbExtendedPrefix > pageSize-3) {
 		size_t rem = dataSize % (pageSize-4);
-		return rem+keyFullSize+4 > (pageSize-3) ? 0 : rem;
+		return rem + cbExtendedPrefix + 4 > (pageSize-3) ? 0 : rem;
 	}
 	return (size_t)dataSize;
 }
 
-LiteEntry *BuildBranchLiteEntryIndex(PageHeader& h, void *raw, int n, size_t pageSize, byte keySize) {
-	LiteEntry *entries = (LiteEntry*)raw;
-	byte *p = h.Data+4;
-	for (int i=0; i<n; ++i) {
-		entries[i].P = p;
-		p += (keySize ? keySize : 1 + p[0]) + 4;
-	}
-	entries[n].P = p;
-	ASSERT(p - (byte*)&h <= pageSize);
-	return entries;
-}
-
 LiteEntry *BuildLiteEntryIndex(PageHeader& h, void *raw, int n, size_t pageSize, byte keySize) {
-	if (h.Flags & PAGE_FLAG_BRANCH)
-		return BuildBranchLiteEntryIndex(h, raw, n, pageSize, keySize);
 	LiteEntry *entries = (LiteEntry*)raw;
-	byte *p = h.Data, *q=p;
-	for (int i=0; i<n; ++i, q=p) {
-		entries[i].P = p;
-		p += keySize ? keySize : 1 + p[0];
-		UInt64 dataSize = Read7BitEncoded((const byte*&)p);
-		size_t cbLocal = CalculateLocalDataSize(dataSize, p-q, pageSize);
-		p += cbLocal + (cbLocal!=dataSize ? 4 : 0);
+	byte *p = h.Data;
+	byte keyOffset = h.KeyOffset();
+	if (h.Flags & PageHeader::FLAG_BRANCH) {
+		p += 4;
+		for (int i=0; i<n; ++i) {
+			entries[i].P = p;
+			p += (keySize ? keySize-keyOffset : 1 + p[0]) + 4;
+		}
+	} else {
+		byte *q = p;
+		for (int i=0; i<n; ++i, q=p) {
+			entries[i].P = p;
+			p += keySize ? keySize-keyOffset : 1 + p[0];
+			uint64_t dataSize = Read7BitEncoded((const byte*&)p);
+			size_t cbLocal = CalculateLocalDataSize(dataSize, p-q+h.KeyOffset(), pageSize);
+			p += cbLocal + (cbLocal!=dataSize ? 4 : 0);
+		}
 	}
 	entries[n].P = p;
 	ASSERT(p - (byte*)&h <= pageSize);
@@ -64,7 +66,7 @@ LiteEntry *Page::Entries(byte keySize) const {
 		PageHeader& h = Header();
 		LiteEntry *p = BuildLiteEntryIndex(h, Malloc(sizeof(LiteEntry) * (h.Num+1)), h.Num, m_pimpl->Storage.PageSize, keySize);
 		if (Interlocked::CompareExchange(m_pimpl->Entries, p, (LiteEntry*)0))
-			Ext::Free(p);		
+			free(p);		
 	}
 	return m_pimpl->Entries;
 }
@@ -86,44 +88,13 @@ size_t Page::SizeLeft(byte keySize) const {
 	return m_pimpl->Storage.PageSize - (Entries(keySize)[h.Num].P - (byte*)&h);
 }
 
-EntryDesc GetEntryDesc(const PagePos& pp, byte keySize) {
-	PageHeader& h = pp.Page.Header();
-	ASSERT(pp.Pos < h.Num);
-	LiteEntry *entries = pp.Page.Entries(keySize),
-		&e = entries[pp.Pos];
-
-	EntryDesc r;
-	ZeroStruct(r);
-	r.P = e.P;
-	r.Size = e.Size();
-	size_t pageSize = pp.Page.m_pimpl->Storage.PageSize;
-	if (pp.Page.IsBranch)
-		r.PgNo = e.PgNo();
-	else {
-		r.DataSize = e.DataSize(keySize);
-		r.LocalData = e.LocalData(pageSize, keySize);
-		if (r.Overflowed = r.DataSize >= pageSize || r.LocalData.P+r.DataSize!=e.Upper()) {
-			r.PgNo = e.FirstBigdataPage();
-		}
-	}
-	return r;
-}
-
 LiteEntry GetLiteEntry(const PagePos& pp, byte keySize) {
-	PageHeader& h = pp.Page.Header();
-	ASSERT(pp.Pos <= h.Num);
+	ASSERT(pp.Pos <= pp.Page.Header().Num);
 
 	return pp.Page.Entries(keySize)[pp.Pos];
-//!!!	return BuildLiteEntryIndex(h, alloca(sizeof(LiteEntry) * (pp.Pos+2)), pp.Pos+1)[pp.Pos];
 }
 
-pair<size_t, bool> GetDataEntrySize(size_t ksize, UInt64 dsize, size_t pageSize) {
-	byte buf[10], *p = buf;
-	Write7BitEncoded(p, dsize);
-	return make_pair(CalculateLocalDataSize(dsize, ksize + (p-buf), pageSize), ksize + (p-buf) + dsize > pageSize-3);
-}
-
-size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, UInt64 dsize) {
+size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t dsize) {
 	byte buf[10], *p = buf;
 	Write7BitEncoded(p, dsize);
 	return ppEntry.first + ksize + (p-buf) + (ppEntry.second ? 4 : 0);
@@ -145,10 +116,10 @@ void InsertCell(const PagePos& pagePos, const ConstBuf& cell, byte keySize) {
 	PageObj& po = *page.m_pimpl;
 	if (po.Overflows || page.SizeLeft(keySize) < cell.Size) {
 		ASSERT(po.Overflows < _countof(po.OverflowCells));
-		po.OverflowCells[po.Overflows++] = IndexedBuf(cell.P, (UInt16)cell.Size, (UInt16)pagePos.Pos);
+		po.OverflowCells[po.Overflows++] = IndexedBuf(cell.P, (uint16_t)cell.Size, (uint16_t)pagePos.Pos);
 	} else {
 		PageHeader& h = page.Header();
-		bool bBranch = h.Flags & PAGE_FLAG_BRANCH;
+		bool bBranch = h.Flags & PageHeader::FLAG_BRANCH;
 		int off = bBranch ? 4 : 0;
 		LiteEntry *entries = page.Entries(keySize),
 			&e = entries[pagePos.Pos];
@@ -160,23 +131,23 @@ void InsertCell(const PagePos& pagePos, const ConstBuf& cell, byte keySize) {
 
 // Keeps Entry Index valid on the same memory place
 // Returns first overflow page or 0
-UInt32 DeleteEntry(const PagePos& pp, byte keySize) {
+uint32_t DeleteEntry(const PagePos& pp, byte keySize) {
 	PageHeader& h = pp.Page.Header();
 	ASSERT(pp.Pos < h.Num);
 	LiteEntry *entries = pp.Page.Entries(keySize),
 		&e = entries[pp.Pos];
 	bool bBranch = pp.Page.IsBranch;
-	int r = bBranch || e.DataSize(keySize) == e.LocalData(pp.Page.m_pimpl->Storage.PageSize, keySize).Size ? 0 : e.FirstBigdataPage();
+	int r = bBranch || e.DataSize(keySize, h.KeyOffset()) == e.LocalData(pp.Page.m_pimpl->Storage.PageSize, keySize, h.KeyOffset()).Size ? DB_EOF_PGNO : e.FirstBigdataPage();
 	ssize_t off = e.Size();
 	byte *p = e.P - (int(bBranch)*4);
 	memmove(p, p+off, entries[h.Num--].P - p - off);
-	for (int i=pp.Pos+1; i<=h.Num; ++i)
+	for (int i=pp.Pos+1, numKeys=h.Num; i<=numKeys; ++i)
 		entries[i].P = entries[i+1].P-off;
 	return r;
 }
 
 // Returns pointer to the RightPtr of the Branch Page
-static byte *AssemblePage(Page& page, const ConstBuf cells[], UInt16 n) {
+static byte *AssemblePage(Page& page, const ConstBuf cells[], uint16_t n) {
 	ASSERT(!page.Overflows);
 
 	PageHeader& h = page.Header();
@@ -198,13 +169,14 @@ void BTree::SetRoot(const Page& page) {
 
 // second arg not used, but present to ensure it exists in memory when reopened by OpenPage()
 void BTree::BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage) {
-	KVStorage& stg = Tx.Storage;
+	DbTransaction& tx = dynamic_cast<DbTransaction&>(Tx);
+	KVStorage& stg = tx.Storage;
 	const size_t pageSize = stg.PageSize;
 	Page pageParent = ppParent.Page;
 
 	int n = NumKeys(pageParent);
-	int	nxDiv = std::max(0, std::min(ppParent.Pos-1, n-2+int(Tx.Bulk)));
-	n = std::min(2-int(Tx.Bulk), n);
+	int	nxDiv = std::max(0, std::min(ppParent.Pos-1, n-2+int(tx.Bulk)));
+	n = std::min(2-int(tx.Bulk), n);
 	vector<Page> oldPages(n+1);
 	vector<ConstBuf> dividers(n);
 	LiteEntry *entriesParent = pageParent.Entries(KeySize);
@@ -212,7 +184,7 @@ void BTree::BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage) {
 	int nEstimatedCells = 0;
 	for (int i=oldPages.size()-1; i>=0; --i) {
 		LiteEntry& e = entriesParent[nxDiv+i];
-		Page& page = oldPages[i] = Tx.OpenPage(e.PgNo());
+		Page& page = oldPages[i] = tx.OpenPage(e.PgNo());
 		nEstimatedCells += NumKeys(page)+page.Overflows+1;
 		if (i != oldPages.size()-1) {
 			size_t cbEntry = e.Size();
@@ -238,10 +210,12 @@ void BTree::BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage) {
 	vector<ConstBuf> cells;
 	cells.reserve(nEstimatedCells);
 	byte *pTemp = (byte*)memTmp.get()+oldPages.size()*pageSize;
-	UInt32 pgnoRight = 0;
+	uint32_t pgnoRight = 0;
+	byte keyOffset = pageParent.Header().KeyOffset();
 	for (int i=0; i<oldPages.size(); ++i) {
 		Page& page = oldPages[i];
 		PageHeader& h = page.Header();
+//!!!R		keyOffset = h.KeyOffset();
 		LiteEntry *entries = page.Entries(KeySize);
 		PageObj& po = *page.m_pimpl;
 		ASSERT(po.Dirty || !po.Overflows);
@@ -272,7 +246,7 @@ LAB_FOUND:
 		}
 		po.Overflows = 0;
 		if (bBranch) {
-			UInt32 pgno = entries[h.Num].PgNo();
+			uint32_t pgno = entries[h.Num].PgNo();
 			if (i == oldPages.size()-1)
 				pgnoRight = pgno;
 			else {
@@ -309,7 +283,7 @@ LAB_FOUND:
 		while (true) {
 			int r = cnt - 1,
 				d = r + 1 - (bBranch ? 0 : 1);
-			if (cbRight!=0 && (Tx.Bulk || cbRight+cells[d].Size > cbLeft-cells[r].Size))
+			if (cbRight!=0 && (tx.Bulk || cbRight+cells[d].Size > cbLeft-cells[r].Size))
 				break;
 			cbRight += cells[d].Size;
 			cbLeft -= cells[r].Size;
@@ -327,8 +301,10 @@ LAB_FOUND:
 				break;
 			}
 		}
-		if (!newPages[i].Page)
-			newPages[i].Page = Tx.Allocate(bBranch ? PageAlloc::Branch : PageAlloc::Leaf);
+		if (!newPages[i].Page) {
+			newPages[i].Page = tx.Allocate(bBranch ? PageAlloc::Branch : PageAlloc::Leaf);
+			newPages[i].Page.Header().SetKeyOffset(keyOffset);
+		}
 	}
 
 	//!!!TODO Sort pgnos
@@ -336,13 +312,13 @@ LAB_FOUND:
 	entriesParent[nxDiv].PutPgNo(newPages.back().Page.N);
 	
 	int j = 0;
-	tmp = tmpPage;
+	tmp = tmpPage;	
 	for (int i=0; i<newPages.size(); ++i) {
 		Page& page = newPages[i].Page;
 		ASSERT(!page.Overflows);
 
 		int nj = newPages[i].Count;
-		byte *pRight = AssemblePage(page, &cells[j], UInt16(nj-j));
+		byte *pRight = AssemblePage(page, &cells[j], uint16_t(nj-j));
 		j = nj;
 
 		ASSERT(i<newPages.size()-1 || j==cells.size());
@@ -352,7 +328,7 @@ LAB_FOUND:
 				memcpy(pRight, div.P, 4);
 				++j;
 			} else {
-				div.Size = 4 + (KeySize ? KeySize : 1+div.P[0]);
+				div.Size = 4 + (KeySize ? KeySize-keyOffset : 1+div.P[0]);
 				div.P -= 4;
 			}
 			PutLeUInt32(tmp, page.N);
@@ -365,11 +341,11 @@ LAB_FOUND:
 	}
 
 	for (int i=0; i<oldPages.size(); ++i)						// non-Dirty oldPages contain used Data, so free them only after copying to newPages
-		Tx.FreePage(oldPages[i]);
+		tx.FreePage(oldPages[i]);
 
 	if (pageParent==Root && 0==NumKeys(pageParent)) {
 		ASSERT(newPages.size() == 1);
-		Tx.FreePage(Root);
+		tx.FreePage(Root);
 		SetRoot(newPages[0].Page);
 	}
 }
@@ -381,7 +357,8 @@ void BTreeCursor::Balance() {
 	if (Path.size() == 1) {
 		if (!page.Overflows)
 			return;
-		Tree->SetRoot(Tree->Tx.Allocate(PageAlloc::Branch));
+		Tree->SetRoot(dynamic_cast<DbTransaction&>(Tree->Tx).Allocate(PageAlloc::Branch));
+		Tree->Root.Header().SetKeyOffset(page.Header().KeyOffset());
 		PutLeUInt32(Tree->Root.Header().Data, page.N);
 		Path.insert(Path.begin(), PagePos(Tree->Root, 0));
 	} else if (!page.Overflows && !page.IsUnderflowed(Tree->KeySize))
@@ -408,12 +385,21 @@ int PagedMap::Compare(const void *p1, const void *p2, size_t cb2) {
 		     : (cb1 < cb2 ? -1 : cb1==cb2 ? 0 : 1);
 }
 
-pair<int, bool> PagedMap::EntrySearch(LiteEntry *entries, int nKey, const ConstBuf& key) {
+pair<size_t, bool> PagedMap::GetDataEntrySize(const ConstBuf& k, uint64_t dsize) const {
+	size_t pageSize = Tx.Storage.PageSize;
+	byte buf[10], *p = buf;
+	Write7BitEncoded(p, dsize);
+	size_t cbExtendedPrefix = (KeySize ? KeySize : 1+k.Size) + (p-buf);
+	return make_pair(CalculateLocalDataSize(dsize, cbExtendedPrefix, pageSize), cbExtendedPrefix+dsize > pageSize-3);		//!!!?
+}
+
+pair<int, bool> PagedMap::EntrySearch(LiteEntry *entries, PageHeader& h, const ConstBuf& k) {
+	ConstBuf kk(k.P+h.KeyOffset(), k.Size-h.KeyOffset());
 	int rc = 0;
 	int b = 0;
-	for (int count=nKey, m, half; count;) {
+	for (int count=h.Num, m, half; count;) {
 		ConstBuf nk = entries[m = b+(half=count/2)].Key(KeySize);
-		if (!(rc = m_pfnCompare(nk.P, key.P, key.Size)))
+		if (!(rc = m_pfnCompare(nk.P, kk.P, kk.Size)))
 			return make_pair(m, true);
 		else if (rc < 0) {
 			b = m + 1;
@@ -424,15 +410,31 @@ pair<int, bool> PagedMap::EntrySearch(LiteEntry *entries, int nKey, const ConstB
 	return make_pair(b, false);
 }
 
+EntryDesc PagedMap::GetEntryDesc(const PagePos& pp) {
+	PageHeader& h = pp.Page.Header();
+	ASSERT(!(h.Flags & PageHeader::FLAG_BRANCH) && pp.Pos<h.Num);
+	LiteEntry *entries = pp.Page.Entries(KeySize),
+		&e = entries[pp.Pos];
+
+	EntryDesc r;
+	r.P = e.P;
+	r.Size = e.Size();
+	size_t pageSize = pp.Page.m_pimpl->Storage.PageSize;
+	r.DataSize = e.DataSize(KeySize, h.KeyOffset());
+	r.LocalData = e.LocalData(pageSize, KeySize, h.KeyOffset());
+	r.PgNo = (r.Overflowed = r.DataSize >= pageSize || r.LocalData.P+r.DataSize!=e.Upper()) ? e.FirstBigdataPage() : 0;
+	return r;
+}
+
 void CursorObj::DeepFreePage(const Page& page) {
-	DbTransaction& tx = Map->Tx;
+	DbTransaction& tx = dynamic_cast<DbTransaction&>(Map->Tx);
 	if (page.IsBranch) {
 		LiteEntry *entries = page.Entries(Map->KeySize);
 		for (int i=0, n=NumKeys(page); i<=n; ++i)
 			DeepFreePage(tx.OpenPage(entries[i].PgNo()));
 	} else {
 		for (int i=0, n=NumKeys(page); i<n; ++i)
-			FreeBigdataPages(GetEntryDesc(PagePos(page, i), Map->KeySize).PgNo);
+			FreeBigdataPages(Map->GetEntryDesc(PagePos(page, i)).PgNo);
 	}
 	tx.FreePage(page);
 }
@@ -443,39 +445,12 @@ void CursorObj::DeepFreePage(const Page& page) {
 BTreeCursor::BTreeCursor()
 	:	Path(4)
 {
-	Path.resize(4);
-}
-
-bool BTreeCursor::PageSearchRoot(const ConstBuf& k, bool bModify) {
-	KVStorage& stg = Map->Tx.Storage;
-
-	Page page = Path.back().Page;
-	while (page.IsBranch) {
-		PageHeader& h = page.Header();
-		LiteEntry *entries = page.Entries(Tree->KeySize);
-
-		int i = 0;
-		if (k.Size > MAX_KEY_SIZE)
-			i = h.Num;
-		else if (k.P) {
-			pair<int, bool> pp = Tree->EntrySearch(entries, h.Num, k);		// bBranch=true
-			i = pp.second ? pp.first+1 : pp.first;
-		}
-		page = Tree->Tx.OpenPage(entries[i].PgNo());
-		Path.back().Pos = i;
-		Path.push_back(PagePos(page, 0));
-		ASSERT(Path.size() < 10);
-		if (bModify)
-			PageTouch(Path.size()-1);
-	}
-	ASSERT(!page.IsBranch);
-	return true;
 }
 
 bool BTreeCursor::SeekToKey(const ConstBuf& k) {
 	if (Tree->KeySize && Tree->KeySize!=k.Size)
-		Throw(E_INVALIDARG);
-	ASSERT(k.Size>0 && k.Size<128);
+		Throw(errc::invalid_argument);
+	ASSERT(k.Size>0 && k.Size <= KVStorage::MAX_KEY_SIZE);
 
 	if (Initialized) {
 		Page& page = Top().Page;
@@ -484,20 +459,21 @@ bool BTreeCursor::SeekToKey(const ConstBuf& k) {
 			Top().Pos = 0;
 			return false;
 		}
+		ConstBuf kk(k.P+h.KeyOffset(), k.Size-h.KeyOffset());
 		LiteEntry *entries = page.Entries(Tree->KeySize);
 		ConstBuf nk = entries[0].Key(Tree->KeySize);
-		int rc = Tree->m_pfnCompare(nk.P, k.P, k.Size);
+		int rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size);
 		if (0 == rc)
 			return ReturnFromSeekKey(0);
 		else if (rc < 0) {
 			if (h.Num > 1) {
 				nk = entries[h.Num-1].Key(Tree->KeySize);
-				if (0 == (rc = Tree->m_pfnCompare(nk.P, k.P, k.Size)))
+				if (0 == (rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size)))
 					return ReturnFromSeekKey(h.Num-1);
 				else if (rc > 0) {
 					if (Top().Pos < h.Num) {
 						nk = entries[Top().Pos].Key(Tree->KeySize);
-						if (0 == (rc = Tree->m_pfnCompare(nk.P, k.P, k.Size)))
+						if (0 == (rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size)))
 							return ReturnFromSeekKey(Top().Pos);
 					}
 					goto LAB_ENTRY_SEARCH;
@@ -522,10 +498,8 @@ LAB_ENTRY_SEARCH:
 	Page& page = Top().Page;
 	ASSERT(!page.IsBranch);
 
-	PageHeader& h = page.Header();
-
 	LiteEntry *entries = page.Entries(Tree->KeySize);
-	pair<int, bool> pp = Tree->EntrySearch(entries, h.Num, k);	// bBranch=false
+	pair<int, bool> pp = Tree->EntrySearch(entries, page.Header(), k);	// bBranch=false
 	Top().Pos = pp.first;
 	if (!pp.second)
 		return false;
@@ -552,15 +526,14 @@ bool BTreeCursor::SeekToSibling(bool bToRight) {
 }
 
 void BTreeCursor::InsertImp(ConstBuf k, const ConstBuf& d) {
-	size_t pageSize = Tree->Tx.Storage.PageSize;
-	pair<size_t, bool> ppEntry = GetDataEntrySize(Tree->KeySize ? Tree->KeySize : 1+k.Size, d.Size, pageSize);
-	InsertImpHeadTail(ppEntry, k, d, d.Size, 0, pageSize);
+	pair<size_t, bool> ppEntry = Tree->GetDataEntrySize(k, d.Size);
+	InsertImpHeadTail(ppEntry, k, d, d.Size, DB_EOF_PGNO);
 }
 
 void BTreeCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 	bool bExists = false;
 	if (!Tree->Root) {
-		Page pageRoot = Tree->Tx.Allocate(PageAlloc::Leaf);
+		Page pageRoot = dynamic_cast<DbTransaction&>(Tree->Tx).Allocate(PageAlloc::Leaf);
 		Tree->SetRoot(pageRoot);
 		Path.push_back(PagePos(pageRoot, 0));
 		Initialized = true;
@@ -572,7 +545,7 @@ void BTreeCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 		Touch();
 		if (bExists) {
 			PagePos& pp = Top();
-			EntryDesc e = GetEntryDesc(pp, Tree->KeySize);
+			EntryDesc e = Tree->GetEntryDesc(pp);
 			if (!e.Overflowed && d.Size == e.DataSize) {
 				memcpy((byte*)e.LocalData.P, d.P, d.Size);
 				return;
@@ -585,11 +558,11 @@ void BTreeCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 
 void BTreeCursor::PushFront(ConstBuf k, const ConstBuf& d) {
 	if (Tree->Tx.ReadOnly)
-		Throw(E_ACCESSDENIED);
-	ASSERT(k.Size < 128 && (!Tree->KeySize || Tree->KeySize==k.Size));
+		Throw(errc::permission_denied);
+	ASSERT(k.Size <= KVStorage::MAX_KEY_SIZE && (!Tree->KeySize || Tree->KeySize==k.Size));
 	bool bExists = false;
 	if (!Tree->Root) {
-		Page pageRoot = Tree->Tx.Allocate(PageAlloc::Leaf);
+		Page pageRoot = dynamic_cast<DbTransaction&>(Tree->Tx).Allocate(PageAlloc::Leaf);
 		Tree->SetRoot(pageRoot);
 		Path.push_back(PagePos(pageRoot, 0));
 		Initialized = true;
@@ -599,12 +572,12 @@ void BTreeCursor::PushFront(ConstBuf k, const ConstBuf& d) {
 		Touch();
 		if (bExists) {
 			PagePos& pp = Top();
-			EntryDesc e = GetEntryDesc(pp, Tree->KeySize);
+			EntryDesc e = Tree->GetEntryDesc(pp);
 			size_t pageSize = Tree->Tx.Storage.PageSize;
 			pair<size_t, bool> ppEntry;
 			if (!e.Overflowed ||
 				e.LocalData.Size != e.DataSize % (pageSize-4) ||
-				(ppEntry = GetDataEntrySize(Tree->KeySize ? Tree->KeySize : 1+k.Size, d.Size+e.DataSize, pageSize)).first == 0)
+				(ppEntry = Tree->GetDataEntrySize(k, d.Size+e.DataSize)).first == 0)
 			{
 				Blob newdata = d + get_Data();
 				FreeBigdataPages(DeleteEntry(pp, Tree->KeySize));
@@ -614,7 +587,7 @@ void BTreeCursor::PushFront(ConstBuf k, const ConstBuf& d) {
 			Blob head = d + e.LocalData;
 			ASSERT(ppEntry.second && ppEntry.first==head.Size%(pageSize-4) && ppEntry.first==(d.Size+e.DataSize)%(pageSize-4));
 			DeleteEntry(pp, Tree->KeySize);
-			InsertImpHeadTail(ppEntry, k, head, d.Size+e.DataSize, e.PgNo, pageSize);
+			InsertImpHeadTail(ppEntry, k, head, d.Size+e.DataSize, e.PgNo);
 			return;
 		}
 	}
@@ -646,7 +619,7 @@ void static CopyPage(Page& pageFrom, Page& pageTo, byte keySize) {
 
 void BTreeCursor::PageTouch(int height) {
 	Page& page = Path[height].Page;
-	DbTransaction& tx = Tree->Tx;
+	DbTransaction& tx = dynamic_cast<DbTransaction&>(Tree->Tx);
 	if (!page.Dirty) {
 		Page np = tx.Allocate(page.IsBranch ? PageAlloc::Branch : PageAlloc::Leaf);
 		CopyPage(page, np, Tree->KeySize);
@@ -678,6 +651,29 @@ void BTreeCursor::Touch() {
 		PageTouch(i);
 }
 
+bool BTreeCursor::PageSearchRoot(const ConstBuf& k, bool bModify) {
+	while (true) {
+		Page& page = Path.back().Page;
+		PageHeader& h = page.Header();
+		if (!(h.Flags & PageHeader::FLAG_BRANCH))
+			return true;
+		LiteEntry *entries = page.Entries(Tree->KeySize);
+
+		int i = 0;
+		if (k.Size > MAX_KEY_SIZE)
+			i = h.Num;
+		else if (k.P) {
+			pair<int, bool> pp = Tree->EntrySearch(entries, h, k);		// bBranch=true
+			i = pp.second ? pp.first+1 : pp.first;
+		}
+		Path.back().Pos = i;
+		Path.push_back(PagePos(Tree->Tx.OpenPage(entries[i].PgNo()), 0));
+		ASSERT(Path.size() < 10);
+		if (bModify)
+			PageTouch(Path.size()-1);
+	}
+}
+
 bool BTreeCursor::PageSearch(const ConstBuf& k, bool bModify) {
 	if (Tree->Tx.m_bError)
 		Throw(E_FAIL);
@@ -695,10 +691,9 @@ bool BTreeCursor::PageSearch(const ConstBuf& k, bool bModify) {
 	}
 
 	Path.resize(1);
-	Path[0].Page = Tree->Root;
-	Path[0].Pos = 0;
+	Path[0] = PagePos(Tree->Root, 0);
 	if (bModify)
-		PageTouch(Path.size()-1);
+		PageTouch(0);
 	return PageSearchRoot(k, bModify);
 }
 

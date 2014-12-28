@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -83,7 +90,7 @@ public:
 private:
 	mutex m_mtxThread;
 	ptr<FlushThread> Thread;
-	volatile Int32 RefCount;
+	volatile int32_t RefCount;
 };
 
 static InterlockedSingleton<GlobalLruViewCache> g_lruViewCache;
@@ -112,7 +119,7 @@ void FlushThread::Execute() {
 		nDeleted = 0;
 		cache.Cv.notify_all();
 		if (!cache.m_viewProcessed)
-			m_ev.Lock(FLUSH_WAIT_MS);
+			m_ev.lock(FLUSH_WAIT_MS);
 		else {
 LAB_FOUND:
 			cache.m_viewProcessed->Flushed = true;
@@ -134,7 +141,7 @@ LAB_FOUND:
 				cache.Cv.notify_all();
 		}
 	}
-};
+}
 
 
 
@@ -152,7 +159,7 @@ KVStorage::KVStorage()
 	,	ProtectPages(true)
 	,	m_state(OpenState::Closed)
 	,	m_alignedDbHeader(RESERVED_FILE_SPACE, 4096)		//!!! SectorSize
-	,	m_salt((UInt32)Random().Next())
+	,	m_salt((uint32_t)Random().Next())
 	,	ViewAddress(0)
 #if UCFG_PLATFORM_X64
 	,	m_viewMode(ViewMode::Full)
@@ -165,8 +172,9 @@ KVStorage::KVStorage()
 }
 
 void KVStorage::Init() {
-	SetPageSize(DEFAULT_PAGE_SIZE);
+	PageSize = 0;
 	FileIncrement = ViewSize/2;
+	m_accessViewMode = m_viewMode;
 }
 
 KVStorage::~KVStorage() {
@@ -189,13 +197,13 @@ void KVStorage::WriteHeader() {
 	memset(&header, 0, RESERVED_FILE_SPACE);
 	memcpy(header.Magic, s_Magic, strlen(s_Magic));
 	memcpy(header.AppName, AppName.c_str(), std::min(12, (int)strlen(AppName.c_str())));
-	header.UserVersion = UInt32((UserVersion.Major << 16)|UserVersion.Minor);
+	header.UserVersion = uint32_t((UserVersion.Major << 16)|UserVersion.Minor);
 
 	memcpy(header.FrontEndName, FrontEndName.c_str(), std::min(12, (int)strlen(FrontEndName.c_str())));
-	header.FrontEndVersion = UInt32((FrontEndVersion.Major << 16)|FrontEndVersion.Minor);
+	header.FrontEndVersion = uint32_t((FrontEndVersion.Major << 16)|FrontEndVersion.Minor);
 
 	header.Version = htole(UDB_VERSION);
-	header.PageSize = UInt16(PageSize==65536 ? 1 : PageSize);
+	header.PageSize = uint16_t(PageSize==65536 ? 1 : PageSize);
 	header.Salt = Salt;
 	header.PageCount = PageCount;
 	
@@ -207,18 +215,19 @@ void KVStorage::WriteHeader() {
 void KVStorage::MapMeta() {
 //	MMFile = MemoryMappedFile::CreateFromFile(DbFile, nullptr, ViewSize);
 	DbHeader& header = DbHeaderRef();
-	if (UInt32 pgnoRoot = header.LastTxes[0].MainDbPage)	
+	if (uint32_t pgnoRoot = header.LastTxes[0].MainDbPage)	
 		MainTableRoot = OpenPage(pgnoRoot);
 }
 
-void KVStorage::AddFullMapping(UInt64 fileLength) {
+void KVStorage::AddFullMapping(uint64_t fileLength) {
 	EXT_LOCK (MtxViews) {
 		ptr<MappedFile> m = new MappedFile;
-		m->MemoryMappedFile = MemoryMappedFile::CreateFromFile(DbFile, nullptr, FileLength = fileLength, ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite);
+		MemoryMappedFileAccess acc = ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite;
+		m->MemoryMappedFile = MemoryMappedFile::CreateFromFile(DbFile, nullptr, FileLength = fileLength, acc);
 		Mappings.push_back(m);
 		if (m_viewMode == ViewMode::Full) {
 			ptr<MMView> v = new MMView(_self);
-			v->View = Mappings.back()->MemoryMappedFile.CreateView(0);
+			v->View = Mappings.back()->MemoryMappedFile.CreateView(0, 0, acc);
 			ViewAddress = v->View.Address;
 			m_fullViews.push_back(v);
 			Views[0] = v;
@@ -229,7 +238,7 @@ void KVStorage::AddFullMapping(UInt64 fileLength) {
 #if UCFG_DB_FREE_PAGES_BITSET
 void KVStorage::UpdateFreePagesBitset() {
 	FreePagesBitset.reset();
-	EXT_FOR (UInt32 pgno, FreePages) {
+	EXT_FOR (uint32_t pgno, FreePages) {
 		if (pgno >= FreePagesBitset.size())
 			FreePagesBitset.resize(pgno+1);
 		FreePagesBitset.set(pgno);
@@ -237,19 +246,22 @@ void KVStorage::UpdateFreePagesBitset() {
 }
 #endif // UCFG_DB_FREE_PAGES_BITSET
 
-void KVStorage::Create(RCString filepath) {;
+void KVStorage::Create(const path& filepath) {
 	if (m_state == OpenState::Closing)
 		m_futClose.wait();
 
 	File::OpenInfo oi(FilePath = filepath);
 	oi.Share = FileShare::Read;
 	oi.Mode = FileMode::Open;
-	oi.RandomAccess = true;
+	oi.Options = FileOptions::RandomAccess;
 //	oi.BufferingEnabled = false;
-	if (!File::Exists(filepath) || FileInfo(filepath).Length != 0)
+	if (!exists(filepath) || file_size(filepath) != 0)
 		oi.Mode = FileMode::CreateNew;
 	DbFile.Open(oi);
-		
+	size_t sectorSize = DbFile.PhysicalSectorSize();
+	if (!PageSize)
+		SetPageSize(sectorSize>=4096 ? sectorSize : DEFAULT_PAGE_SIZE);
+	
 	PageCount = 2;
 	OpenedPages.resize(PageCount);
 #if UCFG_DB_FREE_PAGES_BITSET
@@ -263,7 +275,7 @@ void KVStorage::Create(RCString filepath) {;
 	m_dtPrevCheckpoint = DateTime::UtcNow();
 }
 
-void KVStorage::Open(RCString filepath) {
+void KVStorage::Open(const path& filepath) {
 	if (m_state == OpenState::Closing)
 		m_futClose.wait();
 
@@ -274,7 +286,7 @@ void KVStorage::Open(RCString filepath) {
 		oi.Share = FileShare::ReadWrite;
 	}
 	oi.Mode = FileMode::Open;
-	oi.RandomAccess = true;
+	oi.Options = FileOptions::RandomAccess;
 //	oi.BufferingEnabled = false;
 	DbFile.Open(oi);
 	FileLength = DbFile.Length;
@@ -282,33 +294,32 @@ void KVStorage::Open(RCString filepath) {
 	DbFile.Read(&header, 4096);							//!!! SectorSize
 	if (memcmp(header.Magic, s_Magic, strlen(s_Magic)))
 		Throw(E_EXT_DB_Corrupt);
-	UInt32 ver = letoh(header.Version);
+	uint32_t ver = letoh(header.Version);
 	if (ver > UDB_VERSION)
 		Throw(E_EXT_DB_Version);
 	if (ver < COMPATIBLE_UDB_VERSION)		//!!!
 		Throw(E_EXT_IncompatibleFileVersion);
 	AppName = header.AppName;
-	UInt32 uver = header.UserVersion;
+	uint32_t uver = header.UserVersion;
 	UserVersion = Version(uver>>16, uver & 0xFFFF);
 	m_salt = header.Salt;
 
 	FrontEndName = header.FrontEndName;
-	UInt32 fever = header.FrontEndVersion;
+	uint32_t fever = header.FrontEndVersion;
 	FrontEndVersion = Version(fever>>16, fever & 0xFFFF);
 
 	SetPageSize(header.PageSize==1 ? 65536 : int(header.PageSize));
 	PageCount = header.PageCount;
-	if (FileLength < UInt64(PageCount)*PageSize)
+	if (FileLength < uint64_t(PageCount)*PageSize)
 		Throw(E_EXT_DB_Corrupt);
-	FileIncrement = max(FileIncrement, (1ULL << (BitOps::ScanReverse(FileLength)-1))/2);
+	FileIncrement = max((unsigned long long)FileIncrement, (1ULL << (BitOps::ScanReverse(FileLength)-1))/2);
 
 	OpenedPages.resize(PageCount);
 #if UCFG_DB_FREE_PAGES_BITSET
 	FreePagesBitset.resize(PageCount);
 #endif
 
-	UInt64 newFileLength = (FileLength + ViewSize - 1) & ~(UInt64(ViewSize) - 1);
-	AddFullMapping(newFileLength);
+	AddFullMapping(ReadOnly ? FileLength : (FileLength + ViewSize - 1) & ~(uint64_t(ViewSize) - 1));
 	MapMeta();
 	
 	FreePages.insert(begin(header.FreePages), std::find(begin(header.FreePages), end(header.FreePages), 0));
@@ -318,7 +329,7 @@ void KVStorage::Open(RCString filepath) {
 		ASSERT(header.FreePages[i] < PageCount);
 	}
 #endif
-	for (UInt32 pgno=header.FreePagePoolList; pgno; ) {
+	for (uint32_t pgno=header.FreePagePoolList; pgno; ) {
 		if (pgno >= PageCount)
 			Throw(E_EXT_DB_Corrupt);
 		Page page = OpenPage(pgno);
@@ -326,7 +337,7 @@ void KVStorage::Open(RCString filepath) {
 		BeUInt32 *p = (BeUInt32*)page.get_Address();
 		pgno = p[0];
 		for (BeUInt32 *q=p+1, *e=&p[PageSize/4]; q!=e; ++q) {
-			if (UInt32 pn = *q) {
+			if (uint32_t pn = *q) {
 				if (!FreePages.insert(pn).second)
 					Throw(E_EXT_DB_Corrupt);
 			} else if (pgno) {
@@ -336,7 +347,7 @@ void KVStorage::Open(RCString filepath) {
 			}
 		}
 	}
-	EXT_FOR (UInt32 pgno, FreePages) {
+	EXT_FOR (uint32_t pgno, FreePages) {
 		if (pgno >= PageCount)
 			Throw(E_EXT_DB_Corrupt);
 	}
@@ -345,7 +356,7 @@ void KVStorage::Open(RCString filepath) {
 	UpdateFreePagesBitset();
 #endif
 #ifdef _DEBUG//!!!D
-	EXT_FOR (UInt32 pgno, m_nextFreePages) {
+	EXT_FOR (uint32_t pgno, m_nextFreePages) {
 		ASSERT(!FreePages.count(pgno));
 		pgno = pgno;
 		ASSERT(!FreePagesBitset[pgno]);
@@ -355,7 +366,7 @@ void KVStorage::Open(RCString filepath) {
 	m_dtPrevCheckpoint = DateTime::UtcNow();
 }
 
-void KVStorage::FreePage(UInt32 pgno) {
+void KVStorage::FreePage(uint32_t pgno) {
 	FreePages.insert(pgno);
 #if UCFG_DB_FREE_PAGES_BITSET
 	FreePagesBitset.set(pgno);
@@ -371,7 +382,7 @@ void KVStorage::unlock_shared() {
 	unique_lock<shared_mutex> lk(ShMtx, try_to_lock);
 	if (lk) {
 		EXT_LOCK (MtxFreePages) {
-			EXT_FOR (UInt32 pgno, ReaderLockedPages) {
+			EXT_FOR (uint32_t pgno, ReaderLockedPages) {
 				FreePage(pgno);
 			}
 			ReaderLockedPages.clear();
@@ -379,8 +390,8 @@ void KVStorage::unlock_shared() {
 	}
 }
 
-UInt32 KVStorage::NextFreePgno(COrderedPgNos& newFreePages) {		// .second==true  if pgno from ReleasedPages
-	UInt32 r = 0;
+uint32_t KVStorage::NextFreePgno(COrderedPgNos& newFreePages) {		// .second==true  if pgno from ReleasedPages
+	uint32_t r = 0;
 	if (!ReleasedPages.empty()) {
 		CReleasedPages::iterator it = ReleasedPages.begin();
 		ReaderLockedPages.insert(r = *it);
@@ -416,7 +427,7 @@ bool KVStorage::DoCheckpoint(bool bLock) {
 
 	DbHeader& h = DbHeaderRef();
 	memcpy(h.AppName, AppName.c_str(), std::min(12, (int)strlen(AppName.c_str())));
-	h.UserVersion = UInt32((UserVersion.Major << 16)|UserVersion.Minor);
+	h.UserVersion = uint32_t((UserVersion.Major << 16)|UserVersion.Minor);
 	h.ChangeCounter = h.ChangeCounter + 1;
 	h.LastTransactionId = htole(LastTransactionId);
 	ZeroStruct(h.FreePages);
@@ -433,7 +444,7 @@ bool KVStorage::DoCheckpoint(bool bLock) {
 			h.FreePagePoolList = 0;
 			Page pagePrev;
 			BeUInt32 *pNextTrunk = &h.FreePagePoolList;
-			const UInt32 PGNOS_IN_PAGE = PageSize / 4;
+			const uint32_t PGNOS_IN_PAGE = PageSize / 4;
 			while (FreePages.size() + ReleasedPages.size() + m_nextFreePages.size() > _countof(h.FreePages)) {
 				Page page = Allocate(false);
 				nextFreePages.insert(page.N);
@@ -441,12 +452,12 @@ bool KVStorage::DoCheckpoint(bool bLock) {
 				p[0] = 0;
 				*exchange(pNextTrunk, p) = page.N;
 				pagePrev = page;
-				UInt32 i;
+				uint32_t i;
 				for (i=1; i<PGNOS_IN_PAGE && (p[i]=NextFreePgno(newFreePages)); ++i)
 					;
 				memset(p+i, 0, PageSize-(i*4));
 			}
-			for (UInt32 i=0; h.FreePages[i]=NextFreePgno(newFreePages); ++i)
+			for (uint32_t i=0; h.FreePages[i]=NextFreePgno(newFreePages); ++i)
 				;
 			m_nextFreePages = nextFreePages;
 			h.FreePageCount = newFreePages.size();
@@ -477,7 +488,7 @@ bool KVStorage::DoCheckpoint(bool bLock) {
 	return true;
 }
 
-Page KVStorage::OpenPage(UInt32 pgno) {
+Page KVStorage::OpenPage(uint32_t pgno) {
 	ASSERT(pgno);
 
 #ifdef X_DEBUG//!!!D
@@ -515,7 +526,7 @@ Page KVStorage::OpenPage(UInt32 pgno) {
 
 		r = po = new PageObj(_self);
 		++NewPageCount;
-		UInt32 vno = pgno >> m_bitsViewPageRatio;
+		uint32_t vno = pgno >> m_bitsViewPageRatio;
 		if (m_viewMode == ViewMode::Full)
 			vno = 0;
 		CViews::iterator it = Views.find(vno);
@@ -526,17 +537,20 @@ Page KVStorage::OpenPage(UInt32 pgno) {
 			ptr<MMView> mmview = new MMView(_self);
 			bNewView = true;
 			mmview->N = vno;
-			mmview->View = Mappings.back()->MemoryMappedFile.CreateView(UInt64(vno)*ViewSize, ViewSize, ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite);
-			if (ProtectPages)
-				MemoryMappedView::Protect(mmview->View.Address, ViewSize, MemoryMappedFileAccess::Read);
+			size_t viewSize = ViewSize;
+			if (ReadOnly && uint64_t(vno+1)*ViewSize > FileLength)
+				viewSize = FileLength % ViewSize;
+			mmview->View = Mappings.back()->MemoryMappedFile.CreateView(uint64_t(vno)*ViewSize, viewSize, ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite);
+			if (ProtectPages && !ReadOnly)
+				MemoryMappedView::Protect(mmview->View.Address, viewSize, MemoryMappedFileAccess::Read);
 			po->View = mmview;
 			Views.insert(make_pair(vno, mmview));
 		}
 		po->N = pgno;
 		if (m_viewMode == ViewMode::Full)
-			po->Address = (byte*)ViewAddress + UInt64(pgno)*PageSize;
+			po->Address = (byte*)ViewAddress + uint64_t(pgno)*PageSize;
 		else
-			po->Address = (byte*)po->View->View.Address + UInt64(pgno & ((1<<m_bitsViewPageRatio) - 1))*PageSize;
+			po->Address = (byte*)po->View->View.Address + uint64_t(pgno & ((1<<m_bitsViewPageRatio) - 1))*PageSize;
 		Interlocked::Increment((OpenedPages[pgno] = po)->m_dwRef);
 	}
 	po->Live = true;
@@ -561,18 +575,18 @@ Page KVStorage::OpenPage(UInt32 pgno) {
 	return r;
 }
 
-UInt32 KVStorage::TryAllocateMappedFreePage() {
+uint32_t KVStorage::TryAllocateMappedFreePage() {
 	ASSERT(m_bitsViewPageRatio >= 3);
 
-	const UInt32 q = (1<<m_bitsViewPageRatio),
-			step = min(q, (UInt32)64);
-	const UInt64 mask = (UInt64(1) << step) - 1; 
+	const uint32_t q = (1<<m_bitsViewPageRatio),
+			step = min(q, (uint32_t)64);
+	const uint64_t mask = (uint64_t(1) << step) - 1; 
 
 	EXT_LOCK (MtxViews) {
 		for (CViews::iterator it=Views.begin(), e=Views.end(); it!=e; ++it) {
-			UInt32 pgBeg = it->first << m_bitsViewPageRatio;
+			uint32_t pgBeg = it->first << m_bitsViewPageRatio;
 #if UCFG_DB_FREE_PAGES_BITSET
-			UInt32 pgEnd=pgBeg + q;
+			uint32_t pgEnd=pgBeg + q;
 /*!!! bitset::find_ has O(n) complexity
 			CFreePagesBitset::size_type pgnoFree = pgno ? FreePagesBitset.find_next_set(pgno-1) : FreePagesBitset.find_first_set();
 			if (pgnoFree != CFreePagesBitset::npos && pgnoFree < pgEnd) {
@@ -580,23 +594,23 @@ UInt32 KVStorage::TryAllocateMappedFreePage() {
 				FreePages.erase(pgnoFree);
 				return pgnoFree;
 			} else if (pgnoFree == CFreePagesBitset::npos && pgEnd > PageCount) {
-				UInt32 r = FreePagesBitset.size();
+				uint32_t r = FreePagesBitset.size();
 				FreePagesBitset.push_back(false);
-				for (UInt32 i=PageCount; i<r; ++i)
+				for (uint32_t i=PageCount; i<r; ++i)
 					FreePage(i);
 				OpenedPages.resize(PageCount = r+1);
 				return r;
 			}
 */
 
-			UInt32 pgno = pgBeg;
+			uint32_t pgno = pgBeg;
 			for (; pgno<pgEnd; pgno+=step) {
 				if (pgno+step > PageCount || (mask & ToUInt64AtBytePos(FreePagesBitset, pgno & ~(step-1)))) {
-					for (UInt32 j=pgno; j<pgno+step; ++j) {
+					for (uint32_t j=pgno; j<pgno+step; ++j) {
 						if (j>=PageCount || FreePagesBitset[j]) {
 							if (j >= PageCount) {
 								FreePagesBitset.resize(j+1);
-								for (UInt32 i=PageCount; i<j; ++i)
+								for (uint32_t i=PageCount; i<j; ++i)
 									FreePage(i);
 								OpenedPages.resize(PageCount = j+1);
 							} else {
@@ -612,7 +626,7 @@ UInt32 KVStorage::TryAllocateMappedFreePage() {
 #else
 			COrderedPgNos::iterator itFree = FreePages.lower_bound(pgBeg);
 			if (itFree != FreePages.lower_bound(pgBeg+q)) {
-				UInt32 r = *itFree;
+				uint32_t r = *itFree;
 				FreePages.erase(itFree);
 				return r;
 			}
@@ -622,15 +636,15 @@ UInt32 KVStorage::TryAllocateMappedFreePage() {
 	return 0;
 }
 
-void KVStorage::MarkAllocatedPage(UInt32 pgno) {
+void KVStorage::MarkAllocatedPage(uint32_t pgno) {
 	if (AllocatedSinceCheckpointPages.size() < pgno+1)
-		AllocatedSinceCheckpointPages.resize(std::max(pgno+1, (UInt32)AllocatedSinceCheckpointPages.size()*2)); 	//!!!TODO 2^32 limitation
+		AllocatedSinceCheckpointPages.resize(std::max(pgno+1, (uint32_t)AllocatedSinceCheckpointPages.size()*2)); 	//!!!TODO 2^32 limitation
 	AllocatedSinceCheckpointPages.set(pgno);
 }
 
 Page KVStorage::Allocate(bool bLock) {
 	m_bModified = true;
-	UInt32 pgno = 0;
+	uint32_t pgno = 0;
 	{
 		unique_lock<mutex> lk(MtxFreePages, defer_lock);
 		if (bLock)
@@ -662,10 +676,10 @@ Page KVStorage::Allocate(bool bLock) {
 	EXT_LOCK (MtxViews) {				//!!!?
 		OpenedPages.push_back(nullptr);
 	}
-	if (FileLength < UInt64(PageCount)*PageSize) {
-		//FileIncrement = min(FileIncrement*2, UInt64(1024*1024*1024));
+	if (FileLength < uint64_t(PageCount)*PageSize) {
+		//FileIncrement = min(FileIncrement*2, uint64_t(1024*1024*1024));
 		FileIncrement *= 2;
-		AddFullMapping((UInt64(PageCount) * PageSize + FileIncrement - 1) & ~(FileIncrement - 1));
+		AddFullMapping((uint64_t(PageCount) * PageSize + FileIncrement - 1) & ~(FileIncrement - 1));
 		DbFile.Flush();			// save Metadata
 
 #ifdef X_DEBUG//!!!D
@@ -679,11 +693,11 @@ LAB_ALLOCATED:
 	return r;
 }
 
-UInt32 KVStorage::GetUInt32(UInt32 pgno, int offset) {
+uint32_t KVStorage::GetUInt32(uint32_t pgno, int offset) {
 	if (m_viewMode == ViewMode::Window) {
-		return letoh(*(UInt32*)((byte*)OpenPage(pgno).get_Address() + offset));
+		return letoh(*(uint32_t*)((byte*)OpenPage(pgno).get_Address() + offset));
 	} else {
-		return letoh(*(UInt32*)((byte*)ViewAddress + UInt64(pgno)*PageSize + offset));
+		return letoh(*(uint32_t*)((byte*)ViewAddress + uint64_t(pgno)*PageSize + offset));
 	}
 }
 
@@ -727,7 +741,7 @@ void KVStorage::DoClose(bool bLock) {
 	m_fullViews.clear();
 	Mappings.clear();
 	if (!ReadOnly)
-		DbFile.Length = UInt64(PageCount) * PageSize;
+		DbFile.Length = uint64_t(PageCount) * PageSize;
 	DbFile.Close();
 	m_bModified = false;
 	m_state = OpenState::Closed;
@@ -742,7 +756,12 @@ void KVStorage::DoClose(bool bLock) {
 }
 
 void KVStorage::Close(bool bLock) {
-	if (m_state == OpenState::Opened) {
+	switch (m_state) {
+	case OpenState::Closing:
+		if (!AsyncClose)
+			m_futClose.wait();
+		break;
+	case OpenState::Opened:
 		if (AsyncClose) {
 			m_state = OpenState::Closing;
 			m_futClose = std::async(&KVStorage::DoClose, this, bLock);
@@ -768,26 +787,61 @@ PageObj::~PageObj() {
 	if (Storage.ProtectPages && Dirty)
 		MemoryMappedView::Protect(Address, Storage.PageSize, MemoryMappedFileAccess::Read);
 
-	Ext::Free(Entries);
+	free(Entries);
 }
 
 void Page::ClearEntries() const {
-	Ext::Free(exchange(m_pimpl->Entries, nullptr));
+	free(exchange(m_pimpl->Entries, nullptr));
 }
 
-DbTransaction::DbTransaction(KVStorage& storage, bool bReadOnly)
-	:	Storage(storage)
-	,	ReadOnly(bReadOnly)
-	,	m_lockWrite(storage.MtxWrite, defer_lock)
-	,	m_shlk(storage, defer_lock)
+DbTransactionBase::DbTransactionBase(KVStorage& storage)
+	: Storage(storage)
+	, ReadOnly(true)
+	, m_shlk(storage, defer_lock)
 {
-	if (ReadOnly) {
-		m_shlk.lock();		
-		EXT_LOCK (Storage.MtxRoot) {
-			TransactionId = Storage.LastTransactionId;
-			MainTableRoot = Storage.MainTableRoot;
-		}
-	} else {
+	InitReadOnly();
+}
+
+DbTransactionBase::DbTransactionBase(KVStorage& storage, bool bReadOnly)
+	: Storage(storage)
+	, ReadOnly(bReadOnly)
+	, m_shlk(storage, defer_lock)
+{
+	if (ReadOnly)
+		InitReadOnly();
+}
+
+DbTransactionBase::~DbTransactionBase() {
+}
+
+void DbTransactionBase::InitReadOnly() {
+	m_shlk.lock();
+	EXT_LOCK(Storage.MtxRoot) {
+		TransactionId = Storage.LastTransactionId;
+		MainTableRoot = Storage.MainTableRoot;
+	}
+}
+
+Page DbTransactionBase::OpenPage(uint32_t pgno) {
+	return Storage.OpenPage(pgno);
+}
+
+void DbTransactionBase::Commit() {
+	m_shlk.unlock();
+	m_bComplete = true;
+}
+
+void DbTransactionBase::Rollback() {
+	m_shlk.unlock();
+	m_bComplete = true;
+}
+
+
+DbTransaction::DbTransaction(KVStorage& storage, bool bReadOnly)
+	:	base(storage, bReadOnly)
+	,	m_lockWrite(storage.MtxWrite, defer_lock)
+{
+	if (!ReadOnly) {
 		m_lockWrite.lock();
 		TransactionId = Storage.LastTransactionId;
 		MainTableRoot = Storage.MainTableRoot;
@@ -814,7 +868,7 @@ Page DbTransaction::Allocate(PageAlloc pa, Page *pCopyFrom) {
 		{
 			PageHeader& h = r.Header();
 			h.Num = 0;
-			h.Flags = pa==PageAlloc::Branch ? PAGE_FLAG_BRANCH : 0;
+			h.Flags = pa==PageAlloc::Branch ? PageHeader::FLAG_BRANCH : 0;
 		}
 		break;
 	case PageAlloc::Copy:
@@ -832,28 +886,29 @@ Page DbTransaction::Allocate(PageAlloc pa, Page *pCopyFrom) {
 	return r;
 }
 
-Page DbTransaction::OpenPage(UInt32 pgno) {
+Page DbTransaction::OpenPage(uint32_t pgno) {
 	Page r = Storage.OpenPage(pgno);
-//!!!R	ASSERT(!r.m_pimpl->IsDeleted);
-	r.m_pimpl->Dirty = AllocatedPages.count(pgno);
-	if (r.m_pimpl->Dirty && Storage.ProtectPages)
-		MemoryMappedView::Protect(r.m_pimpl->Address, Storage.PageSize, MemoryMappedFileAccess::ReadWrite);
+	if (!ReadOnly) {
+		r.m_pimpl->Dirty = AllocatedPages.count(pgno);
+		if (r.m_pimpl->Dirty && Storage.ProtectPages)
+			MemoryMappedView::Protect(r.m_pimpl->Address, Storage.PageSize, MemoryMappedFileAccess::ReadWrite);
+	}
 	return r;	
 }
 
-void DbTransaction::FreePage(UInt32 pgno) {
+void DbTransaction::FreePage(uint32_t pgno) {
 	if (AllocatedPages.erase(pgno)) {
 		EXT_LOCKED(Storage.MtxFreePages, Storage.FreePage(pgno));
 	} else
 		ReleasedPages.insert(pgno);
 }
 
-vector<UInt32> DbTransaction::AllocatePages(int n) {
-	vector<UInt32> r;
+vector<uint32_t> DbTransaction::AllocatePages(int n) {
+	vector<uint32_t> r;
 	r.reserve(n);
 	struct FreeReleaser {
 		DbTransaction *Tx;
-		vector<UInt32> *Pages;
+		vector<uint32_t> *Pages;
 
 		~FreeReleaser() {
 			if (Pages)
@@ -882,10 +937,10 @@ void DbTransaction::Complete() {
 void DbTransaction::Rollback() {
 	if (!ReadOnly) {
 		EXT_LOCK (Storage.MtxFreePages) {
-			EXT_FOR(UInt32 pgno, AllocatedPages) {
+			EXT_FOR(uint32_t pgno, AllocatedPages) {
 				Storage.AllocatedSinceCheckpointPages.reset(pgno);
 			}
-			EXT_FOR (UInt32 pgno, AllocatedPages) {
+			EXT_FOR (uint32_t pgno, AllocatedPages) {
 				Storage.FreePage(pgno);
 			}
 		}
@@ -919,7 +974,7 @@ void DbTransaction::Commit() {
 		}
 
 		EXT_LOCK (Storage.MtxViews) {
-			EXT_FOR (UInt32 pgno, AllocatedPages) {
+			EXT_FOR (uint32_t pgno, AllocatedPages) {
 				if (PageObj *po = Storage.OpenedPages[pgno]) {
 //!!!?					if (Storage.ProtectPages && po.Dirty)
 //						MemoryMappedView::Protect(po.Address, Storage.PageSize, MemoryMappedFileAccess::Read);
@@ -934,7 +989,7 @@ void DbTransaction::Commit() {
 		{
 			unique_lock<shared_mutex> lk(Storage.ShMtx, try_to_lock);
 			EXT_LOCK (Storage.MtxFreePages) {
-				EXT_FOR (UInt32 pgno, ReleasedPages) {
+				EXT_FOR (uint32_t pgno, ReleasedPages) {
 					if (Storage.Durability || pgno >= Storage.AllocatedSinceCheckpointPages.size() || !Storage.AllocatedSinceCheckpointPages[pgno])
 						Storage.ReleasedPages.insert(pgno);
 					else if (lk) {

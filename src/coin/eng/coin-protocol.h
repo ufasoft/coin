@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 
@@ -16,8 +23,8 @@ class CoinEng;
 
 ENUM_CLASS(InventoryType) {
 	MSG_TX = 1,
-	MSG_BLOCK,
-	MSG_FILTERED_BLOCK
+	MSG_BLOCK = 2,
+	MSG_FILTERED_BLOCK = 3
 } END_ENUM_CLASS(InventoryType);
 
 class Inventory : public CPersistent, public CPrintable {
@@ -37,11 +44,11 @@ public:
 	}
 
 	void Write(BinaryWriter& wr) const override {
-		wr << UInt32(Type) << HashValue;
+		wr << uint32_t(Type) << HashValue;
 	}
 
 	void Read(const BinaryReader& rd) override {
-		UInt32 typ;
+		uint32_t typ;
 		rd >> typ >> HashValue;
 		Type = InventoryType(typ);
 	}
@@ -60,21 +67,25 @@ protected:
 class CoinLink : public P2P::Link {
 	typedef P2P::Link base;
 public:
-	Int32 LastReceivedBlock;
+	int32_t LastReceivedBlock;
 	LruCache<Inventory> KnownInvertorySet;
 	
 	typedef unordered_set<Inventory> CInvertorySetToSend;
 	CInvertorySetToSend InvertorySetToSend;
 
 	HashValue HashContinue;
+	
+	Block m_curMerkleBlock;
+	vector<HashValue> m_curMatchedHashes;
 
 	mutex MtxFilter;
 	ptr<CoinFilter> Filter;
-	CBool RelayTxes;	
+	CBool RelayTxes;
 
 	CoinLink(P2P::NetManager& netManager, thread_group& tr)
 		:	base(&netManager, &tr)
 		,	LastReceivedBlock(-1)
+		,	m_curMerkleBlock(nullptr)
 	{}
 
 	void Push(const Inventory& inv);
@@ -87,10 +98,10 @@ protected:
 class VersionMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	UInt64 Nonce, Services;
-	UInt32 ProtocolVer;
+	uint64_t Nonce, Services;
+	uint32_t ProtocolVer;
 	String UserAgent;
-	Int32 LastReceivedBlock;
+	int32_t LastReceivedBlock;
 	mutable DateTime RemoteTimestamp;
 	PeerInfoBase RemotePeerInfo, LocalPeerInfo;
 	bool RelayTxes;
@@ -109,7 +120,6 @@ public:
 	VerackMessage()
 		:	base("verack")
 	{
-//!!!R?		m_bHasChecksum = false;
 	}
 protected:
 	void Process(P2P::Link& link) override;
@@ -174,6 +184,16 @@ public:
 	void Process(P2P::Link& link) override;
 };
 
+class NotFoundMessage : public InvGetDataMessage {
+	typedef InvGetDataMessage base;
+public:
+	NotFoundMessage()
+		:	base("notfound")
+	{}
+
+	void Process(P2P::Link& link) override;
+};
+
 class HeadersMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
@@ -206,7 +226,7 @@ protected:
 class GetBlocksMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	UInt32 Ver;
+	uint32_t Ver;
 	LocatorHashes Locators;
 	HashValue HashStop;
 
@@ -252,8 +272,8 @@ class BlockMessage : public CoinMessage {
 public:
 	Coin::Block Block;
 
-	BlockMessage(const Coin::Block& block = nullptr)
-		:	base("block")
+	BlockMessage(const Coin::Block& block = nullptr, RCString commandName = "block")
+		:	base(commandName)
 		,	Block(block)
 	{}
 
@@ -268,6 +288,21 @@ public:
 protected:
 	void Process(P2P::Link& link) override;
 	String ToString() const override;
+};
+
+class MerkleBlockMessage : public BlockMessage {
+	typedef BlockMessage base;
+public:
+	CoinPartialMerkleTree PartialMT;
+
+	MerkleBlockMessage()
+		:	base(Coin::Block(), "merkleblock")
+	{}
+
+	vector<Tx> Init(const Coin::Block& block, CoinFilter& filter);
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
+	void Process(P2P::Link& link) override;
 };
 
 class CheckOrderMessage : public CoinMessage {
@@ -299,7 +334,7 @@ public:
 class ReplyMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	UInt32 Code;
+	uint32_t Code;
 
 	ReplyMessage()
 		:	base("reply")
@@ -317,7 +352,7 @@ public:
 class PingPongMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	UInt64 Nonce;
+	uint64_t Nonce;
 
 	PingPongMessage(RCString command)
 		:	base(command)
@@ -394,30 +429,6 @@ protected:
 	void Process(P2P::Link& link) override;
 };
 
-class MerkleBlockMessage : public CoinMessage {
-	typedef CoinMessage base;
-public:
-	HashValue PrevBlockHash;
-	HashValue MerkleRoot;
-	DateTime Timestamp;
-	UInt32 DifficultyTargetBits;
-	UInt32 Ver;
-	UInt32 Height;
-	UInt32 Nonce;
-	UInt32 NTransactions;
-	CoinPartialMerkleTree PartialMT;
-
-	MerkleBlockMessage()
-		:	base("merkleblock")
-	{}
-
-	vector<Tx> Init(const Block& block, CoinFilter& filter);
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
-protected:
-	void Process(P2P::Link& link) override;
-};
-
 class FilterLoadMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
@@ -435,7 +446,7 @@ public:
 	void Read(const BinaryReader& rd) override {
 		rd >> *(Filter = new CoinFilter);
 		if ((Filter->Bitset.size()+7)/8 > MAX_BLOOM_FILTER_SIZE || Filter->HashNum > MAX_HASH_FUNCS)
-			throw PeerMisbehavingExc(100);
+			throw PeerMisbehavingException(100);
 	}
 protected:
 	void Process(P2P::Link& link) override {
@@ -463,14 +474,14 @@ public:
 	void Read(const BinaryReader& rd) override {
 		Data = CoinSerialized::ReadBlob(rd);
 		if (Data.Size > MAX_SCRIPT_ELEMENT_SIZE)
-			throw PeerMisbehavingExc(100);
+			throw PeerMisbehavingException(100);
 	}
 protected:
 	void Process(P2P::Link& link) override {
 		CoinLink& clink = (CoinLink&)link;
 		EXT_LOCK (clink.MtxFilter) {
 			if (!clink.Filter)
-				throw PeerMisbehavingExc(100);
+				throw PeerMisbehavingException(100);
 			clink.Filter->Insert(Data);
 		}
 	}
@@ -511,8 +522,11 @@ public:
 	HashValue Hash;
 	RejectReason Code;
 
-	RejectMessage()
+	RejectMessage(RejectReason code = RejectReason::Malformed, RCString command = String(), RCString reason = String())
 		:	base("reject")
+		,	Code(code)
+		,	Command(command)
+		,	Reason(reason)
 	{}
 
 	void Write(BinaryWriter& wr) const override;

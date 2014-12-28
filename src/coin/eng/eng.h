@@ -1,9 +1,25 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include <el/db/ext-sqlite.h>
 #include "irc.h"
 
 #include <el/crypto/hash.h>
+
+#ifndef UCFG_COIN_ECC
+#	define UCFG_COIN_ECC 'S'			// Secp256k1
+#endif
+
+#if UCFG_COIN_ECC=='S'
+#	include <crypto/cryp/secp256k1.h>
+#endif
+
 #include <el/crypto/ecdsa.h>
 #include <el/crypto/bloom-filter.h>
 using namespace Ext::Crypto;
@@ -38,7 +54,7 @@ class IBlockChainDb;
 namespace Coin {
 
 
-const UInt64 NODE_NETWORK = 1;
+const uint64_t NODE_NETWORK = 1;
 
 
 class CoinPeer : public P2P::Peer {
@@ -76,20 +92,20 @@ public:
 	String Name, Symbol;
 	HashValue Genesis;
 	TimeSpan BlockSpan;
-	Int64 InitBlockValue;
-	Int64 CoinValue;
-	Int64 MaxMoney;
-	Int64 MinTxFee;
-	Int64 MinTxOutAmount;
+	int64_t InitBlockValue;
+	int64_t CoinValue;
+	int64_t MaxMoney;
+	int64_t MinTxFee;
+	int64_t MinTxOutAmount;
 	int HalfLife;
 	int CoinbaseMaturity;
 	int AnnualPercentageRate;
 	int TargetInterval;
 	Target MaxTarget, InitTarget;
 	Target MaxPossibleTarget;
-	UInt32 ProtocolMagic;
-	UInt32 ProtocolVersion;
-	UInt16 DefaultPort;
+	uint32_t ProtocolMagic;
+	uint32_t ProtocolVersion;
+	uint16_t DefaultPort;
 	vector<String> BootUrls;
 	int IrcRange;
 	int PayToScriptHashHeight;
@@ -103,6 +119,7 @@ public:
 	CInt<byte> AddressVersion, ScriptAddressVersion;
 	int AuxPowStartBlock;
 	bool IsTestNet;
+	bool AllowLiteMode;
 	bool Listen;
 	size_t MedianTimeSpan;
 	
@@ -138,17 +155,20 @@ public:
 	void LoadFromXmlAttributes(IXmlAttributeCollection& xml);
 	int Log10CoinValue() const;				// precise calculation of log10(CoinValue)
 	void AddSeedEndpoint(RCString seed);
+private:
+	void ReadParam(int& param, IXmlAttributeCollection& xml, RCString name);
+	void ReadParam(int64_t& param, IXmlAttributeCollection& xml, RCString name);
 };
 
 class Alert : public Object, public CPersistent {
 public:
-	Int32 Ver;
+	int32_t Ver;
 	DateTime RelayUntil, Expiration;
-	Int32 NId, NCancel;
-	set<Int32> SetCancel;
-	Int32 MinVer, MaxVer;
+	int32_t NId, NCancel;
+	set<int32_t> SetCancel;
+	int32_t MinVer, MaxVer;
 	set<String> SetSubVer;
-	Int32 Priority;
+	int32_t Priority;
 	String Comment, StatusBar, Reserved;
 
 	void Read(const BinaryReader& rd) override;
@@ -212,7 +232,7 @@ public:
 class MyKeyInfo {
 	typedef MyKeyInfo class_type;
 public:
-	Int64 KeyRowid;
+	int64_t KeyRowid;
 	Blob PubKey;
 	
 	CngKey Key;
@@ -251,7 +271,7 @@ public:
 		BLOOM_UPDATE_P2PUBKEY_ONLY = 2,
 		BLOOM_UPDATE_MASK = 3;
 
-	UInt32 Tweak;
+	uint32_t Tweak;
 	byte Flags;
 
 	CoinFilter()
@@ -259,7 +279,7 @@ public:
 		,	Flags(0)
 	{}
 
-	CoinFilter(int nElements, double falsePostitiveRate, UInt32 tweak, byte flags);
+	CoinFilter(int nElements, double falsePostitiveRate, uint32_t tweak, byte flags);
 
 	using base::Contains;
 	bool Contains(const HashValue& hash) const { return base::Contains(hash); }
@@ -277,22 +297,23 @@ protected:
 };
 
 class COIN_CLASS CoinDb : public P2P::DetectGlobalIp, public NetManager {
+	typedef NetManager base;
 	typedef CoinDb class_type;
 public:
 	recursive_mutex MtxDb;
 
-	String DbWalletFilePath, DbPeersFilePath;
+	path DbWalletFilePath, DbPeersFilePath;
 	String FilenameSuffix;
 	SqliteConnection m_dbWallet;
 	SqliteCommand  CmdAddNewKey;
-	SqliteCommand m_cmdIsFromMe, CmdGetBalance, CmdRecipients, CmdGetTxId, CmdPendingTxes, CmdSetBestBlockHash,
+	SqliteCommand m_cmdIsFromMe, CmdGetBalance, CmdRecipients, CmdGetTxId, CmdGetTx, CmdGetTxes, CmdPendingTxes, CmdSetBestBlockHash,
 		CmdFindCoin, CmdInsertCoin;
 
 	recursive_mutex MtxDbPeers;
 	SqliteConnection m_dbPeers;
-	SqliteCommand m_cmdIsBanned, CmdPeerByIp, CmdInsertPeer, CmdUpdatePeer,
+	SqliteCommand CmdPeerByIp, CmdInsertPeer, CmdUpdatePeer,
 		CmdEndpointByIp, CmdInsertEndpoint, CmdUpdateEndpoint;
-
+	
 	typedef unordered_map<HashValue160, MyKeyInfo> CHash160ToMyKey;
 	CHash160ToMyKey Hash160ToMyKey;
 	ptr<CoinFilter> Filter;
@@ -340,12 +361,11 @@ public:
 	bool SetPrivkeyComment(const HashValue160& hash160, RCString comment);
 	void ImportXml(RCString filepath);
 	void ImportDat(RCString filepath, RCString password);
-	void ImportWallet(RCString filepath, RCString password);
-	void ExportWalletToXml(RCString filepath);
+	void ImportWallet(const path& filepath, RCString password);
+	void ExportWalletToXml(const path& filepath);
 
 	void OnIpDetected(const IPAddress& ip) override;
 	Link *CreateLink(thread_group& tr) override;
-	bool IsBanned(const IPAddress& ip) override;
 	void BanPeer(Peer& peer) override;
 	void SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers);
 private:
@@ -377,7 +397,7 @@ class CoinMessage : public P2P::Message, public CoinSerialized, public CPrintabl
 	typedef P2P::Message Base;
 public:
 	String Command;
-	UInt32 Checksum;
+	uint32_t Checksum;
 
 	CoinMessage(RCString command)
 		:	Command(command)
@@ -403,9 +423,10 @@ extern const Version
 
 ENUM_CLASS(EngMode) {
 	DbLess,
-	Lite,
+	Lite,							// Don't download all block contents block
+	BlockParser,					// Download blocks, but don't save txes
 	Normal,
-	BlockExplorer
+	BlockExplorer					// Keep map<address, txes>
 } END_ENUM_CLASS(EngMode)
 
 inline CoinEng& Eng() noexcept { return *(CoinEng*)HasherEng::GetCurrent(); }
@@ -424,7 +445,6 @@ class IBlockChainDb : public Object, public ITransactionable  {
 public:
 	CInt<int> m_nCheckpont;
 	String DefaultFileExt;
-	CBool IsSlow;
 
 	IBlockChainDb()
 		:	DefaultFileExt(".db")
@@ -433,8 +453,8 @@ public:
 	virtual void *GetDbObject()																	=0;
 	virtual ITransactionable& GetSavepointObject()												=0;
 
-	virtual bool Create(RCString path)															=0;
-	virtual bool Open(RCString path)															=0;			// returns false if DBConvering deffered
+	virtual bool Create(const path& p)															=0;
+	virtual bool Open(const path& p)															=0;			// returns false if DBConvering deffered
 	virtual void Close(bool bAsync = true)																		=0;	
 	virtual void Recreate();
 	
@@ -448,11 +468,11 @@ public:
 	virtual int GetMaxHeight()																	=0;
 	virtual TxHashesOutNums GetTxHashesOutNums(int height)										=0;
 	virtual void InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) =0;
-	virtual void DeleteBlock(int height, const vector<Int64>& txids)							=0;
+	virtual void DeleteBlock(int height, const vector<int64_t>& txids)							=0;
 
 	virtual bool FindTx(const HashValue& hash, Tx *ptx)											=0;
 	virtual bool FindTxById(const ConstBuf& txid8, Tx *ptx)										=0;
-	virtual vector<Int64> GetTxesByPubKey(const HashValue160& pubkey)							=0;
+	virtual vector<int64_t> GetTxesByPubKey(const HashValue160& pubkey)							=0;
 
 	virtual void ReadTxIns(const HashValue& hash, const TxObj& txObj)							=0;
 	virtual pair<int, int> FindPrevTxCoords(DbWriter& wr, int height, const HashValue& hash)	=0;
@@ -464,9 +484,9 @@ public:
 	virtual void SetProgressHandler(int(* pfn)(void*), void*p = 0, int n = 1)					=0;
 	virtual vector<Block> GetBlocks(const LocatorHashes& locators, const HashValue& hashStop)	=0;
 
-	virtual Blob FindPubkey(Int64 id)															=0;
-	virtual void InsertPubkey(Int64 id, const ConstBuf& pk)										=0;
-	virtual void UpdatePubkey(Int64 id, const ConstBuf& pk)										=0;
+	virtual Blob FindPubkey(int64_t id)															=0;
+	virtual void InsertPubkey(int64_t id, const ConstBuf& pk)										=0;
+	virtual void UpdatePubkey(int64_t id, const ConstBuf& pk)										=0;
 	
 	virtual void Vacuum() {}
 	virtual void BeforeEnsureTransactionStarted() {}
@@ -483,7 +503,7 @@ public:
 	CoinDb& m_cdb;
 
 	Coin::ChainParams ChainParams;
-	UInt16 MaxBlockVersion;
+	uint16_t MaxBlockVersion;
 
 	recursive_mutex Mtx;
 
@@ -517,20 +537,23 @@ public:
 	
 	ptr<Coin::ChannelClient> ChannelClient;
 	int CommitPeriod;
-	EngMode Mode;
+
+
 
 	ptr<CoinFilter> Filter;
-	unordered_set<HashValue> CheckedFilteredTxHashes;
 
 	CBool InWalJournalMode;
 	CBool JournalModeDelete;
 	CBool m_bSomeInvReceived;
 	CBool m_dbTxBegin;
+	bool AllowFreeTxes;
+
+	EngMode get_Mode() { return m_mode; }
+	void put_Mode(EngMode mode);
+	DEFPROP(EngMode, Mode);
 
 	bool get_LiteMode() { return Mode == EngMode::Lite; }
 	DEFPROP_GET(bool, LiteMode);
-
-	bool AllowFreeTxes;
 
 	CoinEng(CoinDb& cdb);
 	~CoinEng();
@@ -539,20 +562,22 @@ public:
 	void ContinueLoad();
 	virtual void Load();
 	virtual void Close();
+	void PurgeDatabase();
 
 	virtual ptr<IBlockChainDb> CreateBlockChainDb();
 
 	void Start() override;
+	void SignalStop();
 	void Stop();
 
 	Block BestBlock();
 	void SetBestBlock(const Block& b);
 	int BestBlockHeight();
 
-	String m_dbFilePath;
-	virtual String GetDbFilePath();	
+	path m_dbFilePath;
+	path GetDbFilePath();
 
-	bool CheckSelfVerNonce(UInt64 nonce) {
+	bool CheckSelfVerNonce(uint64_t nonce) {
 		bool bSelf = false;
 		EXT_LOCK (m_mtxVerNonce) {
 			 if (bSelf = m_nonce2link.count(nonce))
@@ -583,7 +608,7 @@ public:
 	void Push(const Inventory& inv);
 	void Push(const Tx& tx);
 	bool AddToPool(const Tx& tx, vector<HashValue>& vQueue);
-	Block GetBlockByHeight(UInt32 height);
+	Block GetBlockByHeight(uint32_t height);
 	Block LookupBlock(const HashValue& hash);
 	static Blob SpendVectorToBlob(const vector<bool>& vec);
 	void EnsureTransactionStarted();
@@ -597,7 +622,7 @@ public:
 	virtual void OnDisconnectInputs(const Tx& tx) {}
 	virtual bool ShouldBeSaved(const Tx& tx) { return !LiteMode; }
 
-	virtual Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty = 0, bool bForCheck = false) {
+	virtual int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty = 0, bool bForCheck = false) {
 		return ChainParams.InitBlockValue >> (height/ChainParams.HalfLife);
 	}
 
@@ -614,7 +639,7 @@ public:
 	CoinPeer *CreatePeer() override;
 //!!!R	void FillAddress(Address& addr, RCString s);
 
-	Int64 CheckMoneyRange(Int64 v) {
+	int64_t CheckMoneyRange(int64_t v) {
 		if (v < 0 || v > ChainParams.MaxMoney)
 			Throw(E_COIN_MoneyOutOfRange);
 		return v;
@@ -622,7 +647,7 @@ public:
 
 	virtual double ToDifficulty(const Target& target);
 
-	virtual Int64 GetMinRelayTxFee() {
+	virtual int64_t GetMinRelayTxFee() {
 		return ChainParams.CoinValue/10000;
 	}
 
@@ -633,8 +658,8 @@ public:
 
 	bool GetPkId(const HashValue160& hash160, CIdPk& id);
 	bool GetPkId(const ConstBuf& cbuf, CIdPk& id);
-	HashValue160 GetHash160ById(Int64 id);
-	Blob GetPkById(Int64 rowid);
+	HashValue160 GetHash160ById(int64_t id);
+	Blob GetPkById(int64_t rowid);
 	virtual void UpgradeDb(const Version& ver);
 
 	virtual CoinMessage *CreateVersionMessage();
@@ -642,6 +667,7 @@ public:
 	virtual CoinMessage *CreateAddrMessage();
 	virtual CoinMessage *CreateInvMessage();
 	virtual CoinMessage *CreateGetDataMessage();
+	virtual CoinMessage *CreateNotFoundMessage();
 	virtual CoinMessage *CreateGetBlocksMessage();
 	virtual CoinMessage *CreateGetHeadersMessage();
 	virtual CoinMessage *CreateTxMessage();
@@ -699,12 +725,15 @@ protected:
 	virtual TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan);
 	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval);
 	virtual Target GetNextTargetRequired(const Block& blockLast, const Block& block);
-	virtual void UpdateMinFeeForTxOuts(Int64& minFee, const Int64& baseFee, const Tx& tx);
+	virtual void UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx);
+	virtual path VGetDbFilePath();
 private:
+	EngMode m_mode;
+
 	mutex m_mtxThreadStateChange;	
 
 	mutex m_mtxVerNonce;
-	typedef unordered_map<UInt64, ptr<Link>> CNonce2link;
+	typedef unordered_map<uint64_t, ptr<Link>> CNonce2link;
 	CNonce2link m_nonce2link;
 
 	mutex MtxBestUpdate;
@@ -744,12 +773,12 @@ void SetUserVersion(SqliteConnection& db, const Version& ver = Version());
 Blob ToUncompressedKey(const ConstBuf& cbuf);
 Blob ToCompressedKey(const ConstBuf& cbuf);
 
-class TxNotFoundExc : public Exception {
+class TxNotFoundException : public Exception {
 	typedef Exception base;
 public:
 	HashValue HashTx;
 
-	TxNotFoundExc(const HashValue& hashTx)
+	TxNotFoundException(const HashValue& hashTx)
 		:	base(E_COIN_TxNotFound)
 		,	HashTx(hashTx)
 	{
@@ -760,32 +789,33 @@ public:
 	}
 };
 
-class PeerMisbehavingExc : public Exception {
+class PeerMisbehavingException : public Exception {
 	typedef Exception base;
 public:
 	int HowMuch;
 
-	PeerMisbehavingExc(int howMuch = 1)
+	PeerMisbehavingException(int howMuch = 1)
 		:	base(E_COIN_Misbehaving)
 		,	HowMuch(howMuch)
 	{}
 };
 
 
-class VersionExc : public Exception {
+class VersionException : public Exception {
 	typedef Exception base;
 public:
 	Ext::Version Version;
 
-	VersionExc()
+	VersionException(const Ext::Version& ver = Ext::Version())
 		:	base(E_EXT_DB_Version)
+		,	Version(ver)
 	{
 	}
 
+	~VersionException() noexcept {}		//!!! GCC 4.6
+
 	String get_Message() const override {
-		String r = base::get_Message();
-		r += " "+Version.ToString(2);
-		return r;
+		return base::get_Message() + " " + Version.ToString(2);
 	}
 };
 

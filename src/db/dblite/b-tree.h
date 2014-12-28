@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 namespace Ext { namespace DB { namespace KV {
@@ -11,19 +18,17 @@ struct EntryDesc : Buf {
 		return ConstBuf(P+1, P[0]);
 	}
 
-	UInt64 DataSize;
+	uint64_t DataSize;
 	ConstBuf LocalData;
-	UInt32 PgNo;
+	uint32_t PgNo;
 	bool Overflowed;
 };
 
-EntryDesc GetEntryDesc(const PagePos& pp, byte keySize);
 LiteEntry GetLiteEntry(const PagePos& pp, byte keySize);
-pair<size_t, bool> GetDataEntrySize(size_t ksize, UInt64 dsize, size_t pageSize);	// <size, isBigData>
-size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, UInt64 dsize);
+size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t dsize);
 void InsertCell(const PagePos& pagePos, const ConstBuf& cell, byte keySize);
-UInt32 DeleteEntry(const PagePos& pp, byte keySize);
-size_t CalculateLocalDataSize(UInt64 dataSize, size_t keyFullSize, size_t pageSize);
+uint32_t DeleteEntry(const PagePos& pp, byte keySize);
+size_t CalculateLocalDataSize(uint64_t dataSize, size_t cbExtendedPrefix, size_t pageSize);
 
 struct LiteEntry {
 	byte *P;
@@ -32,26 +37,26 @@ struct LiteEntry {
 		return keySize ? ConstBuf(P, keySize) : ConstBuf(P+1, P[0]);
 	}
 
-	UInt32 PgNo() {
+	uint32_t PgNo() {
 		return GetLeUInt32(P-4);
 	}
 
-	void PutPgNo(UInt32 v) {
+	void PutPgNo(uint32_t v) {
 		PutLeUInt32(P-4, v);
 	}
 
-	UInt64 DataSize(byte keySize) {
-		const byte *p = P + (keySize ? keySize : 1+P[0]);
+	uint64_t DataSize(byte keySize, byte keyOffset) const {
+		const byte *p = P + (keySize ? keySize-keyOffset : 1+P[0]);
 		return Read7BitEncoded(p);
 	}
 
-	ConstBuf LocalData(size_t pageSize, byte keySize) {
-		const byte *p = P + (keySize ? keySize : 1+P[0]);
-		UInt64 dataSize = Read7BitEncoded(p);
-		return ConstBuf(p, CalculateLocalDataSize(dataSize, p-P, pageSize));
+	ConstBuf LocalData(size_t pageSize, byte keySize, byte keyOffset) const {
+		const byte *p = P + (keySize ? keySize-keyOffset : 1+P[0]);
+		uint64_t dataSize = Read7BitEncoded(p);
+		return ConstBuf(p, CalculateLocalDataSize(dataSize, p - P + keyOffset, pageSize));
 	}
 
-	UInt32 FirstBigdataPage() {
+	uint32_t FirstBigdataPage() {
 		return (this+1)->PgNo();
 	}
 
@@ -65,7 +70,7 @@ class BTree : public PagedMap {
 public:
 	Page Root;
 
-	BTree(DbTransaction& tx)
+	BTree(DbTransactionBase& tx)
 		:	base(tx)
 	{}
 
@@ -74,16 +79,15 @@ public:
 	}
 
 	TableType Type() override { return TableType::BTree; }
-	EntryDesc SetOverflowPages(bool bIsBranch, const ConstBuf& k, const ConstBuf& d, UInt32 pgno, byte flags);
-	static void AddEntry(void *p, bool bIsBranch, const ConstBuf& key, const ConstBuf& data, UInt32 pgno, byte flags);
-	void AddEntry(const PagePos& pagePos, const ConstBuf& key, const ConstBuf& data, UInt32 pgno, byte flags = 0);
+	static void AddEntry(void *p, bool bIsBranch, const ConstBuf& key, const ConstBuf& data, uint32_t pgno, byte flags);
+	void AddEntry(const PagePos& pagePos, const ConstBuf& key, const ConstBuf& data, uint32_t pgno, byte flags = 0);
 private:
 	void SetRoot(const Page& page);
 	void BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage);
 
 	void Init(const TableData& td) override {
 		base::Init(td);
-		if (UInt32 pgno = letoh(td.RootPgNo))
+		if (uint32_t pgno = letoh(td.RootPgNo))
 			Root = Tx.OpenPage(pgno);
 	}
 

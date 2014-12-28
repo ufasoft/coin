@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -15,7 +22,6 @@
 #	include "backend-sqlite.h"
 #endif
 
-
 using Ext::DB::DbException;
 
 template<> Coin::ChainParams * StaticList<Coin::ChainParams>::Root = 0;
@@ -27,7 +33,7 @@ namespace Coin {
 void MsgLoopThread::Execute() {
 	Name = "MsgLoopThread";
 
-	DateTime dtNextPeriodic = 0;
+	DateTime dtNextPeriodic(0);
 
 	try {
 		DBG_LOCAL_IGNORE_WIN32(WSAENOTSOCK);
@@ -42,12 +48,12 @@ void MsgLoopThread::Execute() {
 						eng.OnPeriodicMsgLoop();
 					}
 				}
-				dtNextPeriodic = now+TimeSpan::FromSeconds(P2P::PERIODIC_SECONDS);
+				dtNextPeriodic = now + TimeSpan::FromSeconds(P2P::PERIODIC_SECONDS);
 			} else
-				m_ev.Lock(P2P::PERIODIC_SECONDS*1000);
+				m_ev.lock(P2P::PERIODIC_SECONDS*1000);
 		}
-	} catch (RCExc ex) {
-		if (HResultInCatch(ex) != HRESULT_FROM_WIN32(WSAENOTSOCK))
+	} catch (system_error& ex) {
+		if (ex.code() != errc::not_a_socket)
 			throw;
 	}
 
@@ -80,6 +86,7 @@ void ChainParams::Init() {
 	CheckDupTxHeight = numeric_limits<int>::max();
 	Listen = true;
 	MedianTimeSpan = 11;
+	AllowLiteMode = true;
 }
 
 CoinEng *ChainParams::CreateEng(CoinDb& cdb) {
@@ -168,7 +175,7 @@ CoinEng::CoinEng(CoinDb& cdb)
 	,	MaxBlockVersion(2)
 	,	m_freeCount(0)
 	,	CommitPeriod(0x1F)
-	,	Mode(EngMode::Normal)
+	,	m_mode(EngMode::Normal)
 	,	AllowFreeTxes(true)
 	,	UpgradingDatabaseHeight(0)
 {
@@ -229,7 +236,7 @@ ptr<IBlockChainDb> CoinEng::CreateBlockChainDb() {
 #endif
 }
 
-Block CoinEng::GetBlockByHeight(UInt32 height) {
+Block CoinEng::GetBlockByHeight(uint32_t height) {
 	Block block(nullptr);
 
 	EXT_LOCK (Caches.Mtx) {
@@ -271,7 +278,11 @@ CoinMessage *CoinEng::CreateInvMessage() {
 }
 
 CoinMessage *CoinEng::CreateGetDataMessage() {
-	return new GetDataMessage; 
+	return new GetDataMessage;
+}
+
+CoinMessage *CoinEng::CreateNotFoundMessage() {
+	return new NotFoundMessage;
 }
 
 CoinMessage *CoinEng::CreateGetBlocksMessage() {
@@ -372,7 +383,7 @@ void CoinEng::LoadLastBlockInfo() {
 		SetBestBlock(GetBlockByHeight(heightMax));
 		Caches.DtBestReceived = BestBlock().Timestamp;
 
-		TRC(2, Hash(BestBlock()));
+		TRC(2, Hash(BestBlock()) << "  Height: " << heightMax);
 	}
 }
 
@@ -387,97 +398,97 @@ bool CoinEng::CreateDb() {
 	return r;
 }
 
+void ChainParams::ReadParam(int& param, IXmlAttributeCollection& xml, RCString name) {
+	String a = xml.GetAttribute(name);
+	if (!a.empty())
+		param = stoi(a);
+}
+
+void ChainParams::ReadParam(int64_t& param, IXmlAttributeCollection& xml, RCString name) {
+	String a = xml.GetAttribute(name);
+	if (!a.empty())
+		param = stoll(a);
+}
+
 void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 	Name = xml.GetAttribute("Name");
-	if ((Symbol = xml.GetAttribute("Symbol")).IsEmpty())
+	if ((Symbol = xml.GetAttribute("Symbol")).empty())
 		Symbol = Name;
 	IsTestNet = xml.GetAttribute("IsTestNet") == "1";
 	Genesis = HashValue(xml.GetAttribute("Genesis"));
 
+	ReadParam(CoinValue, xml, "CoinValue");
+	ReadParam(CoinbaseMaturity, xml, "CoinbaseMaturity");
+	ReadParam(MinTxFee, xml, "MinTxFee");
+	ReadParam(TargetInterval, xml, "TargetInterval");
+	ReadParam(MinTxOutAmount, xml, "MinTxOutAmount");
+	ReadParam(AnnualPercentageRate, xml, "AnnualPercentageRate");
+	ReadParam(HalfLife, xml, "HalfLife");
+	ReadParam(CheckDupTxHeight, xml, "CheckDupTxHeight");
+
 	String a;
 
-	if (!(a = xml.GetAttribute("BlockSpan")).IsEmpty())
-		BlockSpan = TimeSpan::FromSeconds(Convert::ToInt32(a));
+	if (!(a = xml.GetAttribute("BlockSpan")).empty())
+		BlockSpan = TimeSpan::FromSeconds(stoi(a));
 
-	if (!(a = xml.GetAttribute("CoinValue")).IsEmpty())
-		CoinValue = Convert::ToInt64(a);
+	if (!(a = xml.GetAttribute("InitBlockValue")).empty())
+		InitBlockValue = CoinValue * stoll(a);
 
-	if (!(a = xml.GetAttribute("CoinbaseMaturity")).IsEmpty())
-		CoinbaseMaturity = Convert::ToInt32(a);
+	if (!(a = xml.GetAttribute("MaxMoney")).empty())
+		MaxMoney = stoll(a) * CoinValue;
 
-	if (!(a = xml.GetAttribute("InitBlockValue")).IsEmpty())
-		InitBlockValue = CoinValue*(Convert::ToInt64(a));
-
-	if (!(a = xml.GetAttribute("MaxMoney")).IsEmpty())
-		MaxMoney = Convert::ToInt64(a) * CoinValue;
-
-	if (!(a = xml.GetAttribute("MinTxFee")).IsEmpty())
-		MinTxFee = Convert::ToInt64(a);
-
-	if (!(a = xml.GetAttribute("TargetInterval")).IsEmpty())
-		TargetInterval = Convert::ToInt32(a);	
-
-	if (!(a = xml.GetAttribute("MinTxOutAmount")).IsEmpty())
-		MinTxOutAmount = Convert::ToInt64(a);
-
-	if (!(a = xml.GetAttribute("AnnualPercentageRate")).IsEmpty())
-		AnnualPercentageRate = Convert::ToInt32(a);	
-
-	if (!(a = xml.GetAttribute("HalfLife")).IsEmpty())
-		HalfLife = Convert::ToInt32(a);
-
-	if (!(a = xml.GetAttribute("PowOfDifficultyToHalfSubsidy")).IsEmpty())
-		PowOfDifficultyToHalfSubsidy = 1.0/Convert::ToInt32(a);
+	if (!(a = xml.GetAttribute("PowOfDifficultyToHalfSubsidy")).empty())
+		PowOfDifficultyToHalfSubsidy = 1.0/stoi(a);
 
 	a = xml.GetAttribute("MaxTargetHex");
-	MaxTarget = !a.IsEmpty() ? Target(Convert::ToUInt32(a, 16)) : Target(0x1D00FFFF);
+	MaxTarget = !a.empty() ? Target(Convert::ToUInt32(a, 16)) : Target(0x1D00FFFF);
 
-	if (!(a = xml.GetAttribute("InitTargetHex")).IsEmpty())
+	if (!(a = xml.GetAttribute("InitTargetHex")).empty())
 		InitTarget = Target(Convert::ToUInt32(a, 16));
 
 	ProtocolMagic = Convert::ToUInt32(xml.GetAttribute("ProtocolMagicHex"), 16);
 
-	if (!(a = xml.GetAttribute("ProtocolVersion")).IsEmpty())
+	if (!(a = xml.GetAttribute("ProtocolVersion")).empty())
 		ProtocolVersion = Convert::ToUInt32(a);
 
 	a = xml.GetAttribute("DefaultPort");
-	DefaultPort = !a.IsEmpty() ? Convert::ToUInt16(a) : 8333;
+	DefaultPort = !a.empty() ? Convert::ToUInt16(a) : 8333;
 
 	BootUrls = xml.GetAttribute("BootUrls").Split();
 
 	a = xml.GetAttribute("IrcRange");
-	IrcRange = !a.IsEmpty() ? Convert::ToInt32(a) : 0;
+	IrcRange = !a.empty() ? stoi(a) : 0;
 
 	a = xml.GetAttribute("AddressVersion");
-	AddressVersion = !a.IsEmpty() ? Convert::ToByte(a) : (IsTestNet ? 111 : 0);
+	AddressVersion = !a.empty() ? Convert::ToByte(a) : (IsTestNet ? 111 : 0);
 
 	a = xml.GetAttribute("ScriptAddressVersion");
-	ScriptAddressVersion = !a.IsEmpty() ? Convert::ToByte(a) : (IsTestNet ? 196 : 5);
+	ScriptAddressVersion = !a.empty() ? Convert::ToByte(a) : (IsTestNet ? 196 : 5);
 
 	a = xml.GetAttribute("ChainID");
-	ChainId = !a.IsEmpty() ? Convert::ToInt32(a) : 0;
+	ChainId = !a.empty() ? stoi(a) : 0;
 
 	a = xml.GetAttribute("PayToScriptHashHeight");
 	if (!!a)
-		PayToScriptHashHeight = Convert::ToInt32(a);
+		PayToScriptHashHeight = stoi(a);
 
-	if (!(a = xml.GetAttribute("Listen")).IsEmpty())
-		Listen = Convert::ToInt32(a);
+	if (!(a = xml.GetAttribute("Listen")).empty())
+		Listen = stoi(a);
 
-	a = xml.GetAttribute("CheckDupTxHeight");
-	if (!a.IsEmpty())
-		CheckDupTxHeight = Convert::ToInt32(a);	
+	if (!(a = xml.GetAttribute("AllowLiteMode")).empty())
+		AllowLiteMode = stoi(a);
 
-	if (!(a = xml.GetAttribute("MergedMiningStartBlock")).IsEmpty()) {
+
+	if (!(a = xml.GetAttribute("MergedMiningStartBlock")).empty()) {
 		AuxPowEnabled = true;
-		AuxPowStartBlock = Convert::ToInt32(a);
+		AuxPowStartBlock = stoi(a);
 	}
 
-	if (!(a = xml.GetAttribute("Algo")).IsEmpty())
+	if (!(a = xml.GetAttribute("Algo")).empty())
 		HashAlgo = StringToAlgo(a);
 
 	a = xml.GetAttribute("FullPeriod");
-	FullPeriod = !a.IsEmpty() && atoi(a);
+	FullPeriod = !a.empty() && atoi(a);
 }
 
 int ChainParams::Log10CoinValue() const {
@@ -495,9 +506,9 @@ void ChainParams::AddSeedEndpoint(RCString seed) {
 
 
 ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
-	String pathXml = Path::Combine(Path::GetDirectoryName(System.ExeFilePath), "coin-chains.xml");
+	path pathXml = System.GetExeDir() / "coin-chains.xml";
 	ptr<CoinEng> peng;
-	if (!File::Exists(pathXml))
+	if (!exists(path(pathXml)))
 		Throw(E_COIN_XmlFileNotFound);
 	try {
 #if UCFG_WIN32		
@@ -520,7 +531,7 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 							break;
 						if (rd.NodeType == XmlNodeType::Element) {
 							if (elName == "Checkpoint") {
-								int height = Convert::ToInt32(rd.GetAttribute("Block"));
+								int height = stoi(rd.GetAttribute("Block"));
 								params.LastCheckpointHeight = std::max(height, params.LastCheckpointHeight);
 								params.Checkpoints.insert(make_pair(height, HashValue(rd.GetAttribute("Hash"))));
 							} else if (elName == "Seed") {
@@ -576,14 +587,14 @@ protected:
 		DBG_LOCAL_IGNORE_WIN32(WSAHOST_NOT_FOUND);
 		DBG_LOCAL_IGNORE_WIN32(WSATRY_AGAIN);
 
+		DateTime date = DateTime::UtcNow() - TimeSpan::FromDays(1);
 		EXT_FOR (const String& dns, DnsServers) {
 			try {
 				IPHostEntry he = Dns::GetHostEntry(dns);
-				DateTime now = DateTime::UtcNow();
 				EXT_FOR (const IPAddress& a, he.AddressList) {
 					IPEndPoint ep = IPEndPoint(a, Eng.ChainParams.DefaultPort);
-					TRC(2, ep);
-					Eng.Add(ep, NODE_NETWORK, now-TimeSpan::FromDays(1));
+//					TRC(2, ep);
+					Eng.Add(ep, NODE_NETWORK, date);
 				}
 			} catch (RCExc) {
 			}
@@ -608,9 +619,9 @@ void CoinEng::StartIrc() {
 			if (regex_match(url.c_str(), m, s_reDns)) {
 				dnsServers.push_back(m[1]);
 			} else if (regex_match(url.c_str(), m, s_reIrc)) {
-				if (channel.IsEmpty()) {
+				if (channel.empty()) {
 					String host = m[1];
-					UInt16 port = UInt16(m[2].matched ? atoi(String(m[3])) : 6667);
+					uint16_t port = uint16_t(m[2].matched ? atoi(String(m[3])) : 6667);
 					epServer = IPEndPoint(host, port);
 					ostringstream os;
 					os << m[4].str();
@@ -622,7 +633,7 @@ void CoinEng::StartIrc() {
 		}
 		if (!dnsServers.empty())
 			(new DnsThread(_self, dnsServers))->Start();
-		if (!channel.IsEmpty()) {
+		if (!channel.empty()) {
 			ChannelClient = new Coin::ChannelClient(_self);
 //!!!			ChannelClient->ListeningPort = ListeningPort;
 			m_cdb.IrcManager.AttachChannelClient(epServer, channel, ChannelClient);
@@ -633,6 +644,8 @@ void CoinEng::StartIrc() {
 void CoinEng::Start() {
 	if (Runned)
 		return;
+
+	EXT_LOCKED(m_cdb.MtxDb, Filter = LiteMode ? m_cdb.Filter : nullptr);
 
 	Net::Start();
 	EXT_LOCK (m_cdb.MtxNets) {
@@ -647,11 +660,16 @@ void CoinEng::Start() {
 	}
 }
 
-void CoinEng::Stop() {
+void CoinEng::SignalStop() {
 	Runned = false;
 	EXT_LOCK (m_mtxThreadStateChange) {
 		m_tr.interrupt_all();
 	}
+}
+
+void CoinEng::Stop() {
+	if (Runned)
+		SignalStop();
 	EXT_LOCK (m_cdb.MtxNets) {
 		Ext::Remove(m_cdb.m_nets, this);
 	}
@@ -677,8 +695,36 @@ void CoinEng::SetBestBlock(const Block& b) {
 }
 
 int CoinEng::BestBlockHeight() {
-	EXT_LOCK (Caches.Mtx) {
-		return Caches.m_bestBlock.SafeHeight;
+	return EXT_LOCKED(Caches.Mtx, Caches.m_bestBlock.SafeHeight);
+}
+
+void CoinEng::put_Mode(EngMode mode) {
+	if (!ChainParams.AllowLiteMode && mode==EngMode::Lite)
+		Throw(E_INVALIDARG);
+
+	bool bRunned = Runned;
+	if (bRunned)
+		Stop();
+	SetBestBlock(nullptr);
+	m_mode = mode;
+	Filter = nullptr;
+	if (bRunned) {
+		Load();
+		Start();
+	}
+}
+
+void CoinEng::PurgeDatabase() {
+	bool bRunned = Runned;
+	if (bRunned)
+		Stop();
+	Db->Close(false);
+	SetBestBlock(nullptr);
+	sys::remove(GetDbFilePath());
+	Filter = nullptr;
+	if (bRunned) {
+		Load();
+		Start();
 	}
 }
 
@@ -724,9 +770,9 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		return;
 	CCoinEngThreadKeeper engKeeper(this);
 	try {
-		DBG_LOCAL_IGNORE_NAME(E_COIN_RecentCoinbase, E_COIN_RecentCoinbase);
-		DBG_LOCAL_IGNORE_NAME(E_COIN_IncorrectProofOfWork, E_COIN_IncorrectProofOfWork);
-		DBG_LOCAL_IGNORE_NAME(E_COIN_RejectedByCheckpoint, E_COIN_RejectedByCheckpoint);
+		DBG_LOCAL_IGNORE(E_COIN_RecentCoinbase);
+		DBG_LOCAL_IGNORE(E_COIN_IncorrectProofOfWork);
+		DBG_LOCAL_IGNORE(E_COIN_RejectedByCheckpoint);
 
 		m->Process(*m->Link);
 	} catch (const DbException&) {
@@ -741,16 +787,27 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		if (m_iiEngEvents)
 			m_iiEngEvents->OnChange();
 		throw;
-	} catch (const PeerMisbehavingExc& ex) {
+	} catch (const PeerMisbehavingException& ex) {
 		TRC(2, ex.Message);
 		Misbehaving(m, ex.HowMuch);
-	} catch (RCExc ex) {
-		switch (HResultInCatch(ex)) {
+	} catch (Exception& ex) {
+		switch (ToHResult(ex)) {
 		case E_COIN_SizeLimits:
-		case E_COIN_RejectedByCheckpoint:
 		case E_COIN_MoneyOutOfRange:
 		case E_COIN_DupTxInputs:
 			Misbehaving(m, 100);
+			break;
+		case E_COIN_RejectedByCheckpoint:
+			m->Link->Send(new RejectMessage(RejectReason::CheckPoint, "block", "checkpoint mismatch"));
+			Misbehaving(m, 100);
+			break;
+		case E_COIN_BlockHeightMismatchInCoinbase:
+			m->Link->Send(new RejectMessage(RejectReason::Invalid, "block", "bad-cb-height"));
+			Misbehaving(m, 100);
+			break;
+		case E_COIN_ContainsNonFinalTx:
+			m->Link->Send(new RejectMessage(RejectReason::Invalid, "tx", "bad-txns-nonfinal"));
+			Misbehaving(m, 10);
 			break;
 		case E_COIN_TxNotFound:
 		case E_COIN_AllowedErrorDuringInitialDownload:
@@ -760,6 +817,8 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 			break;
 		case E_COIN_IncorrectProofOfWork:
 			goto LAB_MIS;
+		case E_COIN_DupVersionMessage:
+			m->Link->Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
 		case E_COIN_VeryBigPayload:
 		default:
 			TRC(2, ex.what());
@@ -779,24 +838,26 @@ size_t CoinEng::GetMessageHeaderSize() {
 }
 
 size_t CoinEng::GetMessagePayloadSize(const ConstBuf& buf) {
-	DBG_LOCAL_IGNORE_NAME(E_EXT_Protocol_Violation, ignE_EXT_Protocol_Violation);	
+	DBG_LOCAL_IGNORE(E_EXT_Protocol_Violation);
 
 	const SCoinMessageHeader& hdr = *(SCoinMessageHeader*)buf.P;
 	if (le32toh(hdr.Magic) != ChainParams.ProtocolMagic)
 		Throw(E_EXT_Protocol_Violation);
-	return le32toh(hdr.PayloadSize) + sizeof(UInt32);
+	return le32toh(hdr.PayloadSize) + sizeof(uint32_t);
 //!!!R?	if (strcmp(hdr.Command, "version") && strcmp(hdr.Command, "verack"))
 }
 
 ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 	CCoinEngThreadKeeper engKeeper(this);
 
-	UInt32 magic = rd.ReadUInt32();
+	uint32_t magic = rd.ReadUInt32();
 	if (magic != ChainParams.ProtocolMagic)
 		Throw(E_EXT_Protocol_Violation);
+
+	DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
 	ptr<CoinMessage> m = CoinMessage::ReadFromStream(link, rd);
 		
-	TRC(4, ChainParams.Symbol << " " << link.Peer->get_EndPoint() << " " << *m);
+	TRC(6, ChainParams.Symbol << " " << link.Peer->get_EndPoint() << " " << *m);
 
 	return m.get();
 }
@@ -839,6 +900,7 @@ bool CoinEng::HaveTxInDb(const HashValue& hashTx) {
 bool CoinEng::Have(const Inventory& inv) {
 	switch (inv.Type) {
 	case InventoryType::MSG_BLOCK:
+	case InventoryType::MSG_FILTERED_BLOCK:
 		return HaveBlock(inv.HashValue);
 	case InventoryType::MSG_TX:
 		if (EXT_LOCKED(TxPool.Mtx, TxPool.m_hashToTx.count(inv.HashValue)))			// don't combine with next expr, because lock's scope will be wider
@@ -880,10 +942,7 @@ void CoinEng::Relay(const Tx& tx) {
 	TRC(2, hash);
 
 	if (!tx.IsCoinBase() && !HaveTxInDb(hash)) {
-		Inventory inv(InventoryType::MSG_TX, hash);
-		EXT_LOCK (Caches.Mtx) {
-			Caches.m_relayHashToTx.insert(make_pair(hash, tx));
-		}
+		EXT_LOCKED(Caches.Mtx, Caches.m_relayHashToTx.insert(make_pair(hash, tx)));
 		Push(tx);
 	}
 }
@@ -931,7 +990,7 @@ CoinEngApp::CoinEngApp() {
 #if UCFG_TRC //!!!D
 	if (!CTrace::s_nLevel)
 		CTrace::s_nLevel = 0x3F;
-	static ofstream s_ofs((Path::Combine(get_AppDataDir(), "coin.log")).ToOsString(), ios::binary);
+	static ofstream s_ofs((get_AppDataDir() / "coin.log").native().ToOsString(), ios::binary);
 	CTrace::s_pOstream = &s_ofs;//!!!D
 	TRC(0, "Starting");
 #endif
@@ -975,21 +1034,29 @@ void CoinEng::TryUpgradeDb() {
 	Db->TryUpgradeDb(theApp.ProductVersion);
 }
 
-String CoinEng::GetDbFilePath() {
-	if (m_dbFilePath.IsEmpty()) {
-		m_dbFilePath = Path::Combine(AfxGetCApp()->get_AppDataDir(), ChainParams.Name);
-		if (!m_cdb.FilenameSuffix.IsEmpty())
-			m_dbFilePath += m_cdb.FilenameSuffix;
-		else  {
-			switch (Mode) {
-			case EngMode::Lite:
-				m_dbFilePath += ".lite";
-				break;
-			case EngMode::BlockExplorer:
-				m_dbFilePath += ".explorer";
-				break;
-			}
-		}
+path CoinEng::VGetDbFilePath() {
+	path r = AfxGetCApp()->get_AppDataDir() / ChainParams.Name;
+	if (!m_cdb.FilenameSuffix.empty())
+		r += m_cdb.FilenameSuffix;
+	else  {
+		switch (Mode) {
+		case EngMode::Lite:
+   			r += ".spv";
+   			break;
+		case EngMode::BlockParser:
+   			r += ".blocks";
+   			break;
+   		case EngMode::BlockExplorer:
+   			r += ".explorer";
+   			break;
+   		}
+   	}
+	return r;
+}
+
+path CoinEng::GetDbFilePath() {
+	if (m_dbFilePath.empty()) {
+		m_dbFilePath = VGetDbFilePath();
 		m_dbFilePath += Db->DefaultFileExt;
 	}
 	return m_dbFilePath;
@@ -1016,7 +1083,7 @@ void CoinEng::ContinueLoad0() {
 
 			SqliteCommand cmdPeers("SELECT endpoints.ip, port, lastlive, services FROM endpoints JOIN peers ON endpoints.ip=peers.ip WHERE NOT peers.ban AND netid=?", m_cdb.m_dbPeers);
 			for (DbDataReader dr=cmdPeers.Bind(1, m_idPeersNet).ExecuteReader(); dr.Read();) {
-				if (ptr<Peer> peer = Add(IPEndPoint(IPAddress(dr.GetBytes(0)), (UInt16)dr.GetInt32(1)), (UInt64)dr.GetInt64(3), DateTime::from_time_t(dr.GetInt32(2))))
+				if (ptr<Peer> peer = Add(IPEndPoint(IPAddress(dr.GetBytes(0)), (uint16_t)dr.GetInt32(1)), (uint64_t)dr.GetInt64(3), DateTime::from_time_t(dr.GetInt32(2))))
 					peer->IsDirty = false;
 			}
 		}
@@ -1029,10 +1096,12 @@ void CoinEng::ContinueLoad() {
 }
 
 void CoinEng::Load() {
-	String dbFilePath = GetDbFilePath();
-	Directory::CreateDirectory(Path::GetDirectoryName(dbFilePath));
+	CCoinEngThreadKeeper engKeeper(this);
+
+	path dbFilePath = GetDbFilePath();
+	create_directories(dbFilePath.parent_path());
 	bool bContinue;
-	if (File::Exists(dbFilePath)) {
+	if (exists(dbFilePath)) {
 		bContinue = OpenDb();
 		if (bContinue)
 			TryUpgradeDb();
@@ -1059,7 +1128,7 @@ VersionMessage::VersionMessage()
 }
 
 void VersionMessage::Write(BinaryWriter& wr) const {
-	wr << ProtocolVer << Services << Int64(to_time_t(RemoteTimestamp)) << RemotePeerInfo << LocalPeerInfo << Nonce;
+	wr << ProtocolVer << Services << int64_t(to_time_t(RemoteTimestamp)) << RemotePeerInfo << LocalPeerInfo << Nonce;
 	WriteString(wr, UserAgent);
 	wr << LastReceivedBlock << RelayTxes;
 }
@@ -1072,7 +1141,7 @@ void VersionMessage::Read(const BinaryReader& rd) {
 		rd >> RemotePeerInfo >>	LocalPeerInfo >> Nonce;
 		UserAgent = ReadString(rd);
 		if (ProtocolVer >= 209) {
-			LastReceivedBlock = (Int32)rd.ReadUInt32();
+			LastReceivedBlock = (int32_t)rd.ReadUInt32();
 			RelayTxes = rd.BaseStream.Eof() ? true : rd.ReadByte();
 		}
 	}
@@ -1084,6 +1153,9 @@ void VersionMessage::Process(P2P::Link& link) {
 
 	CoinEng& eng = Eng();
 	CoinLink& clink = static_cast<CoinLink&>(link);
+	if (clink.PeerVersion)
+		Throw(E_COIN_DupVersionMessage);
+
 	if (eng.CheckSelfVerNonce(Nonce)) {
 		clink.PeerVersion = ProtocolVer;
 		clink.Send(eng.CreateVerackMessage());
@@ -1100,7 +1172,7 @@ void VersionMessage::Process(P2P::Link& link) {
 			}
 		}
 
-		if (eng.LiteMode && eng.Filter) {
+		if (eng.Filter) {
 			link.Send(new FilterLoadMessage(eng.Filter.get()));
 		}
 	}
@@ -1139,7 +1211,7 @@ void InvGetDataMessage::Read(const BinaryReader& rd) {
 
 void InvGetDataMessage::Process(P2P::Link& link) {
 	if (Invs.size() > MAX_INV_SZ)
-		throw PeerMisbehavingExc(20);
+		throw PeerMisbehavingException(20);
 }
 
 String InvGetDataMessage::ToString() const {
@@ -1159,7 +1231,7 @@ void InvMessage::Process(P2P::Link& link) {
 	if (!eng.BestBlock()) {
 		TRC(1, "Requesting for block " << eng.ChainParams.Genesis);
 
-		m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
+		m->Invs.push_back(Inventory(eng.LiteMode ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
 	}
 
 	Inventory invLastBlock;
@@ -1174,7 +1246,7 @@ void InvMessage::Process(P2P::Link& link) {
 #endif
 
 		if (eng.Have(inv)) {
-			if (inv.Type==InventoryType::MSG_BLOCK) {
+			if (inv.Type==InventoryType::MSG_BLOCK || eng.LiteMode && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
 				Block orphanRoot(nullptr);
 				EXT_LOCK (eng.Caches.Mtx) {
 					Block block(nullptr);
@@ -1188,9 +1260,9 @@ void InvMessage::Process(P2P::Link& link) {
 														// If we are stuck on a (very long) side chain, this is necessary to connect earlier received orphan blocks to the chain again.
 			}
 		} else {
-			if (inv.Type == InventoryType::MSG_BLOCK)
-				m->Invs.push_back(inv);
-			else {
+			if (inv.Type==InventoryType::MSG_BLOCK || eng.LiteMode && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
+				m->Invs.push_back(eng.LiteMode ? Inventory(InventoryType::MSG_FILTERED_BLOCK, inv.HashValue) : inv);
+			} else {
 				switch (eng.Mode) {
 				case EngMode::BlockExplorer:
 					break;
@@ -1217,21 +1289,20 @@ void GetDataMessage::Process(P2P::Link& link) {
 	CoinEng& eng = static_cast<CoinEng&>(*link.Net);
 	base::Process(link);
 	CoinLink& clink = static_cast<CoinLink&>(link);
-
-	if (eng.LiteMode)
-		return;
-
+	
+	ptr<NotFoundMessage> mNotFound = new NotFoundMessage;	
 	EXT_FOR (const Inventory& inv, Invs) {
 		if (Thread::CurrentThread->m_bStop)
 			break;
 		switch (inv.Type) {
 		case InventoryType::MSG_BLOCK:
 		case InventoryType::MSG_FILTERED_BLOCK:
-//#if UCFG_DEBUG //!!!
-//			break;
-//#endif
-			if (eng.Db->IsSlow)
-				break;		// SQLite is too slow
+			if (eng.LiteMode)
+				break;
+
+#if UCFG_DEBUG //!!!
+			break;
+#endif
 
 			{
 				if (Block block = eng.LookupBlock(inv.HashValue)) {
@@ -1241,18 +1312,20 @@ void GetDataMessage::Process(P2P::Link& link) {
 						TRC(1, "Block Message sending");
 						link.Send(new BlockMessage(block));
 					} else {
-						ptr<MerkleBlockMessage> mbm;
+						ptr<MerkleBlockMessage> mbm = new MerkleBlockMessage;
 						vector<Tx> matchedTxes;
 						EXT_LOCK (clink.MtxFilter) {
 							if (clink.Filter)
-								matchedTxes = (mbm = new MerkleBlockMessage)->Init(block, *clink.Filter);
-						}
-						if (mbm) {
-							link.Send(mbm);
-							EXT_FOR (const Tx& tx, matchedTxes) {
-								if (!EXT_LOCKED(clink.Mtx, clink.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(tx)))))
-									link.Send(new TxMessage(tx));									
+								matchedTxes = mbm->Init(block, *clink.Filter);
+							else {
+								CoinFilter dummyFilter;
+								mbm->Init(block, dummyFilter);
 							}
+						}
+						link.Send(mbm);
+						EXT_FOR (const Tx& tx, matchedTxes) {
+							if (!EXT_LOCKED(clink.Mtx, clink.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(tx)))))
+								link.Send(new TxMessage(tx));									
 						}
 					}
 					
@@ -1275,9 +1348,20 @@ void GetDataMessage::Process(P2P::Link& link) {
 				}
 				if (m)
 					link.Send(m);
+				else
+					mNotFound->Invs.push_back(inv);
 			}
 			break;
 		}
+	}
+	if (!mNotFound->Invs.empty())
+		link.Send(mNotFound);
+}
+
+void NotFoundMessage::Process(P2P::Link& link) {
+	CoinEng& eng = Eng();
+	if (eng.LiteMode) {
+		//!!!TODO
 	}
 }
 
@@ -1304,6 +1388,88 @@ String BlockMessage::ToString() const {
 	return base::ToString() + String(os.str());
 }
 
+void CoinPartialMerkleTree::Init(const vector<HashValue>& vHash, const dynamic_bitset<byte>& bsMatch) {
+	Bitset.clear();
+	Items.clear();
+    TraverseAndBuild(CalcTreeHeight(), 0, &vHash[0], bsMatch);
+}
+
+pair<HashValue, vector<HashValue>> CoinPartialMerkleTree::ExtractMatches() const {
+	if (NItems==0 || NItems>MAX_BLOCK_SIZE/60 || Items.size()>NItems)
+		Throw(E_COIN_Misbehaving);
+	size_t nBitsUsed = 0;
+	int nHashUsed = 0;
+	pair<HashValue, vector<HashValue>> r;
+	r.first = TraverseAndExtract(CalcTreeHeight(), 0, nBitsUsed, nHashUsed, r.second);
+	return r;
+}
+
+vector<Tx> MerkleBlockMessage::Init(const Coin::Block& block, CoinFilter& filter) {
+	Block = block;
+	const CTxes& txes = block.get_Txes();
+	PartialMT.NItems = txes.size();
+
+	vector<HashValue> vHash(PartialMT.NItems);
+	dynamic_bitset<byte> bsMatch(PartialMT.NItems);
+	vector<Tx> r;
+	for (size_t i=0; i<PartialMT.NItems; ++i) {
+		const Tx& tx = txes[i];
+		vHash[i] = Hash(tx);
+		if (filter.IsRelevantAndUpdate(tx)) {
+			r.push_back(tx);
+			bsMatch.set(i);
+		}
+	}
+	PartialMT.Init(vHash, bsMatch);
+	return r;
+}
+
+void MerkleBlockMessage::Write(BinaryWriter& wr) const {
+	Block.m_pimpl->WriteHeader(wr);
+	wr << uint32_t(PartialMT.NItems);
+	CoinSerialized::Write(wr, PartialMT.Items);
+	vector<byte> v;
+	to_block_range(PartialMT.Bitset, back_inserter(v));
+	CoinSerialized::WriteBlob(wr, ConstBuf(&v[0], v.size()));
+}
+
+void MerkleBlockMessage::Read(const BinaryReader& rd) {
+	Block.m_pimpl->ReadHeader(rd, false, 0);
+	Block.m_pimpl->m_bTxesLoaded = true;
+	PartialMT.NItems = rd.ReadUInt32();
+	CoinSerialized::Read(rd, PartialMT.Items);
+	Blob blob = CoinSerialized::ReadBlob(rd);
+	const byte *p = blob.constData();
+	PartialMT.Bitset.resize(blob.Size*8);
+	for (int i=0; i<blob.Size; ++i)
+		for (int j=0; j<8; ++j)
+			PartialMT.Bitset.replace(i*8+j, (p[i] >> j) & 1);
+}
+
+void MerkleBlockMessage::Process(P2P::Link& link) {
+	CoinEng& eng = Eng();
+	CoinLink& clink = static_cast<CoinLink&>(link);
+	if (eng.LiteMode) {
+#ifdef X_DEBUG//!!!D
+		static mutex s_mtx;
+		lock_guard<mutex> lk(s_mtx);
+		static ofstream ofs("c:\\work\\coin\\merkle.dat", ios::binary|ios::app);
+		Blob blob = EXT_BIN(_self);
+		ofs.write(blob.constData(), blob.Size);
+#endif
+
+		pair<HashValue, vector<HashValue>> pp = PartialMT.ExtractMatches();
+		if (pp.first != Block.get_MerkleRoot())
+			Throw(E_COIN_MerkleRootMismatch);
+		if (pp.second.empty())
+			Block.Process(&link);
+		else {
+			clink.m_curMerkleBlock = Block;					// Defer processing until all txes will be received
+			clink.m_curMatchedHashes = pp.second;
+		}
+	}
+}
+
 void PingMessage::Process(P2P::Link& link) {
 	ptr<PongMessage> m = new PongMessage;
 	m->Nonce = Nonce;
@@ -1311,7 +1477,7 @@ void PingMessage::Process(P2P::Link& link) {
 }
 
 DateTime CoinEng::GetTimestampForNextBlock() {
-	Int64 epoch = to_time_t(std::max(BestBlock().GetMedianTimePast()+TimeSpan::FromSeconds(1), DateTime::UtcNow()));		// round to seconds
+	int64_t epoch = to_time_t(std::max(BestBlock().GetMedianTimePast()+TimeSpan::FromSeconds(1), DateTime::UtcNow()));		// round to seconds
 	return DateTime::from_time_t(epoch);
 }
 
@@ -1339,7 +1505,7 @@ void CoinEng::CheckCoinbasedTxPrev(int height, const Tx& txPrev) {
 void IBlockChainDb::Recreate() {
 	CoinEng& eng = Eng();	
 	Close(false);
-	File::Delete(eng.GetDbFilePath());
+	sys::remove(eng.GetDbFilePath());
 	eng.CreateDb();
 }
 
@@ -1350,9 +1516,7 @@ Version CheckUserVersion(SqliteConnection& db) {
 	Version dver = Version(dbver >> 16, dbver & 0xFFFF);
 	if (dver > ver && (dver.Major!=ver.Major || dver.Minor/10 != ver.Minor/10)) {					// Versions [mj.x0 .. mj.x9] are DB-compatible
 		db.Close();
-		VersionExc exc;
-		exc.Version = dver;
-		throw exc;
+		throw VersionException(dver);
 	}
 	return dver;
 }

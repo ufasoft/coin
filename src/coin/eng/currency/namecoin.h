@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include "../eng.h"
@@ -27,7 +34,7 @@ String ToStringName(const ConstBuf& cbuf);
 class DomainData : public CPersistent {
 public:
 	String AddressData;
-	UInt32 Height;
+	uint32_t Height;
 
 	DomainData()
 		:	AddressData(nullptr)
@@ -46,9 +53,9 @@ public:
 
 interface INamecoinDb {
 	virtual int GetNameHeight(const ConstBuf& cbufName, int heightExpired) =0;
-	virtual void OptionalDeleteExpiredDomains(UInt32 height) =0;
+	virtual void OptionalDeleteExpiredDomains(uint32_t height) =0;
 	virtual DomainData Resolve(RCString domain) =0;
-	virtual void PutDomainData(RCString domain, UInt32 height, const HashValue& hashTx, RCString addressData, bool bInsert) =0;
+	virtual void PutDomainData(RCString domain, uint32_t height, const HashValue& hashTx, RCString addressData, bool bInsert) =0;
 };
 
 class COIN_CLASS NamecoinEng : public CoinEng {
@@ -58,6 +65,8 @@ public:
 		:	base(cdb)
 	{
 	}
+
+	INamecoinDb& NamecoinDb();
 protected:
 	void TryUpgradeDb() override {
 		if (Db->CheckUserVersion() < VER_NAMECOIN_DOMAINS)
@@ -65,14 +74,13 @@ protected:
 		base::TryUpgradeDb();
 	}
 
-	INamecoinDb& NamecoinDb();
 	void OnCheck(const Tx& tx) override;
 	void OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner) override;
 	void OnConnectBlock(const Block& block) override;
 	void OnDisconnectInputs(const Tx& tx) override;
 	ptr<IBlockChainDb> CreateBlockChainDb() override;
 private:
-	Int64 GetNetworkFee(int height);
+	int64_t GetNetworkFee(int height);
 };
 
 

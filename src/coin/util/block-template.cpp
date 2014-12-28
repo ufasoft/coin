@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -25,8 +24,8 @@ BinaryWriter& operator<<(BinaryWriter& wr, const MinerBlock& block) {
 }
 
 void MinerBlock::ReadJson(const VarValue& json) {
-	Ver = (UInt32)json["version"].ToInt64();
-	Height = UInt32(json["height"].ToInt64());
+	Ver = (uint32_t)json["version"].ToInt64();
+	Height = uint32_t(json["height"].ToInt64());
 	PrevBlockHash = HashValue(json["previousblockhash"].ToString());
 
 	DifficultyTargetBits = Convert::ToUInt32(json["bits"].ToString(), 16);
@@ -44,13 +43,13 @@ void MinerBlock::ReadJson(const VarValue& json) {
 		MinTime = DateTime::from_time_t(json["mintime"].ToInt64());	
 
 	if (json.HasKey("sizelimit"))
-		SizeLimit = UInt32(json["sizelimit"].ToInt64());
+		SizeLimit = uint32_t(json["sizelimit"].ToInt64());
 	if (json.HasKey("sigoplimit"))
-		SigopLimit = UInt32(json["sigoplimit"].ToInt64());
+		SigopLimit = uint32_t(json["sigoplimit"].ToInt64());
 
 	NonceRange = FromOptionalNonceRange(json);
 
-	MyExpireTime = DateTime::UtcNow() + TimeSpan::FromSeconds(json.HasKey("expires") ? Int32(json["expires"].ToInt64()) : 600);
+	MyExpireTime = DateTime::UtcNow() + TimeSpan::FromSeconds(json.HasKey("expires") ? int32_t(json["expires"].ToInt64()) : 600);
 
 	if (VarValue coinbaseAux = json["coinbaseaux"]) {
 		MemoryStream ms;
@@ -140,7 +139,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	BinaryWriter wrScript(msScript);	
 	wrScript << BigInteger(Height) << byte(8);
 	size_t coinb1Size = (size_t)msScript.Position;
-	wrScript << Int64(0);					// place for ExtraNonce1, ExtraNonce2;
+	wrScript << int64_t(0);					// place for ExtraNonce1, ExtraNonce2;
 	if (CoinbaseAux.Size) {
 		ASSERT(CoinbaseAux.Size < 75);	//!!!TODO
 
@@ -153,16 +152,16 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
-	wr << UInt32(1) << byte(1) << HashValue() << UInt32(-1);
+	wr << uint32_t(1) << byte(1) << HashValue() << uint32_t(-1);
 	CoinSerialized::WriteVarInt(wr, scriptIn.Size);
 	coinb1Size += int(ms.Position);
 	ms.WriteBuf(scriptIn);
-	wr << UInt32(-1) << byte(1) << CoinbaseValue								// seq, NOut
+	wr << uint32_t(-1) << byte(1) << CoinbaseValue								// seq, NOut
 		<< byte(25)																// len(PkScript)
 		<< byte(0x76) << byte(0xA9) << byte(20);									// OP_DUP OP_HASH160, hash160Len
 	ms.WriteBuf(ConstBuf(ConvertFromBase58(address, false).constData()+1, 20));
 	wr << byte(0x88) << byte(0xAC);												//OP_EQUALVERIFY OP_CHECKSIG
-	wr << UInt32(0);		// locktime;
+	wr << uint32_t(0);		// locktime;
 	Blob coinbasetxn = ms;
 	Coinb1 = Blob(coinbasetxn.constData(), coinb1Size);
 	Coinb2 = Blob(coinbasetxn.constData()+coinb1Size+8, coinbasetxn.Size-coinb1Size-8);
@@ -224,7 +223,7 @@ void PrimeMinerShare::WriteHeader(BinaryWriter& wr) const {
 	CoinSerialized::WriteBlob(wr, PrimeChainMultiplier.ToBytes());	
 }
 
-UInt32 PrimeMinerShare::GetDifficulty() const {
+uint32_t PrimeMinerShare::GetDifficulty() const {
 	MemoryStream ms;
 	base::WriteHeader(BinaryWriter(ms).Ref());
 	HashValue h = Hash(ms);
@@ -232,7 +231,7 @@ UInt32 PrimeMinerShare::GetDifficulty() const {
 		Throw(E_COIN_MINER_REJECTED);
 	BigInteger origin = HashValueToBigInteger(h) * PrimeChainMultiplier;
 	PrimeTester tester;				//!!!TODO move to some long-time scope
-	return UInt32(tester.ProbablePrimeChainTest(Bn(origin)).BestTypeLength().second * 0x1000000);
+	return uint32_t(tester.ProbablePrimeChainTest(Bn(origin)).BestTypeLength().second * 0x1000000);
 }
 
 

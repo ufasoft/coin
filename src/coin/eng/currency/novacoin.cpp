@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "../proof-of-stake.h"
@@ -14,7 +21,8 @@ const DateTime DATE_CHECK_BLOCK_SIGNATURE_OUTS(2013, 2, 24),
 			DATE_ENTROPY_SWITCH_TIME(2013, 3, 9),
 			DATE_STAKE_SWITCH(2013, 6, 20),
 			DATE_2013_PROOF_OF_STAKE_SWITCH(2013, 7, 20),
-			DATE_STAKECURVE_SWITCH(2013, 10, 20);
+			DATE_STAKECURVE_SWITCH(2013, 10, 20),
+			DtV04Switch(2014, 10, 20);
 
 class NovaCoinBlockObj : public PosBlockObj {
 	typedef PosBlockObj base;
@@ -22,6 +30,10 @@ class NovaCoinBlockObj : public PosBlockObj {
 public:
 	NovaCoinBlockObj() {
 		Ver = 6;
+	}
+
+	bool IsV04Protocol() const override {
+		return Timestamp >= DtV04Switch;
 	}
 protected:
 	Target GetTargetLimit(const Block& block) override {
@@ -54,10 +66,10 @@ class NovaCoinTxObj : public PosTxObj {
 protected:
 	NovaCoinTxObj *Clone() const override { return new NovaCoinTxObj(_self); }
 
-	void CheckCoinStakeReward(Int64 reward, const Target& target) const override {
+	void CheckCoinStakeReward(int64_t reward, const Target& target) const override {
 		PosEng& eng = (PosEng&)Eng();
 		Tx tx((TxObj*)this);
-		Int64 posReward = eng.GetProofOfStakeReward(GetCoinAge(), target, Timestamp);
+		int64_t posReward = eng.GetProofOfStakeReward(GetCoinAge(), target, Timestamp);
 		if (reward > posReward - tx.GetMinFee(1, eng.AllowFreeTxes, MinFeeMode::Block, 0) + eng.ChainParams.MinTxFee)
 			Throw(E_COIN_StakeRewardExceeded);
 	}
@@ -70,6 +82,7 @@ public:
 		:	base(cdb)
 	{
 		MaxBlockVersion = 6;
+		AllowFreeTxes = true;
 	}
 protected:
 	void TryUpgradeDb() override {
@@ -90,23 +103,26 @@ protected:
 		return dt > DATE_2013_PROOF_OF_STAKE_SWITCH ? TimeSpan::FromMinutes(30) : base::GetTargetSpacingWorkMax(dt);
 	}
 
-	Int64 GetProofOfStakeReward(Int64 coinAge, const Target& target, const DateTime& dt) override {
+	int64_t GetProofOfStakeReward(int64_t coinAge, const Target& target, const DateTime& dt) override {
 		if (dt <= DATE_STAKE_SWITCH)
 			return base::GetProofOfStakeReward(coinAge, target, dt);
-		const Int64 MAX_MINT_PROOF_OF_STAKE = ChainParams.CoinValue;
+		const int64_t MAX_MINT_PROOF_OF_STAKE = ChainParams.CoinValue;
 		BigInteger lim = GetProofOfStakeLimit(dt);
-		const Int64 cent = ChainParams.CoinValue / 100;
-		Int64 lower = cent,
+		const int64_t cent = ChainParams.CoinValue / 100;
+		int64_t lower = cent,
 			upper = MAX_MINT_PROOF_OF_STAKE;
 		int exp = dt >= DATE_STAKECURVE_SWITCH ? 3 : 6;
 		for (BigInteger u=pow(BigInteger(MAX_MINT_PROOF_OF_STAKE), exp) * BigInteger(target); lower+cent <= upper;) {
-			Int64 mid = (lower + upper) / 2;
+			int64_t mid = (lower + upper) / 2;
 			if (pow(BigInteger(mid), exp) * lim > u)
 				upper = mid;
 			else
 				lower = mid;
         }
 		return coinAge * 33 * min(upper/cent*cent, MAX_MINT_PROOF_OF_STAKE) / (365 * 33 + 8);
+	}
+
+	void UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx) override {
 	}
 	
 	BlockObj *CreateBlockObj() override { return new NovaCoinBlockObj; }

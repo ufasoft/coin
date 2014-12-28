@@ -1,10 +1,9 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -19,16 +18,16 @@ void ChannelClient::ProcessNick(RCString nick, const DateTime& now) {
 		Blob blob;
 		try {
 			DBG_LOCAL_IGNORE_WIN32(ERROR_CRC);
-//!!!R				DBG_LOCAL_IGNORE_NAME(E_FAIL, E_FAIL);
-			DBG_LOCAL_IGNORE_NAME(E_INVALIDARG, E_INVALIDARG);
-			blob = ConvertFromBase58ShaSquare(nick.Substring(1));
+//!!!R				DBG_LOCAL_IGNORE(E_FAIL);
+			DBG_LOCAL_IGNORE(E_INVALIDARG);
+			blob = ConvertFromBase58ShaSquare(nick.substr(1));
 		} catch (RCExc) {
 		}
 		if (blob.Size == 6) {
 			CMemReadStream stm(blob);
 			BinaryReader rd(stm);
-			Int32 ip4 = rd.ReadInt32();
-			UInt16 port = ntohs(rd.ReadUInt16());
+			int32_t ip4 = rd.ReadInt32();
+			uint16_t port = ntohs(rd.ReadUInt16());
 			IPEndPoint ep(ip4, port);
 
 			TRC(7, ep);
@@ -88,13 +87,13 @@ void IrcThread::Execute() {
 
 		EXT_LOCK (IrcManager.CoinDb.MtxDb) {
 			Blob blob = IrcManager.CoinDb.LocalIp4.GetAddressBytes();
-			if (blob.Size==4 && 0!=*(UInt32*)blob.constData()) {
+			if (blob.Size==4 && 0!=*(uint32_t*)blob.constData()) {
 				MemoryStream ms;
 				ms.WriteBuf(blob);
-				UInt16 port = 0;
+				uint16_t port = 0;
 				if (!ChannelClients.empty())
-					port = UInt16(ChannelClients.begin()->second->ListeningPort);
-				BinaryWriter(ms).Ref() << UInt16(htons(port));
+					port = uint16_t(ChannelClients.begin()->second->ListeningPort);
+				BinaryWriter(ms).Ref() << uint16_t(htons(port));
 				Nick = "u" + ConvertToBase58ShaSquare(ms);
 			} else
 				Nick = "x"+Convert::ToString(Ext::Random().Next(1000000000));

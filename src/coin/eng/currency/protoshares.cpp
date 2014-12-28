@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "../eng.h"
@@ -9,7 +16,7 @@ static HashValue s_hashMax("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 class ProtoSharesBlockObj : public BlockObj {
 	typedef BlockObj base;
 public:
-	UInt32 BirthdayA, BirthdayB;
+	uint32_t BirthdayA, BirthdayB;
 
 	ProtoSharesBlockObj() {
 		Ver = 1;
@@ -43,7 +50,7 @@ public:
 			MemoryStream ms;
 			base::WriteHeader(BinaryWriter(ms).Ref());
 			m_hash = MomentumVerify(Coin::Hash(ms), BirthdayA, BirthdayB)
-				? Coin::Hash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (UInt32)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce << BirthdayA << BirthdayB))
+				? Coin::Hash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce << BirthdayA << BirthdayB))
 				: s_hashMax;
 		}
 		return m_hash.get();
@@ -63,8 +70,8 @@ protected:
 	bool MiningAllowed() override { return false; }
 	BlockObj *CreateBlockObj() override { return new ProtoSharesBlockObj; }
 
-	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
-		return std::max(19012850LL, Int64(ChainParams.InitBlockValue * pow(0.95, height / 2016)) + (bForCheck ? 1 : -1));		// +1|-1 to avoid FP divergence from Integer algorithm
+	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
+		return std::max(int64_t(19012850), int64_t(ChainParams.InitBlockValue * pow(0.95, height / 2016)) + (bForCheck ? 1 : -1));		// +1|-1 to avoid FP divergence from Integer algorithm
 	}
 
 	TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) override {

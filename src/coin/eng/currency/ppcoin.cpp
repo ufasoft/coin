@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "../proof-of-stake.h"
@@ -5,10 +12,11 @@
 
 namespace Coin {
 
-const Version VER_PPCOIN_STAKE_MODIFIER(0, 50);
+const Version VER_PPCOIN_STAKE_MODIFIER(0, 50),
+			VER_PPCOIN_V04_STAKE_MODIFIER(0, 93);
 
-static DateTime DtV30Switch(2013, 3, 20, 17, 20),
-			DtV40Switch(2014, 5, 5, 14, 26, 40);
+static DateTime DtV03Switch(2013, 3, 20, 17, 20),
+			DtV04Switch(2014, 5, 5, 14, 26, 40);
 
 
 class PPCoinBlockObj : public PosBlockObj {
@@ -20,7 +28,11 @@ public:
 	}
 
 	bool IsV02Protocol(const DateTime& dt) const {
-		return dt < DtV30Switch;
+		return dt < DtV03Switch;
+	}
+
+	bool IsV04Protocol() const override {
+		return Timestamp >= DtV04Switch;
 	}
 
 	void CheckCoinStakeTimestamp() override {
@@ -38,10 +50,9 @@ public:
 		else
 			wr << DifficultyTargetBits;		
 	}
-
 protected:
 	bool StakeEntropyBit() const override {
-		return Timestamp>=DtV40Switch ? base::StakeEntropyBit()
+		return IsV04Protocol() ? base::StakeEntropyBit()
 			:	Hash160(Signature)[19] & 0x80;
 	}
 };
@@ -57,7 +68,7 @@ public:
 
 protected:
 	void TryUpgradeDb() override {
-		if (Db->CheckUserVersion() < VER_PPCOIN_STAKE_MODIFIER)
+		if (Db->CheckUserVersion() < VER_PPCOIN_V04_STAKE_MODIFIER)
 			Db->Recreate();
 		base::TryUpgradeDb();
 	}

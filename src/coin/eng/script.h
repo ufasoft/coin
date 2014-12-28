@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include <el/bignum.h>
@@ -67,22 +74,22 @@ inline ScriptWriter& operator<<(ScriptWriter& wr, byte v) {
 	return wr;
 }
 
-inline ScriptWriter& operator<<(ScriptWriter& wr, UInt16 v) {
+inline ScriptWriter& operator<<(ScriptWriter& wr, uint16_t v) {
 	(BinaryWriter&)wr << v;
 	return wr;
 }
 
-inline ScriptWriter& operator<<(ScriptWriter& wr, Int32 v) {
+inline ScriptWriter& operator<<(ScriptWriter& wr, int32_t v) {
 	(BinaryWriter&)wr << v;
 	return wr;
 }
 
-inline ScriptWriter& operator<<(ScriptWriter& wr, UInt32 v) {
+inline ScriptWriter& operator<<(ScriptWriter& wr, uint32_t v) {
 	(BinaryWriter&)wr << v;
 	return wr;
 }
 
-inline ScriptWriter& operator<<(ScriptWriter& wr, UInt64 v) {
+inline ScriptWriter& operator<<(ScriptWriter& wr, uint64_t v) {
 	(BinaryWriter&)wr << v;
 	return wr;
 }
@@ -99,9 +106,9 @@ inline ScriptWriter& operator<<(ScriptWriter& wr, const ConstBuf& mb) {
 	else if (size <= 0xFF)
 		wr << byte(OP_PUSHDATA1) << byte(size);
 	else if (size <= 0xFFFF)
-		wr << byte(OP_PUSHDATA2) << UInt16(size);
+		wr << byte(OP_PUSHDATA2) << uint16_t(size);
 	else
-		wr << byte(OP_PUSHDATA4) << UInt32(size);
+		wr << byte(OP_PUSHDATA4) << uint32_t(size);
 	wr.Write(mb.P, size);
 	return wr;
 }
@@ -122,7 +129,7 @@ inline ScriptWriter& operator<<(ScriptWriter& wr, const HashValue160& hash) {
 	return wr << ConstBuf(hash);
 }
 
-inline ScriptWriter& operator<<(ScriptWriter& wr, Int64 v) {
+inline ScriptWriter& operator<<(ScriptWriter& wr, int64_t v) {
 	BinaryWriter& bwr = wr;
 	if (v==-1 || v>=1 && v<=16)
 		bwr << byte(v+OP_1-1);
@@ -213,7 +220,7 @@ public:
 //	Coin::Script Script;
 
 	void Init(const ConstBuf& mbScript);
-	bool Eval(const ConstBuf& mbScript, const Tx& txTo, UInt32 nIn, Int32 nHashType);
+	bool Eval(const ConstBuf& mbScript, const Tx& txTo, uint32_t nIn, int32_t nHashType);
 	Instr GetOp();
 private:
 	int m_pc;
@@ -223,12 +230,12 @@ private:
 	Value Pop();
 	void SkipStack(int n);
 	void Push(const Value& v);
-	bool EvalImp(const Tx& txTo, UInt32 nIn, Int32 nHashType);
+	bool EvalImp(const Tx& txTo, uint32_t nIn, int32_t nHashType);
 };
 
 bool IsPayToScriptHash(const Blob& script);
-HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, Int32 nHashType);
-void VerifySignature(const Tx& txFrom, const Tx& txTo, UInt32 nIn, Int32 nHashType = 0);
+HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int32_t nHashType);
+void VerifySignature(const Tx& txFrom, const Tx& txTo, uint32_t nIn, int32_t nHashType = 0);
 bool ToBool(const Vm::Value& v);
 BigInteger ToBigInteger(const Vm::Value& v);
 

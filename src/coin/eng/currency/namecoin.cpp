@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -26,7 +33,7 @@ public:
 	DbTable m_tableDomains;
 
 	NamecoinDbliteDb()
-		:	m_tableDomains("domains",	0,	UCFG_COIN_TABLE_TYPE)
+		:	m_tableDomains("domains", 0, TableType::HashTable)
 	{
 	}
 protected:
@@ -37,10 +44,10 @@ protected:
 	}
 
 	int GetNameHeight(const ConstBuf& cbufName, int heightExpired) override {
-		DbTxRef dbt(m_db);
+		DbReadTxRef dbt(m_db);
 		DbCursor c(dbt, m_tableDomains);
 		if (c.SeekToKey(cbufName)) {
-			int r = (int)letoh(*(UInt32*)c.get_Data().P);
+			int r = (int)letoh(*(uint32_t*)c.get_Data().P);
 			if (r > heightExpired)
 				return r;
 			c.Delete();
@@ -52,14 +59,14 @@ protected:
 		DomainData r;
 		const char *pDomain = domain;
 		ConstBuf cbufName(pDomain, strlen(pDomain));
-		DbTxRef dbt(m_db);
+		DbReadTxRef dbt(m_db);
 		DbCursor c(dbt, m_tableDomains);
 		if (c.SeekToKey(cbufName))
 			BinaryReader(CMemReadStream(c.get_Data())) >> r;
 		return r;
 	}
 
-	void PutDomainData(RCString domain, UInt32 height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
+	void PutDomainData(RCString domain, uint32_t height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
 		const char *pDomain = domain;
 		ConstBuf cbufName(pDomain, strlen(pDomain));
 		if (!bInsert && GetNameHeight(cbufName, -1) < 0)
@@ -71,12 +78,12 @@ protected:
 		m_tableDomains.Put(dbt, cbufName, EXT_BIN(dd), bInsert);
 	}
 
-	void OptionalDeleteExpiredDomains(UInt32 height) override {
+	void OptionalDeleteExpiredDomains(uint32_t height) override {
 		if (height & 0xFFF)
 			return;
 		DbTxRef dbt(m_db);
 		for (DbCursor c(dbt, m_tableDomains); c.SeekToNext();) {
-			if (letoh(*(UInt32*)c.get_Data().P) <= height)
+			if (letoh(*(uint32_t*)c.get_Data().P) <= height)
 				c.Delete();
 		}
 	}
@@ -110,11 +117,6 @@ public:
 protected:
 	SqliteCommand m_cmdInsertDomain, m_cmdUpdateDomain, m_cmdFindDomain, m_cmdNameHeight, m_cmdDeleteDomain;
 
-	String GetDomainsDbPath() {
-		String s = GetDbFilePath();
-		return Path::Combine(Path::GetDirectoryName(s), Path::GetFileNameWithoutExtension(s)+"-domains.db");
-	}
-
 	bool Create(RCString path) override {
 		bool r = base::Create(path);
 		if (ResolverMode)
@@ -146,7 +148,7 @@ protected:
 		return r;
 	}
 
-	void PutDomainData(RCString domain, UInt32 height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
+	void PutDomainData(RCString domain, uint32_t height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
 		if (ResolverMode) {
 			if (bInsert) {
 				m_cmdInsertDomain.Bind(1, domain)
@@ -172,7 +174,7 @@ protected:
 		}
 	}
 
-	void OptionalDeleteExpiredDomains(UInt32 height) override {
+	void OptionalDeleteExpiredDomains(uint32_t height) override {
 		if (ResolverMode) {
 			if (!(heightExpired & 0xFF)) {
 				SqliteCommand(EXT_STR("DELETE FROM domains WHERE height <= " << heightExpired), m_db)
@@ -203,7 +205,7 @@ const int MIN_FIRSTUPDATE_DEPTH = 12;
 
 String ToStringName(const ConstBuf& cbuf) {
 	try {
-		DBG_LOCAL_IGNORE_NAME(E_EXT_InvalidUTF8String, ignE_EXT_InvalidUTF8String);
+		DBG_LOCAL_IGNORE(E_EXT_InvalidUTF8String);
 
 		return Encoding::UTF8.GetChars(cbuf);
 	} catch (RCExc) {
@@ -262,7 +264,7 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 	bool bFound = false;
 	for (int i=0; i<tx.TxOuts().size(); ++i) {
 		try {
-			DBG_LOCAL_IGNORE_NAME(E_COIN_InvalidScript, ignE_COIN_InvalidScript);
+			DBG_LOCAL_IGNORE(E_COIN_InvalidScript);
 
 			pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_PkScript());
 			if (pp.first) {
@@ -271,8 +273,8 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 				r = pp.second;
 				r.NOut = i;
 			}
-		} catch (RCExc ex) {
-			if (HResultInCatch(ex) != E_COIN_InvalidScript)
+		} catch (Exception& ex) {
+			if (ToHResult(ex) != E_COIN_InvalidScript)
 				throw;
 		}
 	}
@@ -314,8 +316,8 @@ static int GetRelativeDepth(const Tx& tx, const Tx& txPrev, int maxDepth) {
 	return depth < maxDepth ? depth : -1;
 }
 
-static Int64 GetNameNetFee(const Tx& tx) {
-	Int64 r = 0;
+static int64_t GetNameNetFee(const Tx& tx) {
+	int64_t r = 0;
 	EXT_FOR (const TxOut& txOut, tx.TxOuts()) {
 		if (txOut.get_PkScript().Size == 1 && txOut.get_PkScript()[0] == OP_RETURN)
 			r += txOut.Value;
@@ -323,18 +325,18 @@ static Int64 GetNameNetFee(const Tx& tx) {
 	return r;
 }
 
-Int64 NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decrease 4x starting at 24000    
+int64_t NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decrease 4x starting at 24000    
 	height += std::max(0, height - 24000) * 3;
 	if ((height >> 13) >= 60)
 		return 0;
-	Int64 nStart = ChainParams.IsTestNet ? 10 * ChainParams.CoinValue / 100 : 50 * ChainParams.CoinValue;
-	Int64 r = nStart >> (height >> 13);
+	int64_t nStart = ChainParams.IsTestNet ? 10 * ChainParams.CoinValue / 100 : 50 * ChainParams.CoinValue;
+	int64_t r = nStart >> (height >> 13);
 	return r -= (r >> 14) * (height % 8192);
 }
 
 void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner)  {
 	try {
-		DBG_LOCAL_IGNORE_NAME(E_COIN_NAME_ExpirationError, ignE_COIN_NAME_ExpirationError); //!!!?
+		DBG_LOCAL_IGNORE(E_COIN_NAME_ExpirationError); //!!!?
 
 		bool bFound = false;
 		DecodedTx dtPrev;
@@ -363,7 +365,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				Throw(E_COIN_NAME_NewPointsPrevious);
 			break;
 		case OP_NAME_FIRSTUPDATE:
-			if (dt.Args[0].Size==0 || dt.Args[0].Size>127)				//!!! DBLite supports key length 1..127
+			if (dt.Args[0].Size==0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
 				if (GetNameNetFee(tx) < GetNetworkFee(tx.Height))
@@ -389,7 +391,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			break;
 
 		case OP_NAME_UPDATE:
-			if (dt.Args[0].Size==0 || dt.Args[0].Size>127)				//!!! DBLite supports key length 1..127
+			if (dt.Args[0].Size == 0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
 				if (!LiteMode) {
@@ -405,8 +407,8 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			}
 			break;
 		}
-	} catch (RCExc ex) {
-		switch (HResultInCatch(ex)) {
+	} catch (Exception& ex) {
+		switch (ToHResult(ex)) {
 		case E_COIN_NAME_ExpirationError:			//!!!?
 			break;
 		default:

@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/crypto/ecdsa.h>
@@ -43,6 +50,7 @@ static MessageClassFactoryBase
 	s_factoryAddr		("addr"			, &CoinEng::CreateAddrMessage		),
 	s_factoryInv		("inv"			, &CoinEng::CreateInvMessage		),
 	s_factoryGetData	("getdata"		, &CoinEng::CreateGetDataMessage	),
+	s_factoryNotFound	("notfound"		, &CoinEng::CreateNotFoundMessage	),
 	s_factoryGetBlocks	("getblocks"	, &CoinEng::CreateGetBlocksMessage	),
 	s_factoryGetHeaders	("getheaders"	, &CoinEng::CreateGetHeadersMessage	),
 	s_factoryTx			("tx"			, &CoinEng::CreateTxMessage			),
@@ -65,18 +73,18 @@ static MessageClassFactoryBase
 	s_factoryCheckPoint	("checkpoint"	, &CoinEng::CreateCheckPointMessage	);		// PPCoin
 
 ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader& rd) {
-	UInt32 checksum = 0;
+	uint32_t checksum = 0;
 	ptr<CoinMessage> r;
 	Blob payload(nullptr);
 	{
 		CoinEng& eng = Eng();
 
-		DBG_LOCAL_IGNORE_NAME(E_EXT_EndOfStream, ignE_EXT_EndOfStream);
+		DBG_LOCAL_IGNORE(E_EXT_EndOfStream);
 
 		char cmd[12];
 		rd.Read(cmd, sizeof cmd);
 
-		UInt32 len = rd.ReadUInt32();
+		uint32_t len = rd.ReadUInt32();
 		checksum = rd.ReadUInt32();
 		if (0 != cmd[sizeof(cmd)-1] || len > MAX_PAYLOAD)
 			Throw(E_EXT_Protocol_Violation);
@@ -94,11 +102,17 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	}
 	CMemReadStream ms(payload);
 	HashValue h = Eng().HashMessage(payload);
-	if (*(UInt32*)h.data() != checksum)
+	if (*(uint32_t*)h.data() != checksum)
 		Throw(E_EXT_Protocol_Violation);
 	ms.Position = 0;
 	r->Link = &link;
-	r->Read(BinaryReader(ms));
+
+	try {
+		r->Read(BinaryReader(ms));
+	} catch (RCExc ex) {
+		link.Send(new RejectMessage(RejectReason::Malformed, r->Command, "error parsing message"));
+		throw ex;		//!!!T
+	}
 	return r;
 }
 
@@ -140,7 +154,7 @@ void AddrMessage::Read(const BinaryReader& rd) {
 
 void AddrMessage::Process(P2P::Link& link) {
 	if (PeerInfos.size() > 1000)
-		throw PeerMisbehavingExc(20);
+		throw PeerMisbehavingException(20);
 	DateTime now = DateTime::UtcNow(),
 		lowerLimit(1974, 1, 1),
 		upperLimit(now + TimeSpan::FromMinutes(10)),
@@ -299,7 +313,7 @@ String GetBlocksMessage::ToString() const {
 }
 
 void Alert::Read(const BinaryReader& rd) {
-	Int64 relayUntil, expiration;
+	int64_t relayUntil, expiration;
 	rd >> Ver >> relayUntil >> expiration >> NId >> NCancel >> SetCancel >> MinVer >> MaxVer;
 	RelayUntil = DateTime::from_time_t(relayUntil);
 	Expiration = DateTime::from_time_t(expiration);
@@ -329,6 +343,8 @@ LAB_VERIFIED:
 	(Alert = new Coin::Alert)->Read(BinaryReader(stm));
 
 	if (DateTime::UtcNow() < Alert->Expiration) {
+		TRC(2, Alert->Expiration << "\t" << Alert->StatusBar);
+
 		if (eng.m_iiEngEvents)
 			eng.m_iiEngEvents->OnAlert(Alert);
 
@@ -365,9 +381,10 @@ void CoinLink::OnPeriodic() {
 	}
 
 	if (bTrickled) {
+		ptr<AddrMessage> m;
 		EXT_LOCK (Mtx) {
 			if (!m_setPeersToSend.empty()) {
-				ptr<AddrMessage> m = new AddrMessage;
+				m = new AddrMessage;
 				EXT_FOR (const ptr<P2P::Peer>& peer, m_setPeersToSend) {
 					if (m->PeerInfos.size() < 1000) {
 						PeerInfo pi;
@@ -378,9 +395,10 @@ void CoinLink::OnPeriodic() {
 					}
 				}
 				m_setPeersToSend.clear();
-				Send(m);
 			}
 		}
+		if (m)
+			Send(m);
 	}
 }
 
@@ -395,7 +413,7 @@ void CoinLink::Send(ptr<P2P::Message> msg) {
 	CoinMessage& m = *static_cast<CoinMessage*>(msg.get());
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
-	TRC(1, Peer->get_EndPoint() << " send " << m);
+	TRC(2, Peer->get_EndPoint() << " send " << m);
 	
 	Blob blob = EXT_BIN(m);
 	MemoryStream qs2;
@@ -404,81 +422,9 @@ void CoinLink::Send(ptr<P2P::Message> msg) {
 	char cmd[12] = { 0 };
 	strcpy(cmd, m.Command);
 	wrQs2.WriteStruct(cmd);
-	wrQs2 << UInt32(blob.Size) << letoh(*(UInt32*)Eng().HashMessage(blob).data());	
+	wrQs2 << uint32_t(blob.Size) << letoh(*(uint32_t*)Eng().HashMessage(blob).data());	
 	wrQs2.Write(blob.constData(), blob.Size);
 	SendBinary(qs2);
-#ifdef X_DEBUG//!!!D
-//	Blob bl = Blob::FromHexString("711101000100000000000000fd4cf55200000000010000000000000000000000000000000000ffff8974cc9221dc010000000000000000000000000000000000ffff3e85a9db21dc21d533ec25d8d2630b2f4d61783a302e382e392f00000000");
-	HashValue checksum = SHA3<256>().ComputeHash(blob);	
-	checksum = checksum;
-
-#endif
-}
-
-void CoinPartialMerkleTree::Init(const vector<HashValue>& vHash, const dynamic_bitset<byte>& bsMatch) {
-	Bitset.clear();
-	Items.clear();
-	int nHeight = 0;
-    while (CalcTreeWidth(nHeight) > 1)
-        nHeight++;
-    TraverseAndBuild(nHeight, 0, &vHash[0], bsMatch);
-}
-
-vector<Tx> MerkleBlockMessage::Init(const Block& block, CoinFilter& filter) {
-	Ver = block.Ver;
-	Height = block.Height;
-	PrevBlockHash = block.PrevBlockHash;
-	MerkleRoot = block.MerkleRoot;
-	Timestamp = block.Timestamp;
-	DifficultyTargetBits = block.m_pimpl->DifficultyTargetBits;
-	Nonce = block.Nonce;
-	const CTxes& txes = block.get_Txes();
-	NTransactions = txes.size();
-
-	vector<HashValue> vHash(NTransactions);
-	dynamic_bitset<byte> bsMatch(NTransactions);
-	vector<Tx> r;
-	for (size_t i=0; i<NTransactions; ++i) {
-		const Tx& tx = txes[i];
-		vHash[i] = Hash(tx);
-		if (filter.IsRelevantAndUpdate(tx)) {
-			r.push_back(tx);
-			bsMatch.set(i);
-		}
-	}
-	PartialMT.Init(vHash, bsMatch);
-	return r;
-}
-
-void MerkleBlockMessage::Write(BinaryWriter& wr) const {
-	wr << Ver << PrevBlockHash << MerkleRoot << (UInt32)to_time_t(Timestamp) << DifficultyTargetBits << Nonce << NTransactions;
-	CoinSerialized::Write(wr, PartialMT.Items);
-	vector<byte> v;
-	to_block_range(PartialMT.Bitset, back_inserter(v));
-	CoinSerialized::WriteBlob(wr, ConstBuf(&v[0], v.size()));
-}
-
-void MerkleBlockMessage::Read(const BinaryReader& rd) {
-	rd >> Ver >> PrevBlockHash >> MerkleRoot;
-	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
-	rd >> DifficultyTargetBits >> Nonce >> NTransactions;
-	CoinSerialized::Read(rd, PartialMT.Items);
-	Blob blob = CoinSerialized::ReadBlob(rd);
-	const byte *p = blob.constData();
-	PartialMT.Bitset.resize(blob.Size*8);
-	for (int i=0; i<blob.Size; ++i)
-		for (int j=0; j<8; ++j)
-			PartialMT.Bitset.replace(i*8+j,( p[i] >> j) & 1);
-}
-
-void MerkleBlockMessage::Process(P2P::Link& link) {
-	CoinEng& eng = Eng();
-
-	//!!!TODO Check
-
-	EXT_LOCK (eng.Mtx) {
-		eng.CheckedFilteredTxHashes.insert(PartialMT.Items.begin(), PartialMT.Items.end());
-	}
 }
 
 void RejectMessage::Write(BinaryWriter& wr) const {

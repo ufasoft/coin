@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -8,7 +15,7 @@ namespace Ext { namespace DB { namespace KV {
 
 void DbTable::CheckKeyArg(const ConstBuf& k) {
 	if (k.Size == 0 || k.Size > MAX_KEY_SIZE)
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 }
 
 void DbTable::Open(DbTransaction& tx, bool bCreate) {
@@ -31,7 +38,7 @@ void DbTable::Open(DbTransaction& tx, bool bCreate) {
 
 void DbTable::Drop(DbTransaction& tx) {
 	if (tx.ReadOnly)
-		Throw(E_ACCESSDENIED);
+		Throw(errc::permission_denied);
 	DbCursor(tx, _self).Drop();
 	ConstBuf k(Name.c_str(), strlen(Name.c_str()));
 	DbTable::Main().Delete(tx, k);
@@ -57,7 +64,7 @@ bool DbTable::Delete(DbTransaction& tx, const ConstBuf& k) {
 }
 
 void KVStorage::Vacuum() {
-	String tmpPath = Path::GetTempFileName(Path::GetDirectoryName(FilePath), "tmp").first;
+	path tmpPath = Path::GetTempFileName(FilePath.parent_path(), "tmp").first;
 	lock_guard<mutex> lkWrite(MtxWrite);
 	unique_lock<shared_mutex> lk(ShMtx, defer_lock);
 	try {
@@ -84,7 +91,7 @@ void KVStorage::Vacuum() {
 				tD.KeySize = td.KeySize;
 				tD.Open(txD, true);
 				int n = 0;
-				Int64 bytes = 0;
+				int64_t bytes = 0;
 				for (DbCursor c(txS, tS); c.SeekToNext();) {
 					tD.Put(txD, c.Key, c.Data);
 					if (m_pfnProgress && !--nProgress) {
@@ -102,13 +109,13 @@ void KVStorage::Vacuum() {
 		lk.lock();
 		Close(false);
 	} catch (RCExc) {
-		File::Delete(tmpPath);
+		sys::remove(tmpPath);
 		throw;
 	}
-	String tmpOriginal = FilePath+".bak";
-	File::Move(FilePath, tmpOriginal);
-	File::Move(tmpPath, FilePath);
-	File::Delete(tmpOriginal);
+	path tmpOriginal = FilePath / ".bak";
+	sys::rename(FilePath, tmpOriginal);
+	sys::rename(tmpPath, FilePath);
+	sys::remove(tmpOriginal);
 	Open(FilePath);
 }
 

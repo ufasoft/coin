@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 #include <el/xml.h>
 
@@ -48,7 +55,7 @@ public:
 	HRESULT __stdcall put_Comment(BSTR s);
 };
 
-DECIMAL ToDecimal(const pair<Int64, int>& pp) {
+DECIMAL ToDecimal(const pair<int64_t, int>& pp) {
 	DECIMAL r = { 0 };
 	r.sign = pp.first<0 ? DECIMAL_NEG : 0;
 	r.scale = (byte)pp.second;
@@ -179,7 +186,7 @@ public:
 	typedef unordered_map<String, CComPtr<IAddress>> CStr2Addr;
 	CStr2Addr m_str2addr;
 
-	Int32 StateChanged;
+	int32_t StateChanged;
 
 	WalletCom(Wallet& wallet)
 		:	m_wallet(wallet)
@@ -228,8 +235,7 @@ public:
 			if (m_saTxes.vt == VT_EMPTY) {
 				vector<WalletTx> vec;
 				EXT_LOCK (m_wallet.Eng.m_cdb.MtxDb) {
-					SqliteCommand cmd(EXT_STR("SELECT mytxes.timestamp, mytxes.data, mytxes.blockord, mytxes.comment, value, addr160 FROM usertxes INNER JOIN mytxes ON txid=mytxes.id WHERE mytxes.netid=" << m_wallet.m_dbNetId << " ORDER BY mytxes.timestamp DESC"), m_wallet.Eng.m_cdb.m_dbWallet);
-					for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
+					for (DbDataReader dr=m_wallet.Eng.m_cdb.CmdGetTxes.Bind(1, m_wallet.m_dbNetId).ExecuteReader(); dr.Read();) {
 						WalletTx wtx;
 						wtx.LoadFromDb(dr, true);
 						if (!m_wallet.Eng.m_cdb.Hash160ToMyKey.count(wtx.To))
@@ -383,7 +389,7 @@ public:
 					break;
 				}
 				if (ptr<CompactThread> t = m_wallet.CompactThread) {
-					os << "Compacting Database  " << Int64(t->m_i)*100/t->m_count << "%";
+					os << "Compacting Database  " << int64_t(t->m_i)*100/t->m_count << "%";
 					break;
 				}
 
@@ -569,6 +575,9 @@ public:
 	METHOD_BEGIN {
 		TRC(1, "");
 
+		for (int i=0; i<m_vWalletEng.size(); ++i)
+			m_vWalletEng[i]->m_peng->SignalStop();
+
 		for (int i=0; i<m_vWalletEng.size(); ++i) {
 			m_vWalletEng[i]->m_peng->Stop();
 			m_vWalletEng[i]->Close();
@@ -582,8 +591,8 @@ public:
 			m_cdb.Load();
 			vector<String> names;
 			{
-				String pathXml = Path::Combine(Path::GetDirectoryName(System.ExeFilePath), "coin-chains.xml");
-				if (!File::Exists(pathXml))
+				path pathXml = System.GetExeDir() / "coin-chains.xml";
+				if (!exists(pathXml))
 					Throw(E_COIN_XmlFileNotFound);
 #if UCFG_WIN32
 				XmlDocument doc = new XmlDocument;
@@ -629,7 +638,10 @@ public:
 	HRESULT __stdcall put_LiteMode(VARIANT_BOOL b)
 	METHOD_BEGIN {
 		for (int i=0; i<m_vWalletEng.size(); ++i) {
-			m_vWalletEng[i]->m_peng->Mode = b ? EngMode::Lite : EngMode::Normal;
+			CoinEng& eng = *m_vWalletEng[i]->m_peng;
+			if (eng.ChainParams.AllowLiteMode) {
+				eng.Mode = b ? EngMode::Lite : EngMode::Normal;
+			}
 		}
 	} METHOD_END
 
@@ -650,12 +662,12 @@ public:
 
 	HRESULT __stdcall put_LocalPort(int v)
 	METHOD_BEGIN {
-		m_cdb.ListeningPort = (UInt16)v;
+		m_cdb.ListeningPort = (uint16_t)v;
 	} METHOD_END
 
 	HRESULT __stdcall get_AppDataDirectory(BSTR *r)
 	METHOD_BEGIN {
-		*r = Path::GetDirectoryName(m_cdb.DbWalletFilePath).AllocSysString();
+		*r = String(m_cdb.DbWalletFilePath.parent_path()).AllocSysString();
 	} METHOD_END
 };
 
@@ -676,10 +688,11 @@ METHOD_BEGIN {
 
 HRESULT __stdcall TransactionCom::get_Fee(DECIMAL *r)
 METHOD_BEGIN {
-	DBG_LOCAL_IGNORE_NAME(E_COIN_TxNotFound, ignE_COIN_TxNotFound);
+	DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
+	DBG_LOCAL_IGNORE(E_EXT_DB_NoRecord);
 	
 	CCoinEngThreadKeeper engKeeper(&m_wallet.m_wallet.Eng);
-	*r = ToDecimal(m_wtx.GetDecimalFee());
+	*r = ToDecimal(m_wallet.m_wallet.GetDecimalFee(m_wtx));
 } METHOD_END
 
 HRESULT TransactionCom::get_Confirmations(int *r)

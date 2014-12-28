@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 // File implementation
@@ -9,48 +16,78 @@
 
 namespace Ext { namespace DB { namespace KV {
 
+#ifndef UCFG_DB_TLB
+#	define UCFG_DB_TLB 0 //!!!T originally 0
+#endif
+
 typedef vector<pair<Page, int>> PagedPath;
 
 struct  PathVisitor {
 	virtual bool OnPathLevel(int level, Page& page) { Throw(E_NOTIMPL); }
-	virtual bool OnPathLevelFlat(int level, UInt32& pgno) { Throw(E_NOTIMPL); }
+	virtual bool OnPathLevelFlat(int level, uint32_t& pgno) { Throw(E_NOTIMPL); }
 };
 
 class Filet {
 	typedef Filet class_type;
 public:
-	DbTransaction& m_tx;
+	DbTransactionBase& m_tx;
 	Page PageRoot;
 	const int PageSizeBits;
 
-	Filet(DbTransaction& tx)
+	Filet(DbTransactionBase& tx)
 		:	m_tx(tx)
 		,	PageSizeBits(BitOps::Scan(tx.Storage.PageSize)-1)
+#if UCFG_DB_TLB
+		,	TlbPage(16)
+		,	TlbAddress(16)
+#endif
 	{}
-	
-	UInt64 get_Length() const { return m_length; }
-	void put_Length(UInt64 v);
-	DEFPROP(UInt64, Length);
 
-	UInt64 GetPagesForLength(UInt64 len) const;
-	UInt32 GetUInt32(UInt64 offset) const;
-	void PutUInt32(UInt64 offset, UInt32 v);
-	void PutPgNo(Page& page, int idx, UInt32 pgno) const;	// const because called from universal FindPath()
+	void SetLength(uint64_t v);
+
+	uint64_t get_Length() const { return m_length; }
+	void put_Length(uint64_t v);
+	DEFPROP(uint64_t, Length);
+
+	void SetRoot(const Page& page) {
+		PageRoot = page;
+#if UCFG_DB_TLB
+		ClearTlbs();
+#endif
+	}
+
+	uint64_t GetPagesForLength(uint64_t len) const;
+	uint32_t GetUInt32(uint64_t offset) const;
+	void PutUInt32(uint64_t offset, uint32_t v);
+	void PutPgNo(Page& page, int idx, uint32_t pgno) const;	// const because called from universal FindPath()
 private:
-	UInt64 m_length;
-
-	UInt32 GetPgNo(UInt32 pgno, int idx) const { return m_tx.Storage.GetUInt32(pgno, idx*4); }
+	uint64_t m_length;
+	int IndirectLevels;
 	
-	UInt32 GetPgNo(Page& page, int idx) const;	
-	int IndirectLevels() const;
+	uint32_t GetPgNo(uint32_t pgno, int idx) const { return m_tx.Storage.GetUInt32(pgno, idx*4); }
+
+#if UCFG_DB_TLB
+	typedef LruMap<uint32_t, Page> CTlbPage;					// Caches
+	mutable CTlbPage TlbPage;
+
+	typedef LruMap<uint32_t, byte*> CTlbAddress;
+	mutable CTlbAddress TlbAddress;
+
+	void ClearTlbs() {
+		TlbPage.clear();
+		TlbAddress.clear();
+	}
+#endif // UCFG_DB_TLB
+
+	uint32_t GetPgNo(Page& page, int idx) const;	
 	bool TouchPage(Page& page);
 	void TouchPage(Page& pageData, PagedPath& path);
-	UInt32 RemoveRange(int level, Page& page, UInt32 first, UInt32 last);
-	Page FindPath(UInt64 offset, PathVisitor& visitor) const;
-	byte *FindPathFlat(UInt64 offset, PathVisitor& visitor) const;
-	Page GetPageToModify(UInt64 offset, bool bOptional);
+	uint32_t RemoveRange(int level, Page& page, uint32_t first, uint32_t last);
+	Page FindPath(uint64_t offset, PathVisitor& visitor) const;
+	byte *FindPathFlat(uint64_t offset, PathVisitor& visitor) const;
+	Page GetPageToModify(uint64_t offset, bool bOptional);
 
-	friend class HashTable;
+//	friend class HashTable;
 };
 
 

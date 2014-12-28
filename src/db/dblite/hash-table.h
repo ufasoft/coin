@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include "filet.h"
@@ -14,20 +21,20 @@ public:
 	HashType HtType;
 	const int MaxLevel;
 
-	HashTable(DbTransaction& tx);
+	HashTable(DbTransactionBase& tx);
 	TableType Type() override { return TableType::HashTable; }
-	UInt32 Hash(const ConstBuf& key) const;
+	uint32_t Hash(const ConstBuf& key) const;
 	int BitsOfHash() const;
-	Page TouchBucket(UInt32 nPage);
-	UInt32 GetPgno(UInt32 nPage);
-	void Split(UInt32 nPage, int level);
+	Page TouchBucket(uint32_t nPage);
+	uint32_t GetPgno(uint32_t nPage) const;
+	void Split(uint32_t nPage, int level);
 private:
 	void Init(const TableData& td) override {
 		base::Init(td);
 		HtType = (HashType)td.HtType;
-		if (UInt32 pgno = letoh(td.RootPgNo))
-			PageMap.PageRoot = Tx.OpenPage(pgno);
-		PageMap.m_length = letoh(td.PageMapLength);
+		if (uint32_t pgno = letoh(td.RootPgNo))
+			PageMap.SetRoot(Tx.OpenPage(pgno));
+		PageMap.SetLength(letoh(td.PageMapLength));
 	}
 
 	TableData GetTableData() override;
@@ -61,6 +68,7 @@ public:
 	}
 
 	PagePos& Top() override { return SubCursor ? SubCursor->Top() : m_pagePos; }
+
 	void Touch() override;
 	bool SeekToFirst() override;
 	bool SeekToLast() override;
@@ -79,9 +87,8 @@ private:
 #endif
 	ptr<BTreeSubCursor> SubCursor;
 	PagePos m_pagePos;
-	UInt32 NPage;
 
-	bool SeekToKeyHash(const ConstBuf& k, UInt32 hash);	// return <found, level>
+	bool SeekToKeyHash(const ConstBuf& k, uint32_t hash);				// returns bFound
 	void UpdateFromSubCursor();
 
 	HtCursor *Clone() override { return new HtCursor(*this); }

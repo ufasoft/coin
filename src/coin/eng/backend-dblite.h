@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #pragma once
 
 #include <db/dblite/dblite.h>
@@ -7,10 +14,6 @@ using namespace Ext::DB::KV;
 
 #include "eng.h"
 
-#ifndef UCFG_COIN_TABLE_TYPE
-#	define UCFG_COIN_TABLE_TYPE TableType::HashTable
-#endif
-
 namespace Coin {
 
 const size_t BLOCKID_SIZE = 3;
@@ -19,6 +22,29 @@ const size_t PUBKEYID_SIZE = 5;
 const size_t PUBKEYTOTXES_ID_SIZE = 8;
 
 class DbliteBlockChainDb;
+}
+
+
+namespace Coin {
+
+typedef CThreadTxRef<DbReadTransaction> DbReadTxRef;
+
+
+
+/**!!!T
+class DbReadTxRef : noncopyable {
+public:
+	DbReadTxRef(DbStorage& env);
+	~DbReadTxRef();
+
+	operator DbReadTransaction&() { return *m_p; }
+private:
+	DbReadTransaction *m_p;
+
+	byte m_placeDbTx[sizeof(DbReadTransaction)];
+	CBool m_bOwn;
+};
+*/
 
 class DbTxRef : noncopyable {
 public:
@@ -40,7 +66,7 @@ class SavepointTransaction;
 
 class BlockKey {
 public:
-	BlockKey(UInt32 h)
+	BlockKey(uint32_t h)
 		:	m_beH(htobe(h))
 	{}
 
@@ -50,10 +76,10 @@ public:
 		memcpy((byte*)&m_beH + 1, cbuf.P, BLOCKID_SIZE);
 	}
 
-	operator UInt32() const { return betoh(m_beH); }
+	operator uint32_t() const { return betoh(m_beH); }
 	operator ConstBuf() const { return ConstBuf((const byte*)&m_beH + 1, BLOCKID_SIZE); }
 private:
-	UInt32 m_beH;
+	uint32_t m_beH;
 };
 
 
@@ -73,14 +99,15 @@ public:
 
 	ITransactionable& GetSavepointObject() override;
 
-	bool Create(RCString path) override;
-	bool Open(RCString path) override;
+	bool Create(const path& p) override;
+	bool Open(const path& p) override;
 	void Close(bool bAsync) override;
 	Version CheckUserVersion() override;
 	void UpgradeTo(const Version& ver) override;
+	void TryUpgradeDb(const Version& verApp) override;
 
 	bool HaveBlock(const HashValue& hash) override {
-		DbTxRef dbt(m_db);
+		DbReadTxRef dbt(m_db);
 		return DbCursor(dbt, m_tableHashToBlock).Get(ReducedBlockHash(hash));
 	}
 
@@ -91,7 +118,7 @@ public:
 	void InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) override;
 
 	struct TxData {
-		UInt32 Height;
+		uint32_t Height;
 		Blob Data, TxIns, Coins;
 		HashValue HashTx;
 
@@ -114,7 +141,7 @@ public:
 	bool FindTxDatas(const ConstBuf& txid8, TxDatas& txDatas);
 	TxDatas GetTxDatas(const ConstBuf& txid8);
 	void PutTxDatas(const ConstBuf& txKey, const TxDatas& txDatas);
-	void DeleteBlock(int height, const vector<Int64>& txids) override;
+	void DeleteBlock(int height, const vector<int64_t>& txids) override;
 	bool FindTxById(const ConstBuf& txid8, Tx *ptx) override;
 
 	bool FindTx(const HashValue& hash, Tx *ptx) override {
@@ -131,7 +158,7 @@ public:
 
 	pair<int, int> FindPrevTxCoords(DbWriter& wr, int height, const HashValue& hash) override;
 	void InsertPubkeyToTxes(DbTransaction& dbTx, const Tx& tx);
-	vector<Int64> GetTxesByPubKey(const HashValue160& pubkey) override;
+	vector<int64_t> GetTxesByPubKey(const HashValue160& pubkey) override;
 
 	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) override;
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override;
@@ -145,9 +172,9 @@ public:
 		Throw(E_NOTIMPL);
 	}
 
-	Blob FindPubkey(Int64 id) override;
-	void InsertPubkey(Int64 id, const ConstBuf& pk) override;
-	void UpdatePubkey(Int64 id, const ConstBuf& pk) override;
+	Blob FindPubkey(int64_t id) override;
+	void InsertPubkey(int64_t id, const ConstBuf& pk) override;
+	void UpdatePubkey(int64_t id, const ConstBuf& pk) override;
 
 	void BeginTransaction() override {
 //		ASSERT(!m_dbt.get());
@@ -174,8 +201,8 @@ public:
 protected:
 	virtual void OnOpenTables(DbTransaction& dbt, bool bCreate) {}
 private:
-	Block LoadBlock(DbTransaction& dbt, int height, const ConstBuf& cbuf);
-	bool TryToConvert(RCString path);
+	Block LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf);
+	bool TryToConvert(const path& p);
 };
 
 

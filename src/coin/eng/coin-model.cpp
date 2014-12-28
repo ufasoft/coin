@@ -1,3 +1,10 @@
+/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
+#                                                                                                                                                                                                                                            #
+# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
+# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
+############################################################################################################################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/bignum.h>
@@ -23,20 +30,20 @@ void PeerInfoBase::Write(BinaryWriter& wr) const {
 		wr.Write(buf, sizeof buf);
 	}
 	wr.Write(blob.constData(), blob.Size);
-	wr << UInt16(_byteswap_ushort(Ep.Port));
+	wr << uint16_t(_byteswap_ushort(Ep.Port));
 }
 
 void PeerInfoBase::Read(const BinaryReader& rd) {
 	Services = rd.ReadUInt64();
 	byte buf[16];
 	rd.Read(buf, sizeof buf);
-	UInt16 port = _byteswap_ushort(rd.ReadUInt16());
+	uint16_t port = _byteswap_ushort(rd.ReadUInt16());
 	Ep = IPEndPoint(IPAddress(!memcmp(buf, "\0\0\0\0\0\0\0\0\0\0\xFF\xFF", 12) ? ConstBuf(buf+12, 4) : ConstBuf(buf, 16)), port);
 }
 
 
 void PeerInfo::Write(BinaryWriter& wr) const {
-	wr << (UInt32)to_time_t(Timestamp);
+	wr << (uint32_t)to_time_t(Timestamp);
 	base::Write(wr);
 }
 
@@ -92,7 +99,7 @@ void AuxPow::Write(DbWriter& wr) const {
 	wr << ChainMerkleBranch;
 #if UCFG_COIN_COMPACT_AUX
 	const BlockObj& bo = *ParentBlock.m_pimpl;
-	wr << bo.Ver << bo.PrevBlockHash << (UInt32)to_time_t(bo.Timestamp) << bo.DifficultyTargetBits << bo.Nonce;
+	wr << bo.Ver << bo.PrevBlockHash << (uint32_t)to_time_t(bo.Timestamp) << bo.DifficultyTargetBits << bo.Nonce;
 #else
 	ParentBlock.WriteHeader(wr);
 #endif
@@ -109,7 +116,7 @@ void AuxPow::Read(const DbReader& rd) {
 #endif
 }
 
-int CalcMerkleIndex(int merkleSize, int chainId, UInt32 nonce) {
+int CalcMerkleIndex(int merkleSize, int chainId, uint32_t nonce) {
     return (((nonce * 1103515245 + 12345) + chainId) * 1103515245 + 12345) % merkleSize;
 }
 
@@ -140,7 +147,7 @@ void AuxPow::Check(const Block& blockAux) {
 	} else if (pc-script.begin() > 20)
 		Throw(E_COIN_AUXPOW_MerkleRootMustStartInFirstFewBytes);
 	CMemReadStream stm(ConstBuf(pc + rootHash.size(), script.end()-pc-rootHash.size()));
-	Int32 size, nonce;
+	int32_t size, nonce;
 	BinaryReader(stm) >> size >> nonce;
 	if (size != (1 << ChainMerkleBranch.Vec.size()))
 		Throw(E_COIN_AUXPOW_MerkleBranchSizeIncorrect);
