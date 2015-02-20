@@ -1,3 +1,6 @@
 [submodule "src/el"]
 	path = src/el
 	url = https://github.com/ufasoft/el.git
+[submodule "foreign"]
+	path = foreign
+	url = https://github.com/ufasoft/foreign
