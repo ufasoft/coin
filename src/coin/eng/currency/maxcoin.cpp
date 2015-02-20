@@ -36,24 +36,13 @@ protected:
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
 		if (blockLast.Height < 199)
 			return base::GetNextTargetRequired(blockLast, block);
-		TimeSpan minPast = TimeSpan::FromDays(1) / 100,
-			maxPast = TimeSpan::FromDays(1) / 100 * 14;
-		return KimotoGravityWell(blockLast, block, int(minPast.get_TotalSeconds()/ChainParams.BlockSpan.get_TotalSeconds()), int(maxPast.get_TotalSeconds()/ChainParams.BlockSpan.get_TotalSeconds()));
+		seconds minPast = seconds(hours(24)) / 100,
+			maxPast = seconds(hours(1)) / 100 * 14;
+		return KimotoGravityWell(blockLast, block, int(minPast / ChainParams.BlockSpan), int(maxPast / ChainParams.BlockSpan));
 	}
 };
 
-static class MaxCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	MaxCoinChainParams(bool)
-		:	base("MaxCoin", false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-	MaxCoinEng *CreateEng(CoinDb& cdb) override { return new MaxCoinEng(cdb); }
-} s_maxCoinParams(true);
-
+static CurrencyFactory<MaxCoinEng> s_maxcoin("MaxCoin");
 
 } // Coin::
 

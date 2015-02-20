@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "../eng.h"
@@ -19,7 +12,7 @@ class FeatherCoinBlockObj : public BlockObj {
 	typedef BlockObj base;
 protected:
 	HashValue PowHash() const override {
-		return NeoScryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce),
+		return NeoSCryptHash(EXT_BIN(Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce),
 			Timestamp>=DATE_SWITCH_V2 && int(Height != uint32_t(-1) ? Height : GetBlockHeightFromCoinbase())>=432000 ? 0 : 3);
 	}
 };
@@ -58,8 +51,8 @@ protected:
 		Block prev = blockLast;
 		for (int goback = nInterval - int(h==nInterval); goback--;)
 			prev = prev.GetPrevBlock();
-		int targetSpan = int(((h >= 204639 ? ChainParams.BlockSpan : TimeSpan::FromSeconds(150)) * nInterval).get_TotalSeconds()),
-			spanActual = int((blockLast.get_Timestamp() - prev.get_Timestamp()).get_TotalSeconds());
+		int targetSpan = (int)duration_cast<seconds>(((h >= 204639 ? ChainParams.BlockSpan : TimeSpan::FromSeconds(150)) * nInterval)).count(),
+			spanActual = (int)duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()).count();
 		if (h >= 204639) {
 			prev = blockLast;
 			DateTime dtShortTime, dtMediumTime;
@@ -70,15 +63,15 @@ protected:
 				else if (i == 119)
 					dtMediumTime = prev.Timestamp;
 			}
-			int spanShort = int((blockLast.get_Timestamp() - dtShortTime).get_TotalSeconds()) / 15,
-				spanMedium = int((blockLast.get_Timestamp() - dtMediumTime).get_TotalSeconds()) / 120,
-				spanLong = int((blockLast.get_Timestamp() - prev.get_Timestamp()).get_TotalSeconds()) / 480;
+			int spanShort = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - dtShortTime) / 15).count(),
+				spanMedium = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - dtMediumTime) / 120).count(),
+				spanLong = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()) / 480).count();
 			spanActual = ((spanShort + spanMedium + spanLong)/3 + 3*targetSpan) / 4;
 		} else if (h >= 87948) {																					// Additional averaging over 4x nInterval window
 			prev = blockLast;
 			for (int goback = nInterval*4; goback--;)
 				prev = prev.GetPrevBlock();
-			int spanActualLong = int((blockLast.get_Timestamp() - prev.get_Timestamp()).get_TotalSeconds()) / 4;
+			int spanActualLong = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()) / 4).count();
 	        spanActual = ((spanActual + spanActualLong)/2 + 3*targetSpan) / 4;
 		}
 		pair<int, int> md = h >= 87948 ? make_pair(453, 494)
@@ -88,19 +81,7 @@ protected:
 	}
 };
 
-
-static class FeatherCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	FeatherCoinChainParams(bool)
-		:	base("FeatherCoin", false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-	FeatherCoinEng *CreateEng(CoinDb& cdb) override { return new FeatherCoinEng(cdb); }
-} s_feathercoinParams(true);
-
+static CurrencyFactory<FeatherCoinEng> s_feathercoin("FeatherCoin");
 
 } // Coin::
 

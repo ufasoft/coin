@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/crypto/hash.h>
@@ -63,7 +56,8 @@ ENUM_CLASS(HashAlgo) {
 	Prime,
 	Momentum,
 	Solid,
-	Metis
+	Metis,
+	NeoSCrypt
 } END_ENUM_CLASS(HashAlgo);
 
 HashAlgo StringToAlgo(RCString s);
@@ -78,6 +72,7 @@ public:
 		memcpy(data(), ar, 32);
 	}
 
+	HashValue(const hashval& hv);
 	HashValue(const ConstBuf& mb);
 	explicit HashValue(RCString s);
 	static HashValue FromDifficultyBits(uint32_t bits);
@@ -201,9 +196,9 @@ Blob ConvertFromBase58ShaSquare(RCString s);
 COIN_UTIL_EXPORT Blob CalcSha256Midstate(const ConstBuf& mb);
 
 COIN_UTIL_EXPORT  HashValue ScryptHash(const ConstBuf& mb);
+COIN_UTIL_EXPORT  HashValue NeoSCryptHash(const ConstBuf& mb, int profile);
 HashValue SolidcoinHash(const ConstBuf& cbuf);
 HashValue MetisHash(const ConstBuf& cbuf);
-HashValue NeoScryptHash(const ConstBuf& cbuf, int profile);
 
 bool MomentumVerify(const HashValue& hash, uint32_t a, uint32_t b);
 
@@ -247,7 +242,7 @@ public:
 
 class COIN_UTIL_CLASS BlockBase : public Object {
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	HashValue PrevBlockHash;
 	DateTime Timestamp;
@@ -314,6 +309,8 @@ public:
 	~CHasherEngThreadKeeper();
 };
 
+const error_category& coin_category();
+int SubmitRejectionCode(RCString rej);
 
 } // Coin::
 

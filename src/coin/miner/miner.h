@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
 
 #include EXT_HEADER_CONDITION_VARIABLE
@@ -25,7 +18,7 @@ using namespace Ext::Gpu;
 #include "bitcoin-sha256.h"
 
 #include "../util/util.h"
-#include "../util/block-template.h"
+#include "../util/wallet-client.h"
 #include "../util/miner-interface.h"
 
 namespace Ext {
@@ -53,7 +46,7 @@ const int NORMAL_WAIT = 2000, MAX_WAIT = 200000;
 class BitcoinWorkData : public Object {
 	typedef BitcoinWorkData class_type;
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	ptr<Coin::MinerBlock> MinerBlock;
 
@@ -112,17 +105,17 @@ public:
 
 class ComputationDevice : public Object {
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	ptr<Object> Miner;
 	String Name, Description;
 	Ext::Temperature Temperature;
-	volatile int32_t HwErrors;
+	atomic<int> aHwErrors;
 	CBool IsAmdGpu;
 //!!!	int Index;
 
 	ComputationDevice()
-		:	HwErrors(0)
+		:	aHwErrors(0)
 	{}
 
 	virtual void Start(BitcoinMiner& miner, thread_group *tr) =0;
@@ -367,16 +360,19 @@ public:
 	int m_msWait;
 	int NPAR;
 	
-	volatile int32_t HashCount;
+	atomic<int32_t> aHashCount;
 	volatile float ChainsExpectedCount;
-	volatile int32_t SubmittedCount, AcceptedCount;
+	atomic<int> aSubmittedCount, aAcceptedCount;
 
 	CInt<int> Intensity;
 	int Verbosity;
 	String UserAgentString;
 
-	CPointer<Coin::ConnectionClient> ConnectionClient;
+	observer_ptr<Coin::ConnectionClient> ConnectionClient;
 	ptr<Thread> ConnectionClientThread;
+
+	ptr<IWalletClient> WalletClient;
+	String DestinationAddress;
 	
 	mutex m_csCurrentData;
 	ptr<Coin::MinerBlock> MinerBlock;
@@ -387,13 +383,14 @@ public:
 	list<ptr<BitcoinWorkData>> WorksToSubmit;
 
 	DateTime m_dtNextGetWork;
+	CBool Pooled;
 
 	String MainBitcoinUrl, Login, Password;
 	DateTime m_dtSwichToMainUrl;
 	String ProxyString;
 
 	int ThreadCount;
-	CPointer<thread_group> m_tr;
+	observer_ptr<thread_group> m_tr;
 	vector<ptr<Thread> > Threads;
 	ptr<Thread> GetWorkThread;
 	ptr<Thread> GpuThread;
@@ -418,14 +415,14 @@ public:
 	virtual BitcoinWebClient GetWebClient(WorkerThreadBase *wt);
 //!!!	void SetNewData(const BitcoinWorkData& wd);
 	void SetNewData(const BitcoinWorkData& wd, bool bClearOld = false);
-	void SetWebInfo(WebClient& wc);
+	void SetWebInfo(const WebHeaderCollection& headers);
 	void CheckLongPolling(WebClient& wc, RCString longPollUri = nullptr, RCString longPollId = nullptr);
 	void CallNotifyRequest(WorkerThreadBase& wt, RCString url, RCString longPollId);	
 	
 	String GetMethodName(bool bSubmit);
 	ptr<BitcoinWorkData> GetWorkFromMinerBlock(const DateTime& now, Coin::MinerBlock *minerBlock);
 	virtual ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient);
-	virtual bool SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd);
+	virtual void SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd);
 	
 	void SetIntensity(int v) override {
 		Intensity = v;
@@ -484,7 +481,7 @@ class GpuMiner;
 class GpuTask : public BitcoinSha256 {
 public:
 	ptr<BitcoinWorkData> WorkData;
-	CPointer<WorkerThreadBase> m_pwt;
+	observer_ptr<WorkerThreadBase> m_pwt;
 	GpuMiner& m_gpuMiner;
 	int m_npar, m_nparOrig;
 	CBool m_bIsVector2;
@@ -531,7 +528,7 @@ struct CalEngineWrap {
 	CalEngine Engine;
 
 	static mutex s_cs;
-	static volatile int32_t RefCount;
+	static atomic<int> aRefCount;
 	static CalEngineWrap *I;
 	
 	static CalEngineWrap *Get() {
@@ -543,12 +540,12 @@ struct CalEngineWrap {
 	}
 
 	static void AddRef(CalEngineWrap *p) {
-		Interlocked::Increment(RefCount);
+		++aRefCount;
 	}
 
 	static void Release(CalEngineWrap *p) {
 		EXT_LOCK (s_cs) {
-			if (!Interlocked::Decrement(RefCount)) {
+			if (!--aRefCount) {
 				delete I;
 				I = nullptr;
 			}

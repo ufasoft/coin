@@ -1,14 +1,6 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "block-template.h"
-#include "prime-util.h"
 
 
 namespace Coin {
@@ -24,6 +16,8 @@ BinaryWriter& operator<<(BinaryWriter& wr, const MinerBlock& block) {
 }
 
 void MinerBlock::ReadJson(const VarValue& json) {
+//	TRC(4, "Bits: " << json["bits"].ToString());
+
 	Ver = (uint32_t)json["version"].ToInt64();
 	Height = uint32_t(json["height"].ToInt64());
 	PrevBlockHash = HashValue(json["previousblockhash"].ToString());
@@ -110,6 +104,16 @@ void MinerBlock::ReadJson(const VarValue& json) {
 //		Extranonce1 = Blob(0, 0);
 		Coinb2 = Blob(blob.data()+cbFirst, blob.Size-cbFirst);
 	}	
+
+	if (json.HasKey("longpollid")) {
+		LongPollId = json["longpollid"].ToString();
+		LongPollUrl = nullptr;
+		if (json.HasKey("longpolluri"))
+			LongPollUrl = json["longpolluri"].ToString();
+		else if (json.HasKey("longpoll"))
+			LongPollUrl = json["longpoll"].ToString();
+	}
+
 }
 
 HashValue MinerBlock::MerkleRoot(bool bSave) const {
@@ -167,72 +171,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	Coinb2 = Blob(coinbasetxn.constData()+coinb1Size+8, coinbasetxn.Size-coinb1Size-8);
 }
 
-void MinerShare::WriteHeader(BinaryWriter& wr) const {
-	base::WriteHeader(wr);
-	switch (Algo) {
-	case HashAlgo::Momentum:
-		wr << BirthdayA << BirthdayB;
-		break;
-	}
-}
 
-static HashValue s_hashMax("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-
-HashValue MinerShare::GetHash() const {
-	switch (Algo) {
-	case HashAlgo::Sha3:
-		{
-			MemoryStream ms;
-			base::WriteHeader(BinaryWriter(ms).Ref());
-			return HashValue(SHA3<256>().ComputeHash(ConstBuf(ms)));
-		}
-	case HashAlgo::Metis:
-		{
-			MemoryStream ms;
-			base::WriteHeader(BinaryWriter(ms).Ref());
-			return MetisHash(ms);
-		}
-	case HashAlgo::Momentum:
-		{
-			MemoryStream ms;
-			base::WriteHeader(BinaryWriter(ms).Ref());
-			if (!MomentumVerify(Coin::Hash(ms), BirthdayA, BirthdayB))
-				return s_hashMax;
-		}
-	default:
-		return base::GetHash();
-	}
-}
-
-HashValue MinerShare::GetHashPow() const {
-	switch (Algo) {
-	case HashAlgo::SCrypt:
-		{
-			MemoryStream ms;
-			WriteHeader(BinaryWriter(ms).Ref());
-			return ScryptHash(ms);
-		}
-		break;
-	default:
-		return GetHash();
-	}
-}
-
-void PrimeMinerShare::WriteHeader(BinaryWriter& wr) const {
-	base::WriteHeader(wr);
-	CoinSerialized::WriteBlob(wr, PrimeChainMultiplier.ToBytes());	
-}
-
-uint32_t PrimeMinerShare::GetDifficulty() const {
-	MemoryStream ms;
-	base::WriteHeader(BinaryWriter(ms).Ref());
-	HashValue h = Hash(ms);
-	if (h[31] < 0x80)
-		Throw(E_COIN_MINER_REJECTED);
-	BigInteger origin = HashValueToBigInteger(h) * PrimeChainMultiplier;
-	PrimeTester tester;				//!!!TODO move to some long-time scope
-	return uint32_t(tester.ProbablePrimeChainTest(Bn(origin)).BestTypeLength().second * 0x1000000);
-}
 
 
 } // Coin::

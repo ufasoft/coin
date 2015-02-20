@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -62,13 +55,16 @@ LiteEntry *Page::Entries(byte keySize) const {
 	}
 #endif
 
-	if (!m_pimpl->Entries) {
+	if (!m_pimpl->aEntries) {
 		PageHeader& h = Header();
-		LiteEntry *p = BuildLiteEntryIndex(h, Malloc(sizeof(LiteEntry) * (h.Num+1)), h.Num, m_pimpl->Storage.PageSize, keySize);
-		if (Interlocked::CompareExchange(m_pimpl->Entries, p, (LiteEntry*)0))
-			free(p);		
+		LiteEntry *p = BuildLiteEntryIndex(h, Malloc(sizeof(LiteEntry) * (h.Num+1)), h.Num, m_pimpl->View->Storage.PageSize, keySize);
+		for (LiteEntry *prev=0; !m_pimpl->aEntries.compare_exchange_weak(prev, p);)
+			if (prev) {
+				free(p);
+				break;
+			}
 	}
-	return m_pimpl->Entries;
+	return m_pimpl->aEntries;
 }
 
 #ifdef X_DEBUG//!!!D
@@ -85,7 +81,7 @@ void CheckPage(Page& page) {
 
 size_t Page::SizeLeft(byte keySize) const {
 	PageHeader& h = Header();
-	return m_pimpl->Storage.PageSize - (Entries(keySize)[h.Num].P - (byte*)&h);
+	return m_pimpl->View->Storage.PageSize - (Entries(keySize)[h.Num].P - (byte*)&h);
 }
 
 LiteEntry GetLiteEntry(const PagePos& pp, byte keySize) {
@@ -103,7 +99,7 @@ size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t ds
 int Page::FillPercent(byte keySize) {
 	LiteEntry *entries = Entries(keySize);
 	PageHeader& h = Header();
-	int pageSize = m_pimpl->Storage.PageSize;
+	int pageSize = m_pimpl->View->Storage.PageSize;
 	return h.Num ? int(pageSize - (entries[h.Num].P - h.Data))*100/pageSize : 0;
 }
 
@@ -115,7 +111,7 @@ void InsertCell(const PagePos& pagePos, const ConstBuf& cell, byte keySize) {
 	Page page = pagePos.Page;
 	PageObj& po = *page.m_pimpl;
 	if (po.Overflows || page.SizeLeft(keySize) < cell.Size) {
-		ASSERT(po.Overflows < _countof(po.OverflowCells));
+		ASSERT(po.Overflows < size(po.OverflowCells));
 		po.OverflowCells[po.Overflows++] = IndexedBuf(cell.P, (uint16_t)cell.Size, (uint16_t)pagePos.Pos);
 	} else {
 		PageHeader& h = page.Header();
@@ -137,7 +133,7 @@ uint32_t DeleteEntry(const PagePos& pp, byte keySize) {
 	LiteEntry *entries = pp.Page.Entries(keySize),
 		&e = entries[pp.Pos];
 	bool bBranch = pp.Page.IsBranch;
-	int r = bBranch || e.DataSize(keySize, h.KeyOffset()) == e.LocalData(pp.Page.m_pimpl->Storage.PageSize, keySize, h.KeyOffset()).Size ? DB_EOF_PGNO : e.FirstBigdataPage();
+	int r = bBranch || e.DataSize(keySize, h.KeyOffset()) == e.LocalData(pp.Page.m_pimpl->View->Storage.PageSize, keySize, h.KeyOffset()).Size ? DB_EOF_PGNO : e.FirstBigdataPage();
 	ssize_t off = e.Size();
 	byte *p = e.P - (int(bBranch)*4);
 	memmove(p, p+off, entries[h.Num--].P - p - off);
@@ -294,7 +290,7 @@ LAB_FOUND:
 	for (int i=0; i<newPages.size(); ++i) {
 		for (vector<Page>::iterator it=oldPages.begin(); it!=oldPages.end(); ++it) {
 			if (it->Dirty) {
-				ASSERT(!it->m_pimpl->Entries);
+				ASSERT(!it->m_pimpl->aEntries);
 
 				newPages[i].Page = *it;
 				oldPages.erase(it);
@@ -419,7 +415,7 @@ EntryDesc PagedMap::GetEntryDesc(const PagePos& pp) {
 	EntryDesc r;
 	r.P = e.P;
 	r.Size = e.Size();
-	size_t pageSize = pp.Page.m_pimpl->Storage.PageSize;
+	size_t pageSize = pp.Page.m_pimpl->View->Storage.PageSize;
 	r.DataSize = e.DataSize(KeySize, h.KeyOffset());
 	r.LocalData = e.LocalData(pageSize, KeySize, h.KeyOffset());
 	r.PgNo = (r.Overflowed = r.DataSize >= pageSize || r.LocalData.P+r.DataSize!=e.Upper()) ? e.FirstBigdataPage() : 0;
@@ -611,7 +607,7 @@ void static CopyPage(Page& pageFrom, Page& pageTo, byte keySize) {
 	memset((byte*)pageTo.Address+size, 0xFE, pageFrom.m_pimpl->Storage.PageSize-size);
 #endif
 
-	LiteEntry *dEntries = pageTo.m_pimpl->Entries = (LiteEntry*)Ext::Malloc(sizeof(LiteEntry)*(h.Num+1));
+	LiteEntry *dEntries = pageTo.m_pimpl->aEntries = (LiteEntry*)Ext::Malloc(sizeof(LiteEntry)*(h.Num+1));
 	ssize_t off = (byte*)pageTo.get_Address() - (byte*)pageFrom.get_Address();
 	for (int i=0, n=h.Num; i<=n; ++i)
 		dEntries[i].P = entries[i].P+off;

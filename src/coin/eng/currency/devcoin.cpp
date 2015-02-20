@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "../eng.h"
@@ -27,8 +20,8 @@ protected:
 	}
 
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block)  override {
-		TimeSpan targetSpan = TimeSpan::FromDays(blockLast.Height < 10700 ? 14 : 1);
-		int nInterval = int(targetSpan.TotalSeconds) / int(ChainParams.BlockSpan.TotalSeconds);
+		seconds targetSpan = hours(24 * (blockLast.Height < 10700 ? 14 : 1));
+		int nInterval = int(targetSpan / ChainParams.BlockSpan);
 		if (blockLast.Height < 10 || blockLast.Height < 10700 && ((blockLast.Height+1) % nInterval != 0))
 			return blockLast.DifficultyTarget;
 		BigInteger avg;
@@ -46,23 +39,12 @@ protected:
 			sort(vTimes.begin(), vTimes.end());
 			spanActual = (vTimes[vTimes.size()-6]-vTimes[6]) * double((nInterval-1)/(vTimes.size()-12));
 		}			
-		spanActual = std::min(std::max(spanActual, targetSpan/4), targetSpan*4);
-		return Target(avg*spanActual.get_Ticks()/targetSpan.get_Ticks());
+		spanActual = std::min(std::max(spanActual, TimeSpan(targetSpan/4)), TimeSpan(targetSpan*4));
+		return Target(avg * spanActual.count() / TimeSpan(targetSpan).count());
 	}
 };
 
-static class DevCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	DevCoinChainParams(bool)
-		:	base("DevCoin", false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-	DevCoinEng *CreateEng(CoinDb& cdb) override { return new DevCoinEng(cdb); }
-} s_devcoinParams(true);
-
+static CurrencyFactory<DevCoinEng> s_devcoin("DevCoin");
 
 } // Coin::
 

@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/crypto/hash.h>
@@ -60,7 +53,9 @@ HashAlgo StringToAlgo(RCString s) {
 		return HashAlgo::Sha3;
    	else if (ua == "SCRYPT")
 		return HashAlgo::SCrypt;
-   	else if (ua == "PRIME")
+	else if (ua == "NEOSCRYPT")
+		return HashAlgo::NeoSCrypt;
+	else if (ua == "PRIME")
    		return HashAlgo::Prime;
    	else if (ua == "MOMENTUM")
    		return HashAlgo::Momentum;
@@ -81,6 +76,12 @@ void BitsToTargetBE(uint32_t bits, byte target[32]) {
 		target[30-off] = byte(bits>>8);
 	if (off < 32 && off >= 0)
 		target[31-off] = byte(bits);
+}
+
+HashValue::HashValue(const hashval& hv) {
+	if (hv.size() != 32)
+		Throw(E_INVALIDARG);
+	memcpy(data(), hv.data(), hv.size());
 }
 
 HashValue::HashValue(const ConstBuf& mb) {
@@ -113,6 +114,7 @@ HashValue HashValue::FromShareDifficulty(double difficulty, HashAlgo algo) {
 		memcpy(r.data()+24, &(leTarget = htole(uint64_t(0x00000000FFFF0000ULL / difficulty))), 8);
 		break;
 	case HashAlgo::SCrypt:
+	case HashAlgo::NeoSCrypt:
 		memcpy(r.data()+23, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 		break;
 	case HashAlgo::Metis:
@@ -172,13 +174,6 @@ Blob CalcSha256Midstate(const ConstBuf& mb) {
 	SHA256().HashBlock(pv, (const byte*)w, 0);				// BitcoinSha256().CalcRounds(w, s_sha256_hinit, pv, 16, 0, 64);
 	for (int i=0; i<8; ++i)
 		pv[i] = htole(pv[i]);
-	return r;
-}
-
-HashValue ScryptHash(const ConstBuf& mb) {
-	array<uint32_t, 8> ar = CalcSCryptHash(mb);
-	HashValue r;
-	memcpy(r.data(), ar.data(), 32);
 	return r;
 }
 
@@ -353,6 +348,39 @@ CHasherEngThreadKeeper::~CHasherEngThreadKeeper() {
 
 HashValue Hash(const ConstBuf& mb) {
 	return HasherEng::GetCurrent()->HashBuf(mb);
+}
+
+static class CoinCategory : public error_category {
+	typedef error_category base;
+
+	const char *name() const noexcept override { return "Coin"; }
+
+	string message(int errval) const override {
+		return HResultToMessage(E_COIN_BASE + errval).c_str();
+	}
+} s_coin_category;
+
+const error_category& coin_category() {
+	return s_coin_category;
+}
+
+static const char * const s_reasons[] = {
+	"bad-cb-flag", "bad-cb-length", "bad-cb-prefix", "bad-diffbits", "bad-prevblk", "bad-txnmrklroot", "bad-txns", "bad-version", "duplicate", "high-hash", "rejected", "stale-prevblk", "stale-work",
+	"time-invalid", "time-too-new", "time-too-old", "unknown-user", "unknown-work"
+};
+
+void ThrowRejectionError(RCString reason) {
+	for (int i=0; i<size(s_reasons); ++i)
+		if (s_reasons[i] == reason)
+			Throw(E_COIN_MINER_BAD_CB_FLAG+i);
+	Throw(E_FAIL);
+}
+
+int SubmitRejectionCode(RCString rej) {
+	for (int i=0; i<size(s_reasons); ++i)
+		if (s_reasons[i] == rej)
+			return (E_COIN_MINER_BAD_CB_FLAG & 0xFFFF) + i;
+	return E_COIN_MINER_REJECTED & 0xFFFF;
 }
 
 

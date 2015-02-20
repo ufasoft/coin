@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #pragma once
 
 #include EXT_HEADER_DECIMAL
@@ -13,6 +5,8 @@ using namespace std::decimal;
 
 #include "util.h"
 #include "block-template.h"
+
+#define LOG(s) TRC(2, s)
 
 namespace Coin {
 
@@ -23,8 +17,8 @@ public:
 };
 
 struct TxInfo {
-	String Address;
 	HashValue HashTx, HashBlock;
+	String Address;
 	decimal64 Amount;
 	DateTime Timestamp;
 	int Confirmations;
@@ -33,8 +27,8 @@ struct TxInfo {
 	struct TxDetails {
 		String Account;
 		String Address;
-		CBool IsSend;
 		decimal64 Amount;
+		CBool IsSend;
 	};
 	vector<TxDetails> Details;
 };
@@ -57,25 +51,37 @@ struct BlockInfo {
 class IWalletClient : public Object {
 public:
 	String Name;
-	String DataDir;
-	CPointer<INewBlockNotify> OnNewBlockNotify;
-	IPEndPoint EpRpc,
-			EpApi;
+	path PathDaemon;
+	path DataDir;
+	observer_ptr<INewBlockNotify> OnNewBlockNotify;
+	
+	Uri RpcUrl;
+	String Login, Password;
+
+	IPEndPoint EpApi;
+	
+	mutex MtxHeaders;
+	WebHeaderCollection Headers;
+
 	bool IsTestNet;
 	bool Listen;
+	bool EnableNotifications;
 	bool WalletNotifications;
 
 	IWalletClient()
 		:	Listen(true)
 		,	IsTestNet(false)
+		,	EnableNotifications(true)
 		,	WalletNotifications(false)
+		,	Login("u")
+		,	Password("p")
 	{}
 
 	virtual void Start() =0;
 	virtual void Stop() =0;
 	virtual void StopOrKill() { Stop(); }
 	virtual int GetBestHeight()										{ Throw(E_NOTIMPL); }
-	virtual HashValue GetBlockHash(UInt32 height)					{ Throw(E_NOTIMPL); }
+	virtual HashValue GetBlockHash(uint32_t height)					{ Throw(E_NOTIMPL); }
 	virtual BlockInfo GetBlock(const HashValue& hashBlock)			{ Throw(E_NOTIMPL); }
 	virtual double GetDifficulty() 									{ Throw(E_NOTIMPL); }
 	virtual TxInfo GetTransaction(const HashValue& hashTx)			{ Throw(E_NOTIMPL); }
@@ -84,11 +90,12 @@ public:
 	virtual String GetAccountAddress(RCString account = "")										{ Throw(E_NOTIMPL); }
 	virtual HashValue SendToAddress(RCString address, decimal64 amount, RCString comment = "") 	{ Throw(E_NOTIMPL); }
 	virtual ptr<MinerBlock> GetBlockTemplate(const vector<String>& capabilities = vector<String>()) { Throw(E_NOTIMPL); }
-	virtual void SubmitBlock(const ConstBuf& data) 						{ Throw(E_NOTIMPL); }
+	virtual void GetWork(const ConstBuf& data) 						{ Throw(E_NOTIMPL); }
+	virtual void SubmitBlock(const ConstBuf& data, RCString workid) 						{ Throw(E_NOTIMPL); }
 	virtual String GetNewAddress(RCString account = nullptr)			{ Throw(E_NOTIMPL); }
 };
 
-ptr<IWalletClient> CreateRpcWalletClient(RCString name, RCString pathDaemon);
+ptr<IWalletClient> CreateRpcWalletClient(RCString name, const path& pathDaemon, WebClient *pwc = 0);
 ptr<IWalletClient> CreateInprocWalletClient(RCString name);
 
 enum class RpcCoinErr {
@@ -121,6 +128,6 @@ enum class RpcCoinErr {
 } // Coin::
 
 namespace Ext {
-	inline HRESULT HResult(Coin::RpcCoinErr err) { return MAKE_HRESULT(SEVERITY_ERROR, FACILITY_JSON_RPC, UInt16(err)); }
+	inline HRESULT HResult(Coin::RpcCoinErr err) { return MAKE_HRESULT(SEVERITY_ERROR, FACILITY_JSON_RPC, uint16_t(err)); }
 } // Ext::
 

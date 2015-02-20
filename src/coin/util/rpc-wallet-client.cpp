@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include <el/libext/ext-net.h>
@@ -21,16 +13,23 @@ using namespace Ext::Inet;
 
 namespace Coin {
 
-static volatile Int32 s_triedPort = 12000;
+static atomic<int> s_aTriedPort;
 
-decimal64 AmountToDecimal(const VarValue& v) {
-	return make_decimal64(Int64(v.ToDouble() * 100000000), -8);						//!!! not precise;
+static bool InitTriedPort() {
+	s_aTriedPort = 12000;
+	return true;
 }
 
-UInt16 GetFreePort() {
-	for (UInt16 port; (port=(UInt16)Interlocked::Increment(s_triedPort))<20000;) {
-		Socket sock;
-		sock.Open();
+static bool s_initTriedPort = InitTriedPort();
+
+
+decimal64 AmountToDecimal(const VarValue& v) {
+	return make_decimal64(int64_t(v.ToDouble() * 100000000), -8);						//!!! not precise;
+}
+
+uint16_t GetFreePort() {
+	for (uint16_t port; (port = uint16_t(++s_aTriedPort))<20000;) {
+		Socket sock(AddressFamily::InterNetwork);
 		try {
 			sock.Bind(IPEndPoint(IPAddress::Any, port));
 			return port;
@@ -42,9 +41,10 @@ UInt16 GetFreePort() {
 
 TxInfo ToTxInfo(const VarValue& v) {
 	TxInfo r;
-	r.Address = v["address"].ToString();
+	if (VarValue vAddress = v["address"])
+		r.Address = vAddress.ToString();
 	r.HashTx = HashValue(v["txid"].ToString());
-	r.Confirmations = Int32(v["confirmations"].ToInt64());
+	r.Confirmations = int32_t(v["confirmations"].ToInt64());
 	r.Timestamp = DateTime::from_time_t(v["time"].ToInt64());
 	if (r.Confirmations) {
 		r.HashBlock = HashValue(v["blockhash"].ToString());
@@ -67,15 +67,11 @@ TxInfo ToTxInfo(const VarValue& v) {
 
 class RpcWalletClient : public IWalletClient {
 public:
-	String PathDaemon;
-	String Login, Password;
 	Process m_process;
 	bool HasSubmitBlockMethod;
 
 	RpcWalletClient()
 		:	Stm(Sock)
-		,	Login("u")
-		,	Password("p")
 		,	HasSubmitBlockMethod(true)
 	{
 		m_wc.CacheLevel = RequestCacheLevel::BypassCache;
@@ -84,53 +80,60 @@ public:
 	}	
 	
 	void Start() override {
-		if (!EpRpc.Port) 
-			EpRpc = IPEndPoint(IPAddress::Loopback , GetFreePort());
+		if (!RpcUrl.get_Port())
+			RpcUrl = Uri("http://127.0.0.1:" + Convert::ToString(GetFreePort()));
 		else {
 			try {
-				DBG_LOCAL_IGNORE_WIN32(WSAECONNREFUSED);
-				DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_CANNOT_CONNECT);
+				DBG_LOCAL_IGNORE_CONDITION(errc::connection_refused);
 
 				Call("getinfo");			
 
-				try {
-					vector<Process> ps = Process::GetProcessesByName(Path::GetFileNameWithoutExtension(PathDaemon));	//!!! incorrect process can be selected and then terminated
-					if (!ps.empty())
-						m_process = ps.back();
-				} catch (RCExc) {
+				if (!PathDaemon.empty()) {
+					try {
+						vector<Process> ps = Process::GetProcessesByName(PathDaemon.stem());	//!!! incorrect process can be selected and then terminated
+						if (!ps.empty())
+							m_process = ps.back();
+					} catch (RCExc) {
+					}
 				}
 				return;
 			} catch (RCExc) {
 			}
 		}
 
-		String exeFilePath = System.ExeFilePath;
+		if (PathDaemon.empty()) {
+			LOG("Currency daemon for " << Name << " is unavailable");
+			return;
+		}
+		
+		String exeFilePath = System.get_ExeFilePath();
 		ostringstream os;
-		Directory::CreateDirectory(DataDir);
+		create_directories(DataDir);
 		Listen ? (os << " -port=" << GetFreePort()) : (os << " -listen=0");
-		os << " -rpcport=" << EpRpc.Port
+		os << " -rpcport=" << RpcUrl.get_Port()
 			<< " -rpcallowip=127.0.0.1"
 			<< " -rpcuser=" << Login
 			<< " -rpcpassword=" << Password
 			<< " -server"
 			<< (IsTestNet ? " -testnet" : "")
-			<< " -datadir=\"" << DataDir << "\""
-			<< " -blocknotify=\"" << exeFilePath << " " << EpApi << " blocknotify " << Name << " %s\""
+			<< " -datadir=\"" << DataDir << "\"";
+		if (EnableNotifications) {
+			os << " -blocknotify=\"" << exeFilePath << " " << EpApi << " blocknotify " << Name << " %s\""
 			<< " -alertnotify=\"" << exeFilePath << " " << EpApi << " alertnotify " << Name << " %s\"";		
-		if (WalletNotifications)
-			os << " -walletnotify=\"" << exeFilePath << " " << EpApi <<  " walletnotify " << Name << " %s\"";
+			if (WalletNotifications)
+				os << " -walletnotify=\"" << exeFilePath << " " << EpApi <<  " walletnotify " << Name << " %s\"";
+		}
 		ProcessStartInfo psi;
 		psi.Arguments = os.str();
 		psi.FileName = PathDaemon;
 		psi.EnvironmentVariables["ComSpec"] = exeFilePath;										// to avoid console window
-		TRC(2, "Starting: " << psi.FileName << " " << psi.Arguments);
 		m_process = Process::Start(psi);
 	}
 
 	void Stop() override {
 		TRC(2, "Stopping " << PathDaemon);
 		try {
-			DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_CANNOT_CONNECT);
+			DBG_LOCAL_IGNORE_CONDITION(errc::connection_refused);
 
 			Call("stop");
 		} catch (RCExc) {
@@ -142,7 +145,8 @@ public:
 	void StopOrKill() override {
 		try {
 			Stop();
-			m_process.WaitForExit(10000);
+			if (m_process)
+				m_process.WaitForExit(10000);
 		} catch (RCExc ex) {
 			TRC(1, ex.what());
 		}
@@ -161,14 +165,14 @@ public:
 		return (int)Call("getblockcount").ToInt64();
 	}
 
-	HashValue GetBlockHash(UInt32 height) override {
+	HashValue GetBlockHash(uint32_t height) override {
 		return HashValue(Call("getblockhash", (int)height).ToString());
 	}
 
-	BlockInfo GetBlock(const HashValue& hashBlock) {
+	BlockInfo GetBlock(const HashValue& hashBlock) override {
 		BlockInfo r;
 		VarValue v = Call("getblock", EXT_STR(hashBlock));
-		r.Version = (Int32)v["version"].ToInt64();
+		r.Version = (int32_t)v["version"].ToInt64();
 		r.Timestamp = DateTime::from_time_t(v["time"].ToInt64());
 		r.Hash = HashValue(v["hash"].ToString());
 		if (VarValue vpbh = v["previousblockhash"])
@@ -188,7 +192,7 @@ public:
 		return Call("getdifficulty").ToDouble();
 	}
 
-	TxInfo GetTransaction(const HashValue& hashTx) {
+	TxInfo GetTransaction(const HashValue& hashTx) override {
 		return ToTxInfo(Call("gettransaction", EXT_STR(hashTx)));
 	}
 
@@ -221,18 +225,34 @@ public:
 		return MinerBlock::FromJson(jr);
 	}
 
-	void SubmitBlock(const ConstBuf& data) {
+	void ProcessSubmitResult(const VarValue& v) {
+		switch (v.type()) {
+		case VarType::Null:
+			break;
+		case VarType::String:
+			{
+				String rej = v.ToString();
+				throw system_error(SubmitRejectionCode(rej), coin_category(), rej);
+			}
+		case VarType::Map:
+			throw system_error(SubmitRejectionCode("rejected"), coin_category(), String::Join(", ", v.Keys()));
+		default:
+			Throw(E_INVALIDARG);
+		}
+	}
+
+	void SubmitBlock(const ConstBuf& data, RCString workid) override {
 		String sdata = EXT_STR(data);
 		if (HasSubmitBlockMethod) {
 			try {
-				DBG_LOCAL_IGNORE_NAME(E_EXT_JSON_RPC_MethodNotFound, ignE_EXT_JSON_RPC_MethodNotFound);
-				Call("submitblock", sdata);
-			} catch (const JsonRpcExc& ex) {
+				DBG_LOCAL_IGNORE(E_EXT_JSON_RPC_MethodNotFound);
+				ProcessSubmitResult(workid.empty() ?Call("submitblock", sdata) : Call("submitblock", sdata));
+				return;
+			} catch (const system_error& ex) {
 				TRC(1, ex.what());
-				if (ex.HResult == E_EXT_JSON_RPC_MethodNotFound)
-					HasSubmitBlockMethod = false;
-				else
+				if (ex.code() != json_rpc_errc::MethodNotFound)
 					throw;
+				HasSubmitBlockMethod = false;
 			}
 		}
 		if (!HasSubmitBlockMethod) {
@@ -242,7 +262,11 @@ public:
 		}
 	}
 
-	String GetNewAddress(RCString account) {
+	void GetWork(const ConstBuf& data) {
+		ProcessSubmitResult(Call("getwork", EXT_STR(data)));
+	}
+
+	String GetNewAddress(RCString account) override {
 		return (!!account ? Call("getnewaddress", account) : Call("getnewaddress")).ToString();
 	}
 protected:
@@ -251,24 +275,29 @@ protected:
 	}
 
 	VarValue Call(RCString method, const vector<VarValue>& params = vector<VarValue>()) {
-		String url = EXT_STR("http://" << EpRpc);
 		Ext::WebClient wc = GetWebClient();
+		wc.Proxy = nullptr;		//!!!?
+		wc.CacheLevel = RequestCacheLevel::BypassCache;
+		wc.Credentials.UserName = !Login.empty() ? Login : RpcUrl.UserName;
+		wc.Credentials.Password = !Password.empty() ? Password : RpcUrl.Password;
+
 		String sjson;
 		try {
-			DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_HTTP, 500), ignoreHttp500);
-			sjson = wc.UploadString(url, JsonRpc.Request(method, params));
+			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_HTTP, 500));
+			sjson = wc.UploadString(RpcUrl.ToString(), JsonRpc.Request(method, params));
 		} catch (WebException& ex) {
-			sjson = StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+			sjson = ex.Result;
 		}
+#ifdef X_DEBUG//!!!D
+		cout << sjson << endl;
+#endif
 
-		VarValue v = ParseJson(sjson);
-		JsonResponse resp = JsonRpc.Response(v);
-		if (resp.Success)
-			return resp.Result;
-		JsonRpcExc exc(resp.Code);
-		exc.m_message = resp.JsonMessage;
-		exc.Data = resp.Data;
-		throw exc;		
+		EXT_LOCKED(MtxHeaders, Headers = wc.get_ResponseHeaders());
+/*!!!R			XStratum = h.Get("X-Stratum");
+			XSwitchTo = h.Get("X-Switch-To");
+			XHostList = h.Get("X-Host-List");*/
+
+		return JsonRpc.ProcessResponse(ParseJson(sjson));
 	}
 
 	VarValue Call(RCString method, const VarValue& v0) {
@@ -304,11 +333,15 @@ private:
 
 	mutex MtxRpc;
 	Ext::Inet::JsonRpc JsonRpc;
+
+	friend ptr<IWalletClient> CreateRpcWalletClient(RCString name, const path& pathDaemon, WebClient *pwc);
 };
 
 
-ptr<IWalletClient> CreateRpcWalletClient(RCString name, RCString pathDaemon) {
+ptr<IWalletClient> CreateRpcWalletClient(RCString name, const path& pathDaemon, WebClient *pwc) {
 	ptr<RpcWalletClient> r = new RpcWalletClient;
+	if (pwc)
+		r->m_wc = *pwc;
 	r->PathDaemon = pathDaemon;
 	r->Name = name;
 	return r.get();

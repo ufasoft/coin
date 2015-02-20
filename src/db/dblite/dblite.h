@@ -1,11 +1,5 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
+
 
 #include <el/stl/dynamic_bitset>
 #include EXT_HEADER_SHARED_MUTEX
@@ -61,32 +55,31 @@ class DbTransactionBase;
 class DbTable;
 class KVStorage;
 class PagedMap;
+class PageObj;
 
-class MMView : public Object {
-	typedef MMView class_type;
-	
-//!!!D	DBG_OBJECT_COUNTER(class_type);
+class ViewBase : public Object {
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	KVStorage& Storage;
-	MMView *Next, *Prev;		// for IntrusiveList<>
-
-	MemoryMappedView View;
+	ViewBase *Next, *Prev;		// for IntrusiveList<>
 	uint32_t N;
-	volatile bool Flushed;
+	volatile bool Flushed, Loaded;
 	bool Removed;
 
-	MMView(KVStorage& storage)
+    ViewBase(KVStorage& storage)
 		:	Storage(storage)
 		,	Flushed(false)
+		,	Loaded(false)
 		,	Removed(false)
 		,	Next(0)				// necessary to init
 		,	Prev(0)
-	{
-	}
+	{}
 
-	~MMView();
+	virtual void Load() {}
+	virtual void Flush() =0;
+	virtual void *GetAddress() =0;	
+	virtual PageObj *AllocPage(uint32_t pgno) =0;
 };
 
 struct IndexedBuf {
@@ -100,21 +93,25 @@ struct IndexedBuf {
 	{}
 };
 
-class PageObj : public Object {
+class PageObj : public Object {	
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
-	KVStorage& Storage;
-	void *Address;
-	ptr<MMView> View;
-	LiteEntry * volatile Entries;
+//!!!R	KVStorage& Storage;
+	void *m_address;
+	ptr<ViewBase> View;
+	atomic<LiteEntry*> aEntries;
 	IndexedBuf OverflowCells[2];
 	uint32_t N;
 	byte Overflows;
-	CBool Dirty, ReadOnly, Live;
+	CBool ReadOnly, Live;
+	volatile bool Dirty, Flushed;
 
 	PageObj(KVStorage& storage);
 	~PageObj();
+	inline void *GetAddress();
+
+	virtual void Flush() {}
 };
 
 
@@ -153,10 +150,10 @@ public:
 	bool get_Dirty() const { return m_pimpl->Dirty; }
 	DEFPROP_GET(bool, Dirty);
 
-	void *get_Address() const noexcept { return m_pimpl->Address; }
+	void *get_Address() const { return m_pimpl->GetAddress(); }
 	DEFPROP_GET(void *, Address);
 
-	__forceinline PageHeader& Header() const noexcept { return *(PageHeader*)m_pimpl->Address; }
+	__forceinline PageHeader& Header() const { return *(PageHeader*)m_pimpl->GetAddress(); }
 
 	byte get_Overflows() const { return m_pimpl->Overflows; }
 	DEFPROP_GET(byte, Overflows);
@@ -182,9 +179,29 @@ struct DbHeader;
 typedef unordered_set<uint32_t> CPgNos;
 typedef set<uint32_t> COrderedPgNos;
 
-class MappedFile : public Object {
+class Pager : public Object {	
 public:
-	Ext::MemoryMappedFile MemoryMappedFile;
+	KVStorage& Storage;
+
+	Pager(KVStorage& storage)
+		:	Storage(storage)
+	{}
+
+	virtual ~Pager() {
+	}
+
+	virtual void AddFullMapping(uint64_t fileLength) {}
+	virtual void Flush();
+	virtual void Close() {}
+	virtual ViewBase *CreateView() =0;
+};
+
+Pager *CreateMMapPager(KVStorage& storage);
+Pager *CreateBufferPager(KVStorage& storage);
+
+enum class ViewMode {
+	Window,
+	Full
 };
 
 class DBLITE_CLASS KVStorage {
@@ -195,7 +212,7 @@ public:
 
 	uint64_t FileLength;
 	uint64_t FileIncrement;
-	const size_t ViewSize;
+	size_t ViewSize;					// should be const
 	size_t PageSize;
 	uint32_t PageCount;
 
@@ -210,15 +227,10 @@ public:
 	//-----------------------------
 	recursive_mutex MtxViews; // used in ~PageObj()
 
-	list<ptr<MappedFile>> Mappings;
 
-	enum class ViewMode {
-		Window,
-		Full
-	};
+	bool UseMMapPager;
 
-	const ViewMode m_viewMode;
-	list<ptr<MMView>> m_fullViews;
+	ViewMode m_viewMode;
 
 	ViewMode m_accessViewMode;
 
@@ -230,7 +242,7 @@ public:
 //!!!R	LruCache<Page> PageCache;
 	uint32_t PageCacheSize, NewPageCount;
 
-	typedef unordered_map<uint32_t, ptr<MMView>> CViews;
+	typedef vector<ptr<ViewBase>> CViews;
 	CViews Views;
 
 
@@ -289,7 +301,11 @@ public:
 	void Vacuum();
 	bool Checkpoint() { return DoCheckpoint(); }
 
-	virtual Page OpenPage(uint32_t pgno);
+	ptr<ViewBase> OpenView(uint32_t vno);
+	ViewBase* GetViewNoLock(uint32_t vno);
+	virtual void OnOpenPage(uint32_t pgno) {}
+	void *GetPageAddress(ViewBase *view, uint32_t pgno);
+	Page OpenPage(uint32_t pgno, bool bAlloc = false);
 	Page Allocate(bool bLock = true);
 
 	void SetProgressHandler(int(*pfn)(void*), void* p = 0, int n = 1) {
@@ -318,6 +334,8 @@ public:
 protected:
 	COrderedPgNos m_nextFreePages;
 	uint32_t m_salt;
+	size_t PhysicalSectorSize;
+	size_t HeaderSize;
 
 	int(*m_pfnProgress)(void*);
 	int m_stepProgress;
@@ -335,6 +353,8 @@ private:
 	CBool m_bModified;
 	int m_bitsViewPageRatio;
 
+	ptr<Pager> m_pager;
+
 //!!!R	Page LastFreePoolPage;
 
 	uint32_t GetUInt32(uint32_t pgno, int offset);
@@ -342,7 +362,6 @@ private:
 	void DoClose(bool bLock);
 	void WriteHeader();
 	void MapMeta();
-	void AddFullMapping(uint64_t fileLength);
 	void Init();
 	bool DoCheckpoint(bool bLock = true);
 	uint32_t TryAllocateMappedFreePage();
@@ -350,10 +369,16 @@ private:
 	void FreePage(uint32_t pgno);
 	uint32_t NextFreePgno(COrderedPgNos& newFreePages);
 	void MarkAllocatedPage(uint32_t pgno);
+	void PrepareCreateOpen();
+	void Open(File::OpenInfo& oi);
+	void AfterOpenView(ViewBase *view, bool bNewView, bool bCacheLocked);
+	void AdjustViewCount();
 
 	friend class DbTransaction;
 	friend class HashTable;
 	friend class Filet;
+	friend class AllocatedPageObj;
+	friend class BufferView;
 };
 
 typedef KVStorage DbStorage;
@@ -602,9 +627,61 @@ public:
 	~CKVStorageKeeper();
 };
 
+inline void *PageObj::GetAddress() {
+	return m_address ? m_address
+		: m_address = View->Storage.GetPageAddress(View.get(), N);
+}
+
+
 #ifdef _DEBUG//!!!D
 void CheckPage(Page& page);
 #endif
+
+class FlushThread : public Thread {
+	typedef Thread base;
+public:
+	AutoResetEvent m_ev;
+protected:
+	void Execute() override;
+
+	void Stop() override {
+		base::Stop();
+		m_ev.Set();
+	}
+};
+
+typedef IntrusiveList<ViewBase> CLruViewList;
+
+class GlobalLruViewCache : public CLruViewList {
+public:
+	mutex Mtx;
+	condition_variable Cv;
+
+	ptr<ViewBase> m_viewProcessed;
+
+	GlobalLruViewCache()
+		: m_aRefCount(0) {
+	}
+
+	~GlobalLruViewCache();
+	void AddRef();
+	void Release();
+
+	void WakeUpFlush() {
+		Thread->m_ev.Set();
+	}
+private:
+	mutex m_mtxThread;
+	ptr<FlushThread> Thread;
+	//!!!R volatile int32_t RefCount;
+	atomic<int32_t> m_aRefCount;
+
+	void Execute();
+
+	friend class FlushThread;
+};
+
+extern InterlockedSingleton<GlobalLruViewCache> g_lruViewCache;
 
 }}} // Ext::DB::KV::
 

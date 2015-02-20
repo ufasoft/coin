@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/bignum.h>
@@ -31,7 +24,6 @@ public:
 	DateTime MyExpireTime;
 	Blob CoinbaseTxn;
 	int64_t CoinbaseValue;
-	size_t SizeExtraNonce2;
 	Blob ExtraNonce2; //!!!?
 	Blob Coinb1, ExtraNonce1, CoinbaseAux, Coinb2;
 	CCoinMerkleBranch MerkleBranch;
@@ -39,6 +31,7 @@ public:
 	uint32_t SizeLimit, SigopLimit;
 	pair<uint32_t, uint32_t> NonceRange;
 	HashAlgo Algo;
+	String LongPollId, LongPollUrl;
 
 	MinerBlock()
 		:	WorkId(nullptr)
@@ -46,7 +39,6 @@ public:
 		,	SizeLimit(UINT_MAX)
 		,	SigopLimit(UINT_MAX)
 		,	CoinbaseTxn(nullptr)
-		,	SizeExtraNonce2(4)
 		,	NonceRange(0, 0xFFFFFFFF)
 		,	MyExpireTime(DateTime::UtcNow() + TimeSpan::FromSeconds(1000))
 		,	Algo(HashAlgo::Sha256)
@@ -71,37 +63,6 @@ protected:
 
 BinaryWriter& operator<<(BinaryWriter& wr, const MinerBlock& minerBlock);
 
-
-class MinerShare : public BlockBase {
-	typedef BlockBase base;
-public:
-	HashAlgo Algo;
-	HashValue MerkleRootOriginal;
-	uint32_t BirthdayA, BirthdayB;
-	Blob ExtraNonce;
-	
-	void WriteHeader(BinaryWriter& wr) const override;
-	HashValue GetHash() const override;
-	Coin::HashValue MerkleRoot(bool bSave) const override { return m_merkleRoot.get(); }
-	virtual uint32_t GetDifficulty() const { Throw(E_NOTIMPL); }
-	virtual Coin::HashValue GetHashPow() const;
-protected:
-};
-
-class PrimeMinerShare : public MinerShare {
-	typedef MinerShare base;
-public:
-	PrimeMinerShare() {
-		Algo = HashAlgo::Prime;
-	}
-
-	BigInteger FixedMultiplier, PrimeChainMultiplier;
-	uint32_t SieveSize, SieveCandidate;
-
-protected:
-	void WriteHeader(BinaryWriter& wr) const override;
-	uint32_t GetDifficulty() const override;
-};
 
 
 

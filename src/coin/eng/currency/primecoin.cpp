@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "../util/prime-util.h"
@@ -130,12 +123,12 @@ protected:
 		double r = 7;
 		if (blockLast.Height > 1) {
 			const int INTERVAL = 7*24*60;
-			int nActualSpacing = (int)(blockLast.get_Timestamp() - blockLast.GetPrevBlock().get_Timestamp()).get_TotalSeconds();
+			seconds nActualSpacing = duration_cast<seconds>(blockLast.get_Timestamp() - blockLast.GetPrevBlock().get_Timestamp());
 			double targ = ((PrimeCoinBlockObj*)blockLast.m_pimpl.get())->GetTargetLength();
 			double d = GetFractionalDifficulty(targ);
-			int nTargetSpacing = (int)ChainParams.BlockSpan.get_TotalSeconds();
+			const seconds nTargetSpacing = ChainParams.BlockSpan;
 			
-			BigInteger bn = BigInteger((int64_t)floor(d * (1ULL << 32))) * (INTERVAL+1) * nTargetSpacing / ((INTERVAL-1) * nTargetSpacing + 2 * nActualSpacing);
+			BigInteger bn = BigInteger((int64_t)floor(d * (1ULL << 32))) * (INTERVAL+1) * nTargetSpacing.count() / ((INTERVAL-1) * nTargetSpacing.count() + 2 * nActualSpacing.count());
 			d = double(explicit_cast<int64_t>(bn)) / (1ULL << 32); 
 
 			d = max(1., min(double(1 << FRACTIONAL_BITS), d));
@@ -155,19 +148,7 @@ protected:
 	}
 };
 
-
-static class PrimeCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	PrimeCoinChainParams(bool)
-		:	base("Primecoin", false)
-	{	
-		ChainParams::Add(_self);		
-	}
-
-	PrimeCoinEng *CreateEng(CoinDb& cdb) override { return new PrimeCoinEng(cdb); }
-} s_primecoinParams(true);
-
+static CurrencyFactory<PrimeCoinEng> s_primecoin("Primecoin");
 
 } // Coin::
 
