@@ -40,6 +40,9 @@
     <Filter Include="comp\p2p">
       <UniqueIdentifier>{70d04523-1420-4a39-8298-96baa6739ce6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\backend-sqlite">
+      <UniqueIdentifier>{56311435-2adf-4160-b7b4-d85dae621222}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="coineng.cpp">
@@ -120,9 +123,6 @@
     <ClCompile Include="import-export-bdb.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="backend-sqlite.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="backend-dblite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -201,6 +201,21 @@
     <ClCompile Include="currency\earthcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
+    <ClCompile Include="currency\maxcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="backend-sqlite.cpp">
+      <Filter>Source Files\backend-sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\ixcoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha-1.cpp">
+      <Filter>comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\litecoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -245,7 +260,7 @@
     <ClInclude Include="..\..\el\db\ext-sqlite.h">
       <Filter>comp\h</Filter>
     </ClInclude>
-    <ClInclude Include="..\inc\util.h">
+    <ClInclude Include="..\util\util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\el\num\mod.h">
@@ -272,6 +287,12 @@
     <ClInclude Include="currency\namecoin.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="backend-dblite.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="backend-sqlite.h">
+      <Filter>Source Files\backend-sqlite</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="coineng.rc">
@@ -280,6 +301,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="coineng.def">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="coineng-64.def">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
