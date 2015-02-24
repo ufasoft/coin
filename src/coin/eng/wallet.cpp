@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -31,14 +29,14 @@ Wallet::Wallet(CoinEng& eng)
 Wallet::Wallet(CoinDb& cdb, RCString name)
 	:	m_peng(CoinEng::CreateObject(cdb, name))
 {
-	m_eng = m_peng.get();
+	m_eng.reset(m_peng.get());
 	Init();
 }
 
 void Wallet::Init() {
 	Progress = 1;
 	CurrentHeight = -1;
-	m_eng->m_iiEngEvents = this;
+	m_eng->m_iiEngEvents.reset(this);
 }
 
 DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx) {
@@ -388,7 +386,7 @@ void Wallet::OnBlockchainChanged() {
 				break;
 			}
 			Block block = m_eng->GetBlockByHeight(CurrentHeight+1);
-			if (m_eng->LiteMode) {
+			if (m_eng->Mode==EngMode::Lite) {
 				HashValue hash = Hash(block);
 				EXT_LOCK (m_eng->m_cdb.MtxDb) {
 					++CurrentHeight;
@@ -414,7 +412,7 @@ void Wallet::OnBlockchainChanged() {
 			}
 		}
 	}
-	if (m_eng->LiteMode && !m_eng->IsInitialBlockDownload())
+	if (m_eng->Mode==EngMode::Lite && !m_eng->IsInitialBlockDownload())
 		ProcessPendingTxes();
 	if (m_iiWalletEvents)
 		m_iiWalletEvents->OnStateChanged();
@@ -429,16 +427,16 @@ void Wallet::OnEraseTx(const HashValue& hashTx) {
 }
 
 CompactThread::CompactThread(Coin::Wallet& wallet)
-	:	base(&wallet.m_eng->m_tr)
-	,	Wallet(wallet)
-	,	m_i(0)
-	,	m_count(numeric_limits<uint32_t>::max())
+	: base(&wallet.m_eng->m_tr)
+	, Wallet(wallet)
+	, m_ai(0)
+	, m_count(numeric_limits<uint32_t>::max())
 {
 }
 
 static int CompactProgressHandler(void *p) {
 	CompactThread *t = (CompactThread*)p;
-	if (Interlocked::Increment(t->m_i) >= t->m_count)
+	if (++(t->m_ai) >= t->m_count)
 		t->m_count *= 2;
 	if (t->Wallet.m_iiWalletEvents)
 		t->Wallet.m_iiWalletEvents->OnStateChanged();
@@ -538,7 +536,7 @@ void Wallet::Rescan() {
 	if (RescanThread)
 		return;
 
-	if (m_eng->LiteMode) {
+	if (m_eng->Mode==EngMode::Lite) {
 		m_eng->PurgeDatabase();
 	} else if (m_eng->IsInitialBlockDownload())
 		Throw(E_COIN_RescanDisabledDuringInitialDownload);
@@ -647,7 +645,7 @@ void Wallet::Start() {
 		CurrentHeight = block.Height;
 
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		if (!m_eng->LiteMode) {
+		if (m_eng->Mode!=EngMode::Lite) {
 			if (!bIsInitialBlockDownload)
 				ReacceptWalletTxes();												//!!!TODO
 

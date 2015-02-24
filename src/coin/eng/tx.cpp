@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -86,7 +84,7 @@ void CoinsView::SpendInput(const OutPoint& op) {
 }
 
 
-//!!! static regex s_rePkScriptDestination("(\\x76\\xA9\\x14([^]{20,20})\\x88\\xAC|(\\x21|\\x41)([^]+)\\xAC)");		// binary, VC don't allows regex for binary data
+//!!! static regex s_rePkScriptDestination("(\\x76\\xA9\\x14(.{20,20})\\x88\\xAC|(\\x21|\\x41)(.+)\\xAC)");		// binary, VC don't allows regex for binary data
 
 byte TryParseDestination(const ConstBuf& pkScript, HashValue160& hash160, Blob& pubkey) {
 	const byte *p = pkScript.P;
@@ -223,7 +221,7 @@ void TxObj::ReadTxIns(const DbReader& rd) const {
 #endif
 			break;
 		case 0x7F:
-			if (eng.LiteMode)
+			if (eng.Mode==EngMode::Lite)
 				break;
 //!!!?			Throw(E_FAIL);
 		default:
@@ -670,7 +668,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 			case 20:
 			case 33:
 			case 65:
-				if (eng.LiteMode) {
+				if (eng.Mode==EngMode::Lite) {
 					wr.Write7BitEncoded(valtyp | 3);
 					break;
 				} else {
@@ -886,7 +884,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 	if (!IsCoinBase()) {
 		vector<Tx> vTxPrev;
 		int64_t nValueIn = 0;
-		if (!eng.LiteMode) {
+		if (eng.Mode!=EngMode::Lite) {
 //			TRC(3, TxIns.size() << " TxIns");
 
 			for (int i=0; i<TxIns().size(); ++i) {
@@ -932,7 +930,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 		if (bBlock)
 			eng.OnConnectInputs(_self, vTxPrev, bBlock, bMiner);
 
-		if (!eng.LiteMode)
+		if (eng.Mode!=EngMode::Lite)
 			CheckInOutValue(nValueIn, nFees, minFee, target);
 	}
 	if (nSigOp > MAX_BLOCK_SIGOPS)

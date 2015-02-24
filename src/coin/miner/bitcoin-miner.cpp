@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #ifndef UCFG_BITCOIN_SOLO_MINING
@@ -13,6 +5,16 @@
 #endif
 
 #include "miner.h"
+
+#if defined(_MSC_VER) && !defined(_AFXDLL)
+#	pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
+#	pragma comment(lib, "el-std")
+#	pragma comment(lib, "libext")
+#	pragma comment(lib, "cryp")
+#	pragma comment(lib, "coinutil")
+#	pragma comment(lib, "miner")
+#endif // defined(_MSC_VER) && !defined(_AFXDLL)
+
 
 #if UCFG_COIN_MINER_SERVICE
 #	include <el/win/nt.cpp>
@@ -102,14 +104,16 @@ void SoloMiner::StartChainEngs() {
 #	pragma comment(lib, "ws2_32")
 #	include <el/comp/crashdump.h>
 
-class MyCrashDump : public CCrashDump {
-public:
-	MyCrashDump() {
-		if (Typ == CrashDumpType::Email)
-			Typ = CrashDumpType::File;
-	}
-} g_crashDump;
-#endif
+	class MyCrashDump : public CCrashDump {
+	public:
+		MyCrashDump() {
+#	if UCFG_CRASH_DUMP == 1
+			if (Typ == CrashDumpType::Email)
+				Typ = CrashDumpType::File;
+#	endif
+		}
+	} g_crashDump;
+#endif // UCFG_BITCOIN_USE_CRASHDUMP
 
 class CMinerApp : public CConApp, public BitcoinMiner {
 public:
@@ -117,19 +121,20 @@ public:
 
 	CMinerApp() {
 		FileDescription = VER_FILEDESCRIPTION_STR;
-		SVersion			= VER_PRODUCTVERSION_STR;
+		SVersion = VER_PRODUCTVERSION_STR;
 		LegalCopyright = VER_LEGALCOPYRIGHT_STR;
 		Url = VER_EXT_URL;
 
 		MainBitcoinUrl = "http://127.0.0.1:8332";
 
-#if UCFG_WIN32 && !defined(_WIN64) && UCFG_BITCOIN_USE_CRASHDUMP
-		CUnhandledExceptionFilter::I->RestorePrev();
+#if UCFG_WIN32 && UCFG_BITCOIN_USE_CRASHDUMP
+		if (CUnhandledExceptionFilter::I)
+			CUnhandledExceptionFilter::I->RestorePrev();
 #endif
 	}
 
 	void PrintUsage() {
-		cout << "Usage: " << Path::GetFileNameWithoutExtension(System.ExeFilePath) << " {-options}"
+		cout << "Usage: " << System.get_ExeFilePath().stem() << " {-options}"
 #if UCFG_BITCOIN_SOLO_MINING
 			" [bitcoin-address | {bitcoin-address chainname}]"
 #endif
@@ -139,7 +144,7 @@ public:
 		for (Hasher *p=Hasher::GetRoot(); p; p=p->Next, ++nHasher) {
 			cout << (nHasher ? "|" : "") << p->Name;
 		}
-		cout <<	" |<seconds>   hashing algorithm or time between getwork requests 1..60, default 15\n"
+		cout <<	"|<seconds>   hashing algorithm or time between getwork requests 1..60, default 15\n"
 				"  -A user-agent       Set custom User-agent string in HTTP header, default: Ufasoft bitcoin miner \n"
 				"  -g yes|no           set \'no\' to disable GPU, default \'yes\'\n"
 				"  -h                  this help\n"
@@ -147,10 +152,12 @@ public:
 				"  -I intensity        Intensity of GPU usage [-10..10], default 0\n"
 				"  -l yes|no           set \'no\' to disable Long-Polling, default \'yes\'\n"
 				"  -o url              in form http://user:password@server.tld:port/path, stratum+tcp://server.tld:port, by default http://127.0.0.1:8332\n"
+				"  -p password         Password to Pool\n"
 				"  -t threads          Number of threads for CPU mining, 0..256, by default is number of CPUs (Cores), 0 - disable CPU mining\n"
 #if UCFG_BITCOIN_THERMAL_CONTROL
 				"  -T temperature      max temperature in Celsius degrees, default: " + Convert::ToString(MAX_GPU_TEMPERATURE) + "\n"
 #endif
+				"  -u login            Login to Pool\n"
 #if UCFG_COIN_MINER_SERVICE
 				"  -S                  Install service\n"
 				"  -U                  Uninstall service\n"
@@ -161,6 +168,19 @@ public:
 	}
 
 	void Execute() override	{
+#ifdef X_DEBUG//!!!D
+		cerr <<  HResultToMessage(E_SOCKS_InvalidVersion) << endl;
+		cerr <<  HResultToMessage(E_COIN_VerifySignatureFailed) << endl;
+#endif
+
+#if UCFG_COIN_MINER_CHECK_EXE_NAME
+		if (System.get_ExeFilePath().stem().native().find(VER_INTERNALNAME_STR) == String::npos) {
+			cerr << "The EXE must not be renamed" << endl;
+			Throw(2);
+		}
+#endif
+
+
 #if !UCFG_WIN32
 		CPreciseTimeBase::s_pCurrent = nullptr;
 #endif
@@ -293,14 +313,14 @@ public:
 			Throw(2);
 		}
 
-		miner->m_tr = &m_tr;
+		miner->m_tr.reset(&m_tr);
 		miner->InitDevices(selectedDevs);
 
 		if (!bMine) {
 			PrintUsage();
 			
 			cerr << "Device List:\n";
-			for (int i=0; i<Devices.size(); ++i) {
+			for (size_t i=0; i<Devices.size(); ++i) {
 				ComputationDevice& dev = *Devices[i];
 				cerr << setw(3) << i+1 << ". " << dev.Name << "\t" << dev.Description << "\n";
 			}
@@ -334,9 +354,9 @@ public:
 		}
 
 #if UCFG_TRC
-		static ofstream s_log("/var/log/miner.log");
-		CTrace::s_pOstream = &s_log;
-		CTrace::s_nLevel = 0x30000;
+//		static ofstream s_log("/var/log/miner.log");
+//		CTrace::s_pOstream = &cerr;
+//		CTrace::s_nLevel = 0x30000;
 #endif
 
 #if UCFG_COIN_MINER_SERVICE
@@ -347,8 +367,8 @@ public:
 			RunMinerAsService(*miner);
 			return;
 		} catch (AccessDeniedException) {
-		} catch (RCExc ex) {
-			if (HResultInCatch(ex) != HRESULT_FROM_WIN32(ERROR_FAILED_SERVICE_CONTROLLER_CONNECT))
+		} catch (system_error& ex) {
+			if (ex.code() != error_condition(ERROR_FAILED_SERVICE_CONTROLLER_CONNECT, win32_category()))
 				throw;
 		}		
 #endif
@@ -425,9 +445,9 @@ public:
 		}
 		miner->Stop();		//!!! we can't stop LongPolling with easy libcurl
 
-		double sec = (DateTime::UtcNow()-DtStart).TotalSeconds;
+		double sec = duration_cast<milliseconds>(DateTime::UtcNow()-DtStart).count() / 1000.0;
 		cerr << "\nProcessed: " << EntireHashCount/1000000 << " Mhash, " << int(sec) << " s with average Rate: " << miner->Speed/1000000  << " MHash/s"
-			<< "\nAccepted: " << AcceptedCount << ", average: " << AcceptedCount*60/sec << " shares/min"
+			<< "\nAccepted: " << aAcceptedCount << ", average: " << aAcceptedCount*60/(sec > 1 ? sec : 1) << " shares/min"
 			<< endl;
 	}
 
@@ -438,7 +458,6 @@ public:
 protected:
 
 } theApp;
-
 
 
 EXT_DEFINE_MAIN(theApp)
