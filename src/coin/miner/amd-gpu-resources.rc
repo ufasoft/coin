@@ -1,0 +1,14 @@
+#include "resource.h"
+
+phatk.cl				RCDATA					"phatk.cl"
+scrypt.cl				RCDATA					"scrypt.cl"
+
+#if UCFG_BITCOIN_USE_CUDA
+	phatk.ptx				RCDATA					"obj/phatk.ptx"
+#endif
+
+#if UCFG_BITCOIN_USE_CAL
+	btc.il 					RCDATA 					"obj/btc.il"
+	btc-evergreen.il		RCDATA					"obj/btc-evergreen.il"
+#endif
+
