@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -340,7 +338,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 
 		bool bFound = false;
 		DecodedTx dtPrev;
-		if (!LiteMode) {
+		if (Mode != EngMode::Lite && Mode != EngMode::BlockParser) {
 			for (int i=0; i<tx.TxIns().size(); ++i) {
 				const TxIn& txIn = tx.TxIns()[i];
 				const TxOut& txOut = vTxPrev[i].TxOuts()[txIn.PrevOutPoint.Index];
@@ -370,7 +368,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			{
 				if (GetNameNetFee(tx) < GetNetworkFee(tx.Height))
 					Throw(E_COIN_TxFeeIsLow);
-				if (!LiteMode) {
+				if (Mode != EngMode::Lite && Mode != EngMode::BlockParser) {
 					if (!bFound || dtPrev.Op != OP_NAME_NEW)
 						Throw(E_COIN_NAME_InvalidTx);
 				}
@@ -379,7 +377,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				int hPrev = NamecoinDb().GetNameHeight(dt.Args[0], heightExpired);
 				if (hPrev>=0 && hPrev > heightExpired)
 					Throw(E_COIN_NAME_ExpirationError);
-				if (!LiteMode) {
+				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], MIN_FIRSTUPDATE_DEPTH);
 					if (depth >= 0 && depth < MIN_FIRSTUPDATE_DEPTH)
 						Throw(E_COIN_NAME_ExpirationError);
@@ -394,7 +392,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			if (dt.Args[0].Size == 0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
-				if (!LiteMode) {
+				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {
 					if (!bFound || (dtPrev.Op != OP_NAME_FIRSTUPDATE && dtPrev.Op != OP_NAME_UPDATE))
 						Throw(E_COIN_NAME_InvalidTx);
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], GetExpirationDepth(tx.Height));
@@ -468,17 +466,7 @@ INamecoinDb& NamecoinEng::NamecoinDb() {
 	return dynamic_cast<NamecoinDbType&>(*Db);
 }
 
-static class NamecoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	NamecoinChainParams(bool)
-		:	base("Namecoin"			, false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-	NamecoinEng *CreateEng(CoinDb& cdb) override { return new NamecoinEng(cdb); }
-} s_namecoinParams(true);
+static CurrencyFactory<NamecoinEng> s_namecoin("Namecoin");
 
 } // Coin::
 

@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -39,7 +37,7 @@ public:
 		DateTime dtTx = GetTxObj(1).Timestamp;
 		if (!IsV02Protocol(dtTx))
 			base::CheckCoinStakeTimestamp();
-		else if (dtTx > Timestamp || Timestamp > dtTx+TimeSpan::FromSeconds(MAX_FUTURE_SECONDS)) 
+		else if (dtTx > Timestamp || Timestamp > dtTx + seconds(MAX_FUTURE_SECONDS)) 
 			Throw(E_COIN_TimestampViolation);
 	}
 
@@ -76,21 +74,7 @@ protected:
 	BlockObj *CreateBlockObj() override { return new PPCoinBlockObj; }
 };
 
-static class PPCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	PPCoinChainParams(bool)
-		:	base("PPCoin", false)
-	{	
-//!!!R		MaxPossibleTarget = Target(0x1D00FFFF);
-		ChainParams::Add(_self);
-	}
-
-	PPCoinEng *CreateEng(CoinDb& cdb) override { return new PPCoinEng(cdb); }
-} s_ppcoinParams(true);
-
-
-
+static CurrencyFactory<PPCoinEng> s_ppcoin("PPCoin");
 
 } // Coin::
 

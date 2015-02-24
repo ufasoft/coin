@@ -11,12 +11,8 @@
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
 
-/////////////////////////////////////////////////////////////////////////////
-// English (United States) resources
-
-#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
-LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
-#pragma code_page(1252)
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_RUS)
+LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -36,21 +32,28 @@ END
 
 3 TEXTINCLUDE 
 BEGIN
+    "#include <el/inc/ext.ver>\r\n"
+    "\r\n"
     "#include ""coin-msg.rc""\0"
 END
 
 #endif    // APSTUDIO_INVOKED
 
-#endif    // English (United States) resources
+#endif   
 /////////////////////////////////////////////////////////////////////////////
 
 
 
 #ifndef APSTUDIO_INVOKED
+
+1                       TYPELIB                 "coineng.tlb"
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // Generated from the TEXTINCLUDE 3 resource.
 //
+#include <el/inc/ext.ver>
+
 #include "coin-msg.rc"
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED

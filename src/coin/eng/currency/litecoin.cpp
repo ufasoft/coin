@@ -11,8 +11,7 @@
 
 namespace Coin {
 
-static CurrencyFactory<CoinEng> s_bitcoin("Bitcoin");
-static CurrencyFactory<CoinEng> s_bitcoinTestnet("Bitcoin-testnet");
+static CurrencyFactory<CoinEng> s_litecoin("LiteCoin");
 
 } // Coin::
 

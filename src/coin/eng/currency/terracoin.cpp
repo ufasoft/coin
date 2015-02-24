@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2014 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -39,19 +37,18 @@ protected:
 	}
 
 	TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval) override {
-		int r = (int)base::GetActualSpanForCalculatingTarget(bo, nInterval + int(bo.Height>99988)).TotalSeconds;
-		return TimeSpan::FromSeconds(
-			bo.Height > 181200 ? r
+		seconds r = duration_cast<seconds>(base::GetActualSpanForCalculatingTarget(bo, nInterval + int(bo.Height>99988)));
+		return bo.Height > 181200 ? r
 			: bo.Height > 101908 ? r / 3 * 3
 			: bo.Height > 99988 ? r / 24 * 24
-			: r);
+			: r;
 	}
 
 	TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) override {
 		if (height <= 192237)
 			return base::AdjustSpan(height, span, targetSpan);
-		int targetSeconds = int(targetSpan.TotalSeconds);
-		return TimeSpan::FromSeconds(clamp(int(span.TotalSeconds), int(targetSeconds/1.25), int(targetSeconds*1.25)));
+		int targetSeconds = (int)duration_cast<seconds>(targetSpan).count();
+		return clamp(duration_cast<seconds>(span), seconds(int(targetSeconds/1.25)), seconds(int(targetSeconds*1.25)));
 	}
 
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
@@ -69,43 +66,31 @@ protected:
 		if (block.get_Timestamp()-blockLast.Timestamp > ChainParams.BlockSpan*10 && blockLast.Height <= 175000)
 			r = Target(BigInteger(blockLast.get_DifficultyTarget()) * (blockLast.Height>101631 && blockLast.Height<103791 ? 10 : 2));
 		else {
-			const int PER_BLOCK_SPAN = (int)ChainParams.BlockSpan.TotalSeconds;	
-			vector<int> durations(2160);
+			const seconds PER_BLOCK_SPAN = duration_cast<seconds>(ChainParams.BlockSpan);
+			vector<seconds> durations(2160);
 			Block b = blockLast;
-			for (vector<int>::reverse_iterator it=durations.rbegin(), e=durations.rend(); it!=e; ++it) {
+			for (vector<seconds>::reverse_iterator it=durations.rbegin(), e=durations.rend(); it!=e; ++it) {
 				Block prev = b.GetPrevBlock();
-				int dur = (int)(exchange(b, prev).get_Timestamp()-prev.get_Timestamp()).TotalSeconds;
+				seconds dur = duration_cast<seconds>(exchange(b, prev).get_Timestamp()-prev.get_Timestamp());
 				if (blockLast.Height > 110322) {
 					dur = std::min(PER_BLOCK_SPAN*3/2, dur);
-					if (dur >= 0)
+					if (dur.count() >= 0)
 						dur = std::max(PER_BLOCK_SPAN/2, dur);
 				}
-				*it = dur<0 && blockLast.Height>104290 ? PER_BLOCK_SPAN : dur;
+				*it = dur.count()<0 && blockLast.Height>104290 ? PER_BLOCK_SPAN : dur;
 			}
-			float acc = (float)PER_BLOCK_SPAN;
+			float acc = (float)PER_BLOCK_SPAN.count();
 			for (int i=0; i<durations.size(); ++i)
-				acc = blockLast.Height>110322 ? 0.06f*durations[i] + (1-0.06f)*acc				// float/double conversions are not well defined. Another way to calculate diverges with reference TerraCoin implementation
-									: 0.09f*durations[i] + (1-0.09f)*acc;
-			int actualSpan = clamp((int)acc, PER_BLOCK_SPAN/2, PER_BLOCK_SPAN * (blockLast.Height>110322 ? 2 : 4));
-			r = Target(BigInteger(blockLast.get_DifficultyTarget()) * actualSpan / PER_BLOCK_SPAN);
+				acc = blockLast.Height>110322 ? 0.06f*durations[i].count() + (1-0.06f)*acc				// float/double conversions are not well defined. Another way to calculate diverges with reference TerraCoin implementation
+									: 0.09f*durations[i].count() + (1-0.09f)*acc;
+			seconds actualSpan = clamp(seconds((int)acc), PER_BLOCK_SPAN/2, PER_BLOCK_SPAN * (blockLast.Height>110322 ? 2 : 4));
+			r = Target(BigInteger(blockLast.get_DifficultyTarget()) * actualSpan.count() / PER_BLOCK_SPAN.count());
 		}
 		return blockLast.Height>104290 ? std::min(r, TERRACOIN_FIVE_THOUSAND_LIMIT) : r;
 	}
 };
 
-
-static class TerraCoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	TerraCoinChainParams(bool)
-		:	base("TerraCoin", false)
-	{	
-		ChainParams::Add(_self);
-	}
-
-	TerraCoinEng *CreateEng(CoinDb& cdb) override { return new TerraCoinEng(cdb); }
-} s_terracoinParams(true);
-
+static CurrencyFactory<TerraCoinEng> s_terracoin("TerraCoin");
 
 } // Coin::
 
