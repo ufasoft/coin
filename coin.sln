@@ -7,6 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "miner", "src\coin\miner\min
 	ProjectSection(ProjectDependencies) = postProject
 		{2E655587-19CA-432F-9805-69147DFD3BF4} = {2E655587-19CA-432F-9805-69147DFD3BF4}
 		{36580DA5-0AFE-41F6-AFB3-AFEF30CE9247} = {36580DA5-0AFE-41F6-AFB3-AFEF30CE9247}
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47} = {56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "coinutil", "src\coin\util\coinutil.vcxproj", "{2E655587-19CA-432F-9805-69147DFD3BF4}"
@@ -22,6 +23,11 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libext", "src\el\libext\libext.vcxproj", "{D57346A0-D0B6-4E23-9256-DB4034B5B0DB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mpir", "foreign\mpir\mpir.vcxproj", "{36580DA5-0AFE-41F6-AFB3-AFEF30CE9247}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cryp", "src\crypto\cryp\cryp.vcxproj", "{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D57346A0-D0B6-4E23-9256-DB4034B5B0DB} = {D57346A0-D0B6-4E23-9256-DB4034B5B0DB}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -158,6 +164,30 @@ Global
 		{36580DA5-0AFE-41F6-AFB3-AFEF30CE9247}.Release-static|x64.Build.0 = Release-static|x64
 		{36580DA5-0AFE-41F6-AFB3-AFEF30CE9247}.Release-static|x86.ActiveCfg = Release-static|Win32
 		{36580DA5-0AFE-41F6-AFB3-AFEF30CE9247}.Release-static|x86.Build.0 = Release-static|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.D_St|x64.ActiveCfg = D_St|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.D_St|x64.Build.0 = D_St|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.D_St|x86.ActiveCfg = D_St|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.D_St|x86.Build.0 = D_St|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug|x64.ActiveCfg = Debug|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug|x64.Build.0 = Debug|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug|x86.ActiveCfg = Debug|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug|x86.Build.0 = Debug|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug-static|x64.ActiveCfg = Debug|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug-static|x64.Build.0 = Debug|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug-static|x86.ActiveCfg = Debug|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Debug-static|x86.Build.0 = Debug|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.R_St|x64.ActiveCfg = R_St|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.R_St|x64.Build.0 = R_St|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.R_St|x86.ActiveCfg = R_St|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.R_St|x86.Build.0 = R_St|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release|x64.ActiveCfg = Release|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release|x64.Build.0 = Release|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release|x86.ActiveCfg = Release|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release|x86.Build.0 = Release|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release-static|x64.ActiveCfg = Release|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release-static|x64.Build.0 = Release|x64
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release-static|x86.ActiveCfg = Release|Win32
+		{56580DA5-0AFE-41F6-AFB3-AFEF30CE9F47}.Release-static|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

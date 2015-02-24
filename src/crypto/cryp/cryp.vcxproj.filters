@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{dc469f2d-251e-49eb-8030-0a555e2eb5ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{2f83e6b0-7d01-485c-8465-75796626e5b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{bf562845-21a0-4e3d-bcf9-b9fb3cd2c778}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="comp">
+      <UniqueIdentifier>{97cfe1e3-9955-49a7-aa92-39c513ee879d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="secp256k1_inc">
+      <UniqueIdentifier>{5cce225a-9776-47a2-9d6d-e54c2558ebff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\asm">
+      <UniqueIdentifier>{5a003bed-17de-4c3b-ba65-fce7a84d823f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="file_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cryp-config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="secp256k1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\FOREIGN\secp256k1\secp256k1.c">
+      <Filter>secp256k1_inc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\stdafx.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="secp256k1-envelop.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha512.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\blake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha256.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\scrypt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\salsa20.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\neoscrypt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cryp-64.def">
+      <Filter>Resources</Filter>
+    </None>
+    <None Include="cryp-86.def">
+      <Filter>Resources</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cryp.rc">
+      <Filter>Resources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="..\..\el\crypto\x86x64\sha256_x86x64.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+    <MASM Include="..\..\el\crypto\x86x64\blake_x86x64.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+    <MASM Include="..\..\el\crypto\x86x64\scrypt_x86x64.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+  </ItemGroup>
+</Project>
