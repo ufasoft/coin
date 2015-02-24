@@ -1,0 +1,132 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\el\inet\async-text-client.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\stdafx.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="solidcoin-hash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util-hash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
+      <Filter>Comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
+      <Filter>Comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="base58.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="prime-util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\num\mod.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\num\num.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="momentum.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="block-template.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="metis.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="metis-imp.c">
+      <Filter>Source Files\C</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\FOREIGN\sphlib\shavite.c">
+      <Filter>Source Files\C</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\FOREIGN\sphlib\keccak.c">
+      <Filter>Source Files\C</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha-3.cpp">
+      <Filter>Comp\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rpc-wallet-client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\json-rpc.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="file_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="prime-util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sph-config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="block-template.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\miner\miner-share.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wallet-client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Comp">
+      <UniqueIdentifier>{08ba300c-76f1-4c64-adb5-9848780525d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Comp\crypto">
+      <UniqueIdentifier>{a8991d6e-b9b6-4624-adf6-932b6858e497}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{a792ae0c-c5e6-4f8b-8bf2-452bc2db74b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{1db31dd6-b64b-4f89-8a19-48b55de39445}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{d8e416f8-0a35-40f3-8b18-a55b3f0691cc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\C">
+      <UniqueIdentifier>{a3d33afb-08f7-418e-8610-a389dfef2b4e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="coinutil.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Msg_Compiler Include="coin-msg.mc">
+      <Filter>Resource Files</Filter>
+    </Msg_Compiler>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="coinutil.def">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="coinutil-64.def">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

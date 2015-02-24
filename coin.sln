@@ -1,0 +1,61 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.22512.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "miner", "src\coin\miner\miner.vcxproj", "{172C68FB-4B34-4E24-CD7A-1D4561434F64}"
+	ProjectSection(ProjectDependencies) = postProject
+		{2E655587-19CA-432F-9805-69147DFD3BF4} = {2E655587-19CA-432F-9805-69147DFD3BF4}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "coinutil", "src\coin\util\coinutil.vcxproj", "{2E655587-19CA-432F-9805-69147DFD3BF4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		D_St|x64 = D_St|x64
+		D_St|x86 = D_St|x86
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		R_St|x64 = R_St|x64
+		R_St|x86 = R_St|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.D_St|x64.ActiveCfg = D_St|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.D_St|x64.Build.0 = D_St|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.D_St|x86.ActiveCfg = D_St|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.D_St|x86.Build.0 = D_St|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Debug|x64.ActiveCfg = Debug|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Debug|x64.Build.0 = Debug|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Debug|x86.ActiveCfg = Debug|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Debug|x86.Build.0 = Debug|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.R_St|x64.ActiveCfg = R_St|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.R_St|x64.Build.0 = R_St|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.R_St|x86.ActiveCfg = R_St|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.R_St|x86.Build.0 = R_St|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Release|x64.ActiveCfg = Release|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Release|x64.Build.0 = Release|x64
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Release|x86.ActiveCfg = Release|Win32
+		{172C68FB-4B34-4E24-CD7A-1D4561434F64}.Release|x86.Build.0 = Release|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.D_St|x64.ActiveCfg = D_St|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.D_St|x64.Build.0 = D_St|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.D_St|x86.ActiveCfg = D_St|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.D_St|x86.Build.0 = D_St|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Debug|x64.ActiveCfg = Debug|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Debug|x64.Build.0 = Debug|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Debug|x86.ActiveCfg = Debug|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Debug|x86.Build.0 = Debug|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.R_St|x64.ActiveCfg = R_St|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.R_St|x64.Build.0 = R_St|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.R_St|x86.ActiveCfg = R_St|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.R_St|x86.Build.0 = R_St|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Release|x64.ActiveCfg = Release|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Release|x64.Build.0 = Release|x64
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Release|x86.ActiveCfg = Release|Win32
+		{2E655587-19CA-432F-9805-69147DFD3BF4}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
