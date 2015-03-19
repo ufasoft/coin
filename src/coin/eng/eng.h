@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
 
 #include <el/db/ext-sqlite.h>
@@ -47,7 +40,7 @@ class CoinDb;
 class CoinLink;
 class VersionMessage;
 class VerackMessage;
-
+class ChainParams;
 class IBlockChainDb;
 }
 
@@ -85,13 +78,36 @@ public:
 	}
 };
 
-class ChainParams :	public StaticList<ChainParams> {
+class CurrencyFactoryBase : public StaticList<CurrencyFactoryBase> {
+	typedef StaticList<CurrencyFactoryBase> base;
+public:
+	String Name;
+
+	virtual CoinEng *CreateEng(CoinDb& cdb);
+protected:
+	CurrencyFactoryBase()
+		:	base(true)
+	{}
+};
+
+template <class T>
+class CurrencyFactory : public CurrencyFactoryBase {
+public:
+	CurrencyFactory(RCString name) {
+		Name = name;
+	}
+
+	CoinEng *CreateEng(CoinDb& cdb) override {
+		return new T(cdb);
+	}
+};
+
+class ChainParams {
 	typedef ChainParams class_type;
-	typedef StaticList<ChainParams> base;
 public:
 	String Name, Symbol;
 	HashValue Genesis;
-	TimeSpan BlockSpan;
+	seconds BlockSpan;
 	int64_t InitBlockValue;
 	int64_t CoinValue;
 	int64_t MaxMoney;
@@ -133,25 +149,11 @@ public:
 
 	ChainParams()
 		:	LastCheckpointHeight(-1)
-		,	AuxPowStartBlock(INT_MAX)
 	{
 		Init();
 	}	
 
-	ChainParams(RCString name, bool isTestNet)
-		:	base(true)
-		,	Name(name)
-		,	AuxPowStartBlock(INT_MAX)
-		,	IsTestNet(isTestNet)
-		,	HashAlgo(Coin::HashAlgo::Sha256)
-	{
-		Init();
-	}
-
-	static void Add(const ChainParams& p);
 	void Init();
-	virtual CoinEng *CreateEng(CoinDb& cdb);
-	virtual CoinEng *CreateObject(CoinDb& cdb);
 	void LoadFromXmlAttributes(IXmlAttributeCollection& xml);
 	int Log10CoinValue() const;				// precise calculation of log10(CoinValue)
 	void AddSeedEndpoint(RCString seed);
@@ -182,11 +184,11 @@ public:
 interface COIN_CLASS WalletBase : public Object {
 	typedef WalletBase class_type;
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
-	CPointer<CoinEng> m_eng;
+	observer_ptr<CoinEng> m_eng;
 	float Speed;
-	CPointer<IIWalletEvents> m_iiWalletEvents;
+	observer_ptr<IIWalletEvents> m_iiWalletEvents;
 
 	WalletBase(CoinEng& eng)
 		:	m_eng(&eng)
@@ -264,7 +266,7 @@ private:
 class CoinFilter : public BloomFilter, public Object, public CPersistent {
 	typedef BloomFilter base;
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	static const byte BLOOM_UPDATE_NONE = 0,
 		BLOOM_UPDATE_ALL = 1,
@@ -326,6 +328,7 @@ public:
 	String m_masterPassword;
 	array<byte, 8> Salt;
 	IPAddress LocalIp4, LocalIp6;
+	String ProxyString;
 	CBool m_bLoaded;
 
 	CoinDb();
@@ -426,7 +429,8 @@ ENUM_CLASS(EngMode) {
 	Lite,							// Don't download all block contents block
 	BlockParser,					// Download blocks, but don't save txes
 	Normal,
-	BlockExplorer					// Keep map<address, txes>
+	BlockExplorer,					// Keep map<address, txes>
+	Bootstrap						// Fast for Huge DB
 } END_ENUM_CLASS(EngMode)
 
 inline CoinEng& Eng() noexcept { return *(CoinEng*)HasherEng::GetCurrent(); }
@@ -467,7 +471,7 @@ public:
 	virtual Block FindBlock(int height)															=0;
 	virtual int GetMaxHeight()																	=0;
 	virtual TxHashesOutNums GetTxHashesOutNums(int height)										=0;
-	virtual void InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) =0;
+	virtual vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) =0;
 	virtual void DeleteBlock(int height, const vector<int64_t>& txids)							=0;
 
 	virtual bool FindTx(const HashValue& hash, Tx *ptx)											=0;
@@ -508,6 +512,7 @@ public:
 	recursive_mutex Mtx;
 
 	ptr<IBlockChainDb> Db;
+	uint64_t OffsetInBootstrap;
 
 	int m_idPeersNet;
 	std::exception_ptr CriticalException;
@@ -531,8 +536,9 @@ public:
 		CHashToHash m_prevHashToOrphanHash;
 	} TxPool;
 
-	CPointer<WalletBase> m_iiEngEvents;
+	observer_ptr<WalletBase> m_iiEngEvents;
 
+	static const int HEIGHT_BOOTSTRAPING = -2;
 	int UpgradingDatabaseHeight;
 	
 	ptr<Coin::ChannelClient> ChannelClient;
@@ -551,9 +557,6 @@ public:
 	EngMode get_Mode() { return m_mode; }
 	void put_Mode(EngMode mode);
 	DEFPROP(EngMode, Mode);
-
-	bool get_LiteMode() { return Mode == EngMode::Lite; }
-	DEFPROP_GET(bool, LiteMode);
 
 	CoinEng(CoinDb& cdb);
 	~CoinEng();
@@ -620,7 +623,7 @@ public:
 	virtual void OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner) {}
 	virtual void OnConnectBlock(const Block& block) {}
 	virtual void OnDisconnectInputs(const Tx& tx) {}
-	virtual bool ShouldBeSaved(const Tx& tx) { return !LiteMode; }
+	virtual bool ShouldBeSaved(const Tx& tx) { return Mode!=EngMode::Lite && Mode!=EngMode::BlockParser; }
 
 	virtual int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty = 0, bool bForCheck = false) {
 		return ChainParams.InitBlockValue >> (height/ChainParams.HalfLife);
@@ -754,6 +757,25 @@ private:
 	friend class CoinMessage;
 };
 
+class BootstrapDbThread : public Thread {
+	typedef Thread base;
+public:
+	CoinEng& Eng;
+	path PathBootstrap;
+
+	BootstrapDbThread(CoinEng& eng, const path& pthBootstrap)
+		:	base(&eng.m_tr)
+		,	Eng(eng)
+		,	PathBootstrap(pathBootstrap)
+	{}
+protected:
+	void BeforeStart() override {
+		Eng.UpgradingDatabaseHeight = CoinEng::HEIGHT_BOOTSTRAPING;
+	}
+
+	void Execute() override;
+};
+
 
 class CoinEngApp : public CAppBase {
 	typedef CoinEngApp class_type;
@@ -783,7 +805,7 @@ public:
 		,	HashTx(hashTx)
 	{
 	}
-
+protected:
 	String get_Message() const override {
 		return EXT_STR(base::get_Message() << " " << HashTx);
 	}
@@ -814,6 +836,7 @@ public:
 
 	~VersionException() noexcept {}		//!!! GCC 4.6
 
+protected:
 	String get_Message() const override {
 		return base::get_Message() + " " + Version.ToString(2);
 	}

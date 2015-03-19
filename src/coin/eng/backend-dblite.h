@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #pragma once
 
 #include <db/dblite/dblite.h>
@@ -89,6 +82,7 @@ public:
 	DbStorage m_db;
 	DbTable m_tableBlocks, m_tableHashToBlock, m_tableTxes, m_tablePubkeys, m_tablePubkeyToTxes, m_tableProperties;
 
+
 //!!!R	unique_ptr<DbTransaction> m_dbt;
 
 	DbliteBlockChainDb();
@@ -115,12 +109,13 @@ public:
 	Block FindBlock(int height) override;
 	int GetMaxHeight() override;
 	TxHashesOutNums GetTxHashesOutNums(int height) override;
-	void InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) override;
+	vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) override;
 
 	struct TxData {
 		uint32_t Height;
 		Blob Data, TxIns, Coins;
 		HashValue HashTx;
+		uint32_t TxOffset;
 
 		void Read(BinaryReader& rd);
 		void Write(BinaryWriter& wr, bool bWriteHash = false) const;
@@ -142,14 +137,9 @@ public:
 	TxDatas GetTxDatas(const ConstBuf& txid8);
 	void PutTxDatas(const ConstBuf& txKey, const TxDatas& txDatas);
 	void DeleteBlock(int height, const vector<int64_t>& txids) override;
+	void ReadTx(uint64_t off, Tx& tx);
 	bool FindTxById(const ConstBuf& txid8, Tx *ptx) override;
-
-	bool FindTx(const HashValue& hash, Tx *ptx) override {
-		bool r = FindTxById(ConstBuf(hash.data(), 8), ptx);
-		if (r && ptx)
-			ptx->SetHash(hash);
-		return r;
-	}
+	bool FindTx(const HashValue& hash, Tx *ptx) override;
 
 	void ReadTxIns(const HashValue& hash, const TxObj& txObj) override {
 		TxDatas txDatas = GetTxDatas(ConstBuf(hash.data(), 8));
@@ -181,10 +171,7 @@ public:
 //		m_dbt.reset(new MdbTransaction(m_db));
 	}
 
-	void Commit() override {
-//		m_dbt->Commit();
-//		m_dbt.reset();
-	}
+	void Commit() override;
 
 	void Rollback() override  {
 	//	m_dbt->Rollback();
@@ -201,8 +188,19 @@ public:
 protected:
 	virtual void OnOpenTables(DbTransaction& dbt, bool bCreate) {}
 private:
+	static const uint64_t MIN_MM_LENGTH = 1024*1024*1024;
+
+	File m_fileBootstrap;
+	MemoryMappedFile m_mmBootstrap;
+	MemoryMappedView m_viewBootstrap;
+	uint64_t MappedSize;
+
 	Block LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf);
 	bool TryToConvert(const path& p);
+	uint64_t GetBlockOffset(int height);
+	void OpenBootstrapFile(const path& dir);
+
+	friend class BootstrapDbThread;
 };
 
 

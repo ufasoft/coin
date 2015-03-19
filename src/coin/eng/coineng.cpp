@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -24,11 +22,14 @@
 
 using Ext::DB::DbException;
 
-template<> Coin::ChainParams * StaticList<Coin::ChainParams>::Root = 0;
+template<> Coin::CurrencyFactoryBase * StaticList<Coin::CurrencyFactoryBase>::Root = 0;
 
 namespace Coin {
 
 
+CoinEng *CurrencyFactoryBase::CreateEng(CoinDb& cdb) {
+	return new CoinEng(cdb);
+}
 
 void MsgLoopThread::Execute() {
 	Name = "MsgLoopThread";
@@ -36,7 +37,7 @@ void MsgLoopThread::Execute() {
 	DateTime dtNextPeriodic(0);
 
 	try {
-		DBG_LOCAL_IGNORE_WIN32(WSAENOTSOCK);
+		DBG_LOCAL_IGNORE_CONDITION(errc::not_a_socket);
 
 		while (!m_bStop) {			
 			DateTime now = DateTime::UtcNow();
@@ -61,20 +62,18 @@ void MsgLoopThread::Execute() {
 }
 
 
-void ChainParams::Add(const ChainParams& p) {
-//!!!	AvailableChains.insert(make_pair(p.Name, p));
-}
-
 void ChainParams::Init() {
+	IsTestNet = false;
 	HashAlgo = Coin::HashAlgo::Sha256;
 	ProtocolVersion = PROTOCOL_VERSION;
+	AuxPowStartBlock = INT_MAX;
 	CoinValue = 100000000;
 	InitBlockValue = CoinValue * 50;
 	MaxMoney = 21000000 * CoinValue;
 	HalfLife = 210000;
 	AnnualPercentageRate = 0;
 	MinTxFee = CoinValue/10000;
-	BlockSpan = TimeSpan::FromSeconds(600);
+	BlockSpan = seconds(600);
 	TargetInterval = 2016;
 	MinTxOutAmount = 0;
 	MaxPossibleTarget = Target(0x1D7FFFFF);
@@ -87,16 +86,6 @@ void ChainParams::Init() {
 	Listen = true;
 	MedianTimeSpan = 11;
 	AllowLiteMode = true;
-}
-
-CoinEng *ChainParams::CreateEng(CoinDb& cdb) {
-	return new CoinEng(cdb);
-}
-
-CoinEng *ChainParams::CreateObject(CoinDb& cdb) {
-	CoinEng *r = CreateEng(cdb);
-	r->SetChainParams(_self);
-	return r;
 }
 
 MyKeyInfo::~MyKeyInfo() {
@@ -178,6 +167,7 @@ CoinEng::CoinEng(CoinDb& cdb)
 	,	m_mode(EngMode::Normal)
 	,	AllowFreeTxes(true)
 	,	UpgradingDatabaseHeight(0)
+	,	OffsetInBootstrap(0)
 {
 }
 
@@ -211,7 +201,7 @@ void CoinEng::CommitTransactionIfStarted() {
 			Db->Commit();
 		
 #if UCFG_TRC
-			TRC(2, (DateTime::UtcNow()-dbgStart).TotalMilliseconds << " ms, LastBlock: " << BestBlockHeight());
+			TRC(2, duration_cast<milliseconds>(DateTime::UtcNow() - dbgStart).count() << " ms, LastBlock: " << BestBlockHeight());
 #endif
 		}
 	}
@@ -429,7 +419,7 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 	String a;
 
 	if (!(a = xml.GetAttribute("BlockSpan")).empty())
-		BlockSpan = TimeSpan::FromSeconds(stoi(a));
+		BlockSpan = seconds(stoi(a));
 
 	if (!(a = xml.GetAttribute("InitBlockValue")).empty())
 		InitBlockValue = CoinValue * stoll(a);
@@ -507,7 +497,7 @@ void ChainParams::AddSeedEndpoint(RCString seed) {
 
 ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 	path pathXml = System.GetExeDir() / "coin-chains.xml";
-	ptr<CoinEng> peng;
+	Coin::ChainParams params;
 	if (!exists(path(pathXml)))
 		Throw(E_COIN_XmlFileNotFound);
 	try {
@@ -521,8 +511,8 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 		XmlTextReader rd(ifs);
 #endif
  		for (bool b=rd.ReadToDescendant("Chain"); b; b=rd.ReadToNextSibling("Chain")) {
-			Coin::ChainParams params;
-			if (name == (params.Name = rd.GetAttribute("Name"))) {
+			if (name == rd.GetAttribute("Name")) {
+				params.Name = name;
 				params.LoadFromXmlAttributes(rd);
 				while (rd.Read()) {
 					if (rd.NodeType == XmlNodeType::Element || rd.NodeType == XmlNodeType::EndElement) {
@@ -546,15 +536,6 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 						}
 					}
 				}
-				
-				for (Coin::ChainParams *p=Coin::ChainParams::Root; p; p=p->Next) 
-					if (p->Name == name) {
-						params.MaxPossibleTarget = p->MaxPossibleTarget;
-						peng = p->CreateObject(cdb);
-					}
-				if (!peng)
-					peng = params.CreateObject(cdb);
-				peng->SetChainParams(params);
 				goto LAB_RET;
 			}
 		}
@@ -562,6 +543,11 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 	}
 	Throw(E_COIN_XmlFileNotFound);
 LAB_RET:
+	ptr<CoinEng> peng;
+	for (CurrencyFactoryBase *p=CurrencyFactoryBase::Root; p; p=p->Next)
+		if (p->Name == name)
+			peng = p->CreateEng(cdb);
+	(peng ? peng : (peng = new CoinEng(cdb)))->SetChainParams(params);
 	peng->ProtocolMagic = peng->ChainParams.ProtocolMagic;
 	peng->Listen = peng->ChainParams.Listen;
 	peng->DefaultPort = peng->ChainParams.DefaultPort;
@@ -645,7 +631,7 @@ void CoinEng::Start() {
 	if (Runned)
 		return;
 
-	EXT_LOCKED(m_cdb.MtxDb, Filter = LiteMode ? m_cdb.Filter : nullptr);
+	EXT_LOCKED(m_cdb.MtxDb, Filter = Mode==EngMode::Lite ? m_cdb.Filter : nullptr);
 
 	Net::Start();
 	EXT_LOCK (m_cdb.MtxNets) {
@@ -689,9 +675,7 @@ Block CoinEng::BestBlock() {
 }
 
 void CoinEng::SetBestBlock(const Block& b) {
-	EXT_LOCK (Caches.Mtx) {
-		Caches.m_bestBlock = b;
-	}
+	EXT_LOCKED(Caches.Mtx, Caches.m_bestBlock = b);
 }
 
 int CoinEng::BestBlockHeight() {
@@ -700,7 +684,7 @@ int CoinEng::BestBlockHeight() {
 
 void CoinEng::put_Mode(EngMode mode) {
 	if (!ChainParams.AllowLiteMode && mode==EngMode::Lite)
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 
 	bool bRunned = Runned;
 	if (bRunned)
@@ -773,6 +757,8 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		DBG_LOCAL_IGNORE(E_COIN_RecentCoinbase);
 		DBG_LOCAL_IGNORE(E_COIN_IncorrectProofOfWork);
 		DBG_LOCAL_IGNORE(E_COIN_RejectedByCheckpoint);
+		DBG_LOCAL_IGNORE(E_COIN_AlertVerifySignatureFailed);
+		DBG_LOCAL_IGNORE(E_COIN_ProofOfWorkFailed);
 
 		m->Process(*m->Link);
 	} catch (const DbException&) {
@@ -788,7 +774,7 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 			m_iiEngEvents->OnChange();
 		throw;
 	} catch (const PeerMisbehavingException& ex) {
-		TRC(2, ex.Message);
+		TRC(2, "Misbehaving " << ex.what());
 		Misbehaving(m, ex.HowMuch);
 	} catch (Exception& ex) {
 		switch (ToHResult(ex)) {
@@ -820,6 +806,7 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		case E_COIN_DupVersionMessage:
 			m->Link->Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
 		case E_COIN_VeryBigPayload:
+		case E_COIN_ProofOfWorkFailed:
 		default:
 			TRC(2, ex.what());
 LAB_MIS:
@@ -864,7 +851,7 @@ ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 
 void CoinEng::SendVersionMessage(Link& link) {
 	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
-	m->UserAgent = "/" MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/";		// BIP 0014
+	m->UserAgent = "/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/";		// BIP 0014
 	m->RemoteTimestamp = DateTime::UtcNow();
 	RandomRef().NextBytes(Buf(&m->Nonce, sizeof m->Nonce));
 	EXT_LOCK (m_mtxVerNonce) {
@@ -990,8 +977,7 @@ CoinEngApp::CoinEngApp() {
 #if UCFG_TRC //!!!D
 	if (!CTrace::s_nLevel)
 		CTrace::s_nLevel = 0x3F;
-	static ofstream s_ofs((get_AppDataDir() / "coin.log").native().ToOsString(), ios::binary);
-	CTrace::s_pOstream = &s_ofs;//!!!D
+	CTrace::SetOStream(new ofstream((get_AppDataDir() / "coin.log").native().ToOsString(), ios::binary));
 	TRC(0, "Starting");
 #endif
 }
@@ -1009,8 +995,6 @@ void SetUserVersion(SqliteConnection& db, const Version& ver) {
 }
 
 const Version
-//!!!R	NAMECOIN_VER_DOMAINS_TABLE(0, 26),
-//!!!R	VER_DUPLICATED_TX(0, 27),
 	VER_NORMALIZED_KEYS(0, 30),
 	VER_KEYS32(0, 35),
 	VER_INDEXED_PEERS(0, 35),
@@ -1048,6 +1032,9 @@ path CoinEng::VGetDbFilePath() {
    			break;
    		case EngMode::BlockExplorer:
    			r += ".explorer";
+   			break;
+   		case EngMode::Bootstrap:
+   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol / (ChainParams.Symbol + ".bootstrap-index");
    			break;
    		}
    	}
@@ -1101,12 +1088,18 @@ void CoinEng::Load() {
 	path dbFilePath = GetDbFilePath();
 	create_directories(dbFilePath.parent_path());
 	bool bContinue;
+	OffsetInBootstrap = 0;
 	if (exists(dbFilePath)) {
 		bContinue = OpenDb();
 		if (bContinue)
 			TryUpgradeDb();
 	} else
 		bContinue = CreateDb();
+
+	path pathBootstrap = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol / "bootstrap.dat";
+	TRC(2, "Checking for " << pathBootstrap);
+	if (exists(pathBootstrap) && OffsetInBootstrap < file_size(pathBootstrap))
+		(new BootstrapDbThread(_self))->Start();
 
 	ContinueLoad0();
 	if (bContinue)
@@ -1121,7 +1114,7 @@ VersionMessage::VersionMessage()
 	,	RelayTxes(true)
 {
 	CoinEng& eng = Eng();
-	if (eng.LiteMode)
+	if (eng.Mode == EngMode::Lite)
 		RelayTxes = !eng.Filter;
 	else
 		Services |= NODE_NETWORK;
@@ -1231,7 +1224,7 @@ void InvMessage::Process(P2P::Link& link) {
 	if (!eng.BestBlock()) {
 		TRC(1, "Requesting for block " << eng.ChainParams.Genesis);
 
-		m->Invs.push_back(Inventory(eng.LiteMode ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
+		m->Invs.push_back(Inventory(eng.Mode==EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
 	}
 
 	Inventory invLastBlock;
@@ -1246,7 +1239,7 @@ void InvMessage::Process(P2P::Link& link) {
 #endif
 
 		if (eng.Have(inv)) {
-			if (inv.Type==InventoryType::MSG_BLOCK || eng.LiteMode && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
+			if (inv.Type==InventoryType::MSG_BLOCK || eng.Mode==EngMode::Lite && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
 				Block orphanRoot(nullptr);
 				EXT_LOCK (eng.Caches.Mtx) {
 					Block block(nullptr);
@@ -1260,8 +1253,8 @@ void InvMessage::Process(P2P::Link& link) {
 														// If we are stuck on a (very long) side chain, this is necessary to connect earlier received orphan blocks to the chain again.
 			}
 		} else {
-			if (inv.Type==InventoryType::MSG_BLOCK || eng.LiteMode && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
-				m->Invs.push_back(eng.LiteMode ? Inventory(InventoryType::MSG_FILTERED_BLOCK, inv.HashValue) : inv);
+			if (inv.Type==InventoryType::MSG_BLOCK || eng.Mode==EngMode::Lite && inv.Type==InventoryType::MSG_FILTERED_BLOCK) {
+				m->Invs.push_back(eng.Mode==EngMode::Lite ? Inventory(InventoryType::MSG_FILTERED_BLOCK, inv.HashValue) : inv);
 			} else {
 				switch (eng.Mode) {
 				case EngMode::BlockExplorer:
@@ -1297,7 +1290,7 @@ void GetDataMessage::Process(P2P::Link& link) {
 		switch (inv.Type) {
 		case InventoryType::MSG_BLOCK:
 		case InventoryType::MSG_FILTERED_BLOCK:
-			if (eng.LiteMode)
+			if (eng.Mode==EngMode::Lite)
 				break;
 
 #if UCFG_DEBUG //!!!
@@ -1360,7 +1353,7 @@ void GetDataMessage::Process(P2P::Link& link) {
 
 void NotFoundMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
-	if (eng.LiteMode) {
+	if (eng.Mode==EngMode::Lite) {
 		//!!!TODO
 	}
 }
@@ -1449,7 +1442,7 @@ void MerkleBlockMessage::Read(const BinaryReader& rd) {
 void MerkleBlockMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 	CoinLink& clink = static_cast<CoinLink&>(link);
-	if (eng.LiteMode) {
+	if (eng.Mode==EngMode::Lite) {
 #ifdef X_DEBUG//!!!D
 		static mutex s_mtx;
 		lock_guard<mutex> lk(s_mtx);

@@ -1,10 +1,3 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "param.h"
@@ -69,6 +62,10 @@ DbliteBlockChainDb::DbliteBlockChainDb()
 {
 	DefaultFileExt = ".udb";
 
+#ifdef _DEBUG//!!!D
+//	m_db.UseMMapPager = false;
+#endif
+
 	m_db.AsyncClose = true;
 	m_db.Durability = false;
 	m_db.UseFlush = false;			//!!!?
@@ -121,6 +118,23 @@ public:
 
 ITransactionable& DbliteBlockChainDb::GetSavepointObject() {
 	return *(new SavepointTransaction(_self));
+}
+
+
+const ConstBuf MAX_HEIGHT_KEY("MaxHeight", 9);
+
+int DbliteBlockChainDb::GetMaxHeight() {
+	DbReadTxRef dbt(m_db);
+	if (m_db.UserVersion < VER_BLOCKS_TABLE_IS_HASHTABLE) {
+		DbCursor c(dbt, m_tableBlocks);
+		if (c.Seek(CursorPos::Last))
+			return BlockKey(c.Key);
+	} else {
+		DbCursor c(dbt, m_tableProperties);
+		if (c.SeekToKey(MAX_HEIGHT_KEY))
+			return letoh(*(int32_t*)c.get_Data().P);
+	}
+	return -1;
 }
 
 #if UCFG_COIN_CONVERT_TO_UDB
@@ -220,10 +234,42 @@ bool DbliteBlockChainDb::TryToConvert(const path& p) {
 	return false;
 }
 
+uint64_t DbliteBlockChainDb::GetBlockOffset(int height) {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableBlocks);
+	if (!c.Get(BlockKey(height)))
+		Throw(E_COIN_InconsistentDatabase);
+	return letoh(*(uint64_t UNALIGNED *)c.get_Data().P);
+}
+
+void DbliteBlockChainDb::OpenBootstrapFile(const path& dir) {
+	File::OpenInfo oi;
+	oi.Path = dir / "bootstrap.dat";
+	oi.Mode = FileMode::OpenOrCreate;
+	oi.Share = FileShare::Read;
+	oi.Options = FileOptions::RandomAccess;
+	m_fileBootstrap.Open(oi);
+	int h = GetMaxHeight();
+	if (h != -1)
+		PositionOwningFileStream stm(m_fileBootstrap, GetBlockOffset(h));
+		Block block;
+		BinaryReader(stm) >> block;
+		Eng().OffsetInBootstrap = stm.Position;
+	}
+
+	MappedSize = 0;
+#if UCFG_CPU_X86_X64
+	if (m_fileBootstrap.Length > MIN_MM_LENGTH) {
+		m_mmBootstrap = MemoryMappedFile::CreateFromFile(m_fileBootstrap, nullptr, 0, MemoryMappedFileAccess::Read);
+		m_viewBootstrap = m_mmBootstrap.CreateView(0, MappedSize = m_fileBootstrap.Length & ~0xFFFFull, MemoryMappedFileAccess::Read);
+	}
+#endif	
+}
+
 bool DbliteBlockChainDb::Create(const path& p) {
 	CoinEng& eng = Eng();
 	
-	if (eng.LiteMode)
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		m_db.UseFlush = true;
 	m_db.AppName = VER_INTERNALNAME_STR;
 	m_db.UserVersion = Version(VER_PRODUCTVERSION);
@@ -242,6 +288,9 @@ bool DbliteBlockChainDb::Create(const path& p) {
 		dbt.Commit();
 	}
 	m_db.Checkpoint();
+	if (eng.Mode == EngMode::Bootstrap)
+		OpenBootstrapFile(p.parent_path());
+
 	if (TryToConvert(p))
 		return false;
 
@@ -251,7 +300,7 @@ bool DbliteBlockChainDb::Create(const path& p) {
 bool DbliteBlockChainDb::Open(const path& p) {
 	CoinEng& eng = Eng();
 
-	if (eng.LiteMode)
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		m_db.UseFlush = true;
 	m_db.Open(p);
 	{
@@ -268,10 +317,20 @@ bool DbliteBlockChainDb::Open(const path& p) {
 		}
 		OnOpenTables(dbt, false);
 	}
+	if (eng.Mode == EngMode::Bootstrap)
+		OpenBootstrapFile(p.parent_path());
 	if (TryToConvert(p))
 		return false;
 	return true;
 }
+
+void DbliteBlockChainDb::Commit() {
+	if (Eng().Mode == EngMode::Bootstrap)
+		m_fileBootstrap.Flush();
+	//		m_dbt->Commit();
+	//		m_dbt.reset();
+}
+
 
 void DbliteBlockChainDb::Close(bool bAsync) {
 //!!!!R		m_dbt.reset();
@@ -284,6 +343,10 @@ void DbliteBlockChainDb::Close(bool bAsync) {
 	m_tablePubkeyToTxes.Close();
 	m_db.AsyncClose = bAsync;
 	m_db.Close();
+
+	m_viewBootstrap.Unmap();
+	m_mmBootstrap.Close();
+	m_fileBootstrap.Close();
 }
 
 Version DbliteBlockChainDb::CheckUserVersion() {
@@ -299,23 +362,6 @@ Version DbliteBlockChainDb::CheckUserVersion() {
     	throw VersionException(dver);
     }
     return dver;
-}
-
-const ConstBuf MAX_HEIGHT_KEY("MaxHeight", 9);
-
-int DbliteBlockChainDb::GetMaxHeight() {
-	DbReadTxRef dbt(m_db);
-	if (m_db.UserVersion < VER_BLOCKS_TABLE_IS_HASHTABLE) {
-		DbCursor c(dbt, m_tableBlocks);
-		if (!c.Seek(CursorPos::Last))
-			return -1;
-		return BlockKey(c.Key);
-	} else {
-		DbCursor c(dbt, m_tableProperties);
-		if (!c.SeekToKey(MAX_HEIGHT_KEY))
-			return -1;
-		return letoh(*(int32_t*)c.get_Data().P);
-	}
 }
 
 void DbliteBlockChainDb::UpgradeTo(const Version& ver) {
@@ -346,34 +392,40 @@ void DbliteBlockChainDb::TryUpgradeDb(const Version& verApp) {
 Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf) {
 	CoinEng& eng = Eng();
 
-	CMemReadStream msBlock(cbuf);
-	BinaryReader rd(msBlock);
-
-	Blob blob;
-	rd >> blob;
-	BlockHashValue hash(blob);
 	Block r;
 	r.m_pimpl->Height = height;
+	if (eng.Mode == EngMode::Bootstrap) {
+		uint64_t off = letoh(*(uint64_t UNALIGNED *)cbuf.P);
+		PositionOwningFileStream stm(m_fileBootstrap, off);
+		r.Read(BinaryReader(stm));
+		r.m_pimpl->OffsetInBootstrap = off;
+	} else {
+		CMemReadStream msBlock(cbuf);
+		BinaryReader rd(msBlock);
 
-	rd >> blob;
-	CMemReadStream ms(blob);
-	r.m_pimpl->Read(DbReader(ms, &eng));
-	r.m_pimpl->m_hash = hash;
+		Blob blob;
+		rd >> blob;
+		BlockHashValue hash(blob);
 
-	rd >> blob;
-	r.m_pimpl->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
+		rd >> blob;
+		CMemReadStream ms(blob);
+		r.m_pimpl->Read(DbReader(ms, &eng));
+		r.m_pimpl->m_hash = hash;
 
-	if (r.Height > 0) {
-		DbCursor c(dbt, m_tableBlocks);
-		if (!c.Get(BlockKey(height-1)))
-			Throw(E_COIN_InconsistentDatabase);
-		CMemReadStream msPrev(c.Data);
-		BinaryReader(msPrev) >> blob;
-		r.m_pimpl->PrevBlockHash = BlockHashValue(blob);
-	}
+		rd >> blob;
+		r.m_pimpl->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
 
-//!!!	ASSERT(Hash(r) == hash);
-	
+		if (r.Height > 0) {
+			DbCursor c(dbt, m_tableBlocks);
+			if (!c.Get(BlockKey(height-1)))
+				Throw(E_COIN_InconsistentDatabase);
+			CMemReadStream msPrev(c.Data);
+			BinaryReader(msPrev) >> blob;
+			r.m_pimpl->PrevBlockHash = BlockHashValue(blob);
+		}
+
+	//!!!	ASSERT(Hash(r) == hash);
+	}	
 	return r;
 }
 
@@ -412,13 +464,42 @@ TxHashesOutNums DbliteBlockChainDb::GetTxHashesOutNums(int height) {
 	return TxHashesOutNums(blob);
 }
 
-void DbliteBlockChainDb::InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) {
-	ASSERT(height < 0xFFFFFF);
+vector<uint32_t> DbliteBlockChainDb::InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) {
+	vector<uint32_t> txOffsets;
 
+	int height = block.Height;
+	ASSERT(height < 0xFFFFFF);
+	HashValue hash = Hash(block);
 	BlockKey blockKey(height);
 	MemoryStream msB;
 	BinaryWriter wrT(msB);
-	wrT << ConstBuf(ReducedBlockHash(hash)) << data << txData;
+
+	CoinEng& eng = Eng();
+	if (eng.Mode == EngMode::Bootstrap) {
+		MemoryStream ms;
+		BinaryWriter wr(ms);
+		wr << eng.ChainParams.ProtocolMagic << uint32_t(0);
+		block.m_pimpl->WriteHeader(wr);
+		const CTxes& txes = block.m_pimpl->get_Txes();
+		txOffsets.resize(txes.size());
+		CoinSerialized::WriteVarInt(wr, txes.size());
+		for (size_t i=0; i<txes.size(); ++i) {
+			txOffsets[i] = uint32_t(ms.Position - 8);
+			wr << txes[i];
+		}
+		block.m_pimpl->WriteSuffix(wr);
+		Blob blob = ms;
+		*(uint32_t*)(blob.data() + 4) = htole(uint32_t(blob.Size - 8));
+
+		if (!block.m_pimpl->OffsetInBootstrap) {
+			m_fileBootstrap.Write(blob.constData(), blob.Size, OffsetInBootstrap);
+//!!!?T			m_fileBootstrap.Flush();
+			block.m_pimpl->OffsetInBootstrap = OffsetInBootstrap + 8;
+			OffsetInBootstrap += blob.Size;
+		}
+		wrT << block.m_pimpl->OffsetInBootstrap;
+	} else
+		wrT << ConstBuf(ReducedBlockHash(hash)) << data << txData;
 	DbTxRef dbt(m_db);
 	m_tableBlocks.Put(dbt, blockKey, msB, true);
 	m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
@@ -427,19 +508,35 @@ void DbliteBlockChainDb::InsertBlock(int height, const HashValue& hash, const Co
 		m_tableProperties.Put(dbt, MAX_HEIGHT_KEY, ConstBuf(&h, sizeof h));
 	}
 	dbt.CommitIfLocal();
+	return txOffsets;
 }
 
 void DbliteBlockChainDb::TxData::Read(BinaryReader& rd) {
 	uint32_t h = 0;
 	rd.BaseStream.ReadBuffer(&h, BLOCKID_SIZE);
 	Height = letoh(h);
-	rd >> Data >> TxIns >> Coins;
+	switch (Eng().Mode) {
+	case EngMode::Bootstrap:
+		Data.Size = 3;
+		rd.BaseStream.ReadBuffer(Data.data(), 3);
+		break;
+	default:
+		rd >> Data >> TxIns;
+	}
+	rd >> Coins;
 }
 
 void DbliteBlockChainDb::TxData::Write(BinaryWriter& wr, bool bWriteHash) const {
 	uint32_t h = htole(Height);
 	wr.BaseStream.WriteBuffer(&h, BLOCKID_SIZE);
-	wr << Data << TxIns << Coins;
+	switch (Eng().Mode) {
+	case EngMode::Bootstrap:
+		wr.BaseStream.WriteBuffer(Data.constData(), 3);
+		break;
+	default:
+		wr << Data << TxIns;
+	}
+	wr << Coins;
 	if (bWriteHash)
 		wr << HashTx;
 }
@@ -532,7 +629,7 @@ bool DbliteBlockChainDb::FindTxDatas(const ConstBuf& txid8, TxDatas& txDatas) {
 			rdT >> txData.HashTx;
 			txDatas.Items.push_back(txData);
 		}
-		for (int i=0; i<txDatas.Items.size(); ++i) {
+		for (size_t i=0; i<txDatas.Items.size(); ++i) {
 			if (!memcmp(txDatas.Items[i].HashTx.data(), txid8.P, 8)) {
 				txDatas.Index = i;
 				return true;
@@ -595,6 +692,15 @@ void DbliteBlockChainDb::DeleteBlock(int height, const vector<int64_t>& txids) {
 	dbt.CommitIfLocal();
 }
 
+static const size_t AVG_TX_SIZE = 400;
+
+void DbliteBlockChainDb::ReadTx(uint64_t off, Tx& tx) {
+	if (off+MAX_BLOCK_SIZE < MappedSize)
+		BinaryReader(CMemReadStream(ConstBuf((byte*)m_viewBootstrap.Address + off, MAX_BLOCK_SIZE))) >> tx;
+	else
+		BinaryReader(BufferedStream(PositionOwningFileStream(m_fileBootstrap, off), AVG_TX_SIZE)) >> tx;
+}
+
 bool DbliteBlockChainDb::FindTxById(const ConstBuf& txid8, Tx *ptx) {
 	TxDatas txDatas;
 	if (!FindTxDatas(txid8, txDatas))
@@ -605,12 +711,25 @@ bool DbliteBlockChainDb::FindTxById(const ConstBuf& txid8, Tx *ptx) {
 		CoinEng& eng = Eng();
 		const TxData& txData = txDatas.Items[txDatas.Index];
 		ptx->Height = txData.Height;
-		CMemReadStream stm(txData.Data);
-		DbReader rd(stm, &eng);
-		rd >> *ptx;
+		switch (eng.Mode) {
+		case EngMode::Bootstrap:
+			ReadTx(GetBlockOffset(txData.Height) + letoh(*(uint32_t*)txData.Data.constData()), *ptx);
+			break;
+		default:
+			CMemReadStream stm(txData.Data);
+			DbReader rd(stm, &eng);
+			rd >> *ptx;
+		}
 		ptx->SetReducedHash(txid8);
 	}
 	return true;
+}
+
+bool DbliteBlockChainDb::FindTx(const HashValue& hash, Tx *ptx) {
+	bool r = FindTxById(ConstBuf(hash.data(), 8), ptx);
+	if (r && ptx)
+		ptx->SetHash(hash);
+	return r;
 }
 
 vector<int64_t> DbliteBlockChainDb::GetTxesByPubKey(const HashValue160& pubkey) {
@@ -643,9 +762,18 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 	CoinEng& eng = Eng();
 
 	MemoryStream msT;
+	BinaryWriter wr(msT);
 	uint32_t h = htole(height);
 	msT.WriteBuffer(&h, BLOCKID_SIZE);
-	BinaryWriter(msT).Ref() << data << txIns << spend;
+	switch (eng.Mode) {
+	case EngMode::Bootstrap:
+		ASSERT(data.Size == 3);
+		msT.WriteBuffer(data.P, 3);
+		break;
+	default:
+		wr << data << txIns;
+	}
+	wr << spend;
 
 	DbTxRef dbt(m_db);
 	try {
@@ -654,32 +782,45 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 		m_tableTxes.Put(dbt, TxKey(txHash), msT, true);
 	} catch (DbException& ex) {
 		TxDatas txDatas;
-		if (FindTxDatas(ConstBuf(txHash.data(), 8), txDatas) && (txDatas.Items.size()!=1 ||
-			ConstBuf(txDatas.Items[0].TxIns) == txIns) && ConstBuf(txDatas.Items[0].Data) == data)
-		{
+
+		if (FindTxDatas(ConstBuf(txHash.data(), 8), txDatas)) {
+			if (txDatas.Items.size() == 1) {
+				if (eng.Mode == EngMode::Bootstrap) {
+					Tx txOld;
+					ReadTx(GetBlockOffset(txDatas.Items[0].Height) + letoh(*(uint32_t*)txDatas.Items[0].Data.constData()), txOld);
+					if (Hash(txOld) != txHash) {
+						txDatas.Items[0].HashTx = Hash(txOld);
+						goto LAB_FOUND;
+					}
+				} else if (ConstBuf(txDatas.Items[0].TxIns) != txIns || ConstBuf(txDatas.Items[0].Data) != data)
+					goto LAB_OTHER_TX;
+			}
 			TxData& txData = txDatas.Items[txDatas.Index];
 			txData.Coins = spend;
 
-			String msg = ex.Message; //!!!D
+			String msg = ex.what(); //!!!D
 			TRC(1, "Duplicated Transaction: " << txHash);
 
 			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
 				Throw(E_COIN_DupNonSpentTx);
 			PutTxDatas(TxKey(txHash), txDatas);
-		} else {
-			ASSERT(!txDatas.Items.empty());
-			if (txDatas.Items.size() == 1) {
-				TxData& t = txDatas.Items[0];
-				TxHashesOutNums hons = t.Height==height ? hashesOutNums : GetTxHashesOutNums(t.Height);
-				for (int i=0; i<hons.size(); ++i) {
-					if (!memcmp(hons[i].HashTx.data(), txHash.data(), TXID_SIZE)) {
-						t.HashTx = hons[i].HashTx;
-						goto LAB_FOUND;
-					}
+			goto LAB_END;
+		}
+LAB_OTHER_TX:
+		ASSERT(!txDatas.Items.empty() && eng.Mode != EngMode::Bootstrap);
+		if (txDatas.Items.size() == 1) {
+			TxData& t = txDatas.Items[0];
+			TxHashesOutNums hons = t.Height==height ? hashesOutNums : GetTxHashesOutNums(t.Height);
+			for (size_t i=0; i<hons.size(); ++i) {
+				if (!memcmp(hons[i].HashTx.data(), txHash.data(), TXID_SIZE)) {
+					t.HashTx = hons[i].HashTx;
+					goto LAB_FOUND;
 				}
-				Throw(E_COIN_InconsistentDatabase);
 			}
-LAB_FOUND:					
+			Throw(E_COIN_InconsistentDatabase);
+		}
+LAB_FOUND:
+		{
 			TxData txData;
 			txData.Height = height;
 			txData.Data = data;
@@ -689,6 +830,8 @@ LAB_FOUND:
 			txDatas.Items.push_back(txData);
 			PutTxDatas(TxKey(txHash), txDatas);
 		}
+LAB_END:
+		;
 	}
 	if (eng.Mode == EngMode::BlockExplorer)
 		InsertPubkeyToTxes(dbt, tx);
@@ -701,7 +844,6 @@ void DbliteBlockChainDb::SaveCoinsByTxHash(const HashValue& hash, const vector<b
 	txData.Coins = find(vec.begin(), vec.end(), true) != vec.end() ? CoinEng::SpendVectorToBlob(vec) : Blob();
 	PutTxDatas(TxKey(hash), txDatas);
 }
-
 
 Blob DbliteBlockChainDb::FindPubkey(int64_t id) {
 	id = htole(id);
@@ -740,8 +882,6 @@ void DbliteBlockChainDb::UpdatePubkey(int64_t id, const ConstBuf& pk) {
 	m_tablePubkeys.Put(dbt, ConstBuf(&id, PUBKEYID_SIZE), pk);		
 	dbt.CommitIfLocal();
 }
-
-
 
 
 } // Coin::

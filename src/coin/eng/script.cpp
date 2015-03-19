@@ -307,7 +307,8 @@ HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int
 bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, int32_t nHashType) {
 	if (IsCanonicalSignature(sig)) {
 		try {
-	#define EC_R_INVALID_ENCODING				 102	// OpenSSL
+			DBG_LOCAL_IGNORE(E_EXT_Crypto);
+#define EC_R_INVALID_ENCODING				 102	// OpenSSL
 			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
 
 	#if UCFG_COIN_ECC=='S'
@@ -321,14 +322,14 @@ bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, cons
 			sig.Size--;
 			return dsa.VerifyHash(SignatureHash(script, *txTo.m_pimpl, nIn, nHashType), sig);
 		} catch (CryptoException& DBG_PARAM(ex)) {
-			TRC(2, ex.what());
+			TRC(2, ex.what() << "    PubKey: " << pubKey);
 		}
 	}
 	return false;
 }
 
 bool ToBool(const Vm::Value& v) {
-	for (int i=0; i<v.Size; ++i)
+	for (size_t i=0; i<v.Size; ++i)
 		if (v.constData()[i])
 			return i!=v.Size-1 || v.constData()[i]!=0x80;
 	return false;
