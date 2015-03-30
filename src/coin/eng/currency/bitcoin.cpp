@@ -11,8 +11,27 @@
 
 namespace Coin {
 
-static CurrencyFactory<CoinEng> s_bitcoin("Bitcoin");
-static CurrencyFactory<CoinEng> s_bitcoinTestnet("Bitcoin-testnet");
+class COIN_CLASS BitcoinEng : public CoinEng {
+	typedef CoinEng base;
+public:
+	BitcoinEng(CoinDb& cdb)
+		:	base(cdb)
+	{}
+protected:
+	void CheckForDust(const Tx& tx) override {
+		EXT_FOR(const TxOut& txOut, tx.TxOuts()) {
+			if (txOut.Value < 3*(ChainParams.MinTxFee * (EXT_BIN(txOut).Size + 148) / 1000))
+				Throw(E_COIN_TxAmountTooSmall);
+		}
+	}
+
+	void UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx) override {
+	}
+};
+
+
+static CurrencyFactory<BitcoinEng> s_bitcoin("Bitcoin");
+static CurrencyFactory<BitcoinEng> s_bitcoinTestnet("Bitcoin-testnet");
 
 } // Coin::
 

@@ -140,11 +140,10 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions);</PreprocessorDefinitions>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeaderFile>el/ext.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>.;../util;$(OutDir)\inc</AdditionalIncludeDirectories>
-      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
@@ -280,10 +279,13 @@
   <ItemGroup>
     <ClCompile Include="..\..\el\comp\json-writer.cpp" />
     <ClCompile Include="..\..\el\crypto\bloom-filter.cpp" />
-    <ClCompile Include="..\..\el\crypto\ext-openssl.cpp" />
+    <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\el\crypto\merkle-tree.cpp" />
-    <ClCompile Include="..\..\el\crypto\ripemd.cpp" />
-    <ClCompile Include="..\..\el\crypto\sha-1.cpp" />
     <ClCompile Include="..\..\el\db\bdb.cpp" />
     <ClCompile Include="..\..\el\db\ext-sqlite.cpp" />
     <ClCompile Include="..\..\el\inet\irc-client.cpp" />
@@ -297,9 +299,15 @@
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">el/ext.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="..\..\el\crypto\aes.cpp" />
-    <ClCompile Include="..\..\el\crypto\ecdsa.cpp" />
+    <ClCompile Include="..\..\el\crypto\ecdsa.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\el\db\bdb-reader.cpp" />
+    <ClCompile Include="..\..\el\inet\proxy-client.cpp" />
+    <ClCompile Include="..\..\el\inet\proxy.cpp" />
     <ClCompile Include="..\..\el\num\mod.cpp" />
     <ClCompile Include="..\..\el\num\num.cpp" />
     <ClCompile Include="..\..\el\xml\xml-dom.cpp" />
@@ -314,7 +322,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="bootstrap.cpp" />
+    <ClCompile Include="buggy-aes.cpp" />
     <ClCompile Include="currency\bitcoin.cpp" />
     <ClCompile Include="block.cpp" />
     <ClCompile Include="coin-com.cpp" />
@@ -331,6 +342,8 @@
     <ClCompile Include="currency\maxcoin.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="currency\metiscoin.cpp" />
     <ClCompile Include="currency\protoshares.cpp" />
@@ -346,13 +359,8 @@
     <ClCompile Include="currency\ppcoin.cpp" />
     <ClCompile Include="currency\primecoin.cpp" />
     <ClCompile Include="proof-of-stake.cpp" />
+    <ClCompile Include="reorganize.cpp" />
     <ClCompile Include="script.cpp" />
-    <ClCompile Include="currency\solidcoin.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="currency\terracoin.cpp" />
     <ClCompile Include="tx.cpp" />
     <ClCompile Include="wallet.cpp" />
@@ -374,6 +382,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="buggy-aes.h" />
     <ClInclude Include="coin-model.h" />
     <ClInclude Include="coin-protocol.h" />
     <ClInclude Include="coinrpc.h" />

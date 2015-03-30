@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -44,6 +42,10 @@ bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 
 	if (HaveTxInDb(hash))
 		return false;
+
+	if (!tx.IsFinal(BestBlockHeight()+1))
+		Throw(E_COIN_ContainsNonFinalTx);
+
 	Tx ptxOld(nullptr);
 	EXT_LOCK (TxPool.Mtx) {
 		if (TxPool.m_hashToTx.count(hash))
@@ -75,7 +77,7 @@ bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 		Throw(E_COIN_TxFeeIsLow);
 	if (nFees < GetMinRelayTxFee()) {
 		DateTime now = DateTime::UtcNow();
-		m_freeCount = pow(1.0 - 1.0/600, (now - exchange(m_dtLastFreeTx, now)).TotalSeconds);
+		m_freeCount = pow(1.0 - 1.0/600, duration_cast<seconds>(now - exchange(m_dtLastFreeTx, now)).count());
 		if (m_freeCount > 15*10000 && !IsFromMe(tx))
 			Throw(E_COIN_TxRejectedByRateLimiter);
 		m_freeCount += serSize;
@@ -129,7 +131,7 @@ void TxMessage::Process(P2P::Link& link) {
 
 	HashValue hash = Hash(Tx);
 		
-	if (eng.LiteMode) {
+	if (eng.Mode==EngMode::Lite)  {
 		auto it = find(clink.m_curMatchedHashes.begin(), clink.m_curMatchedHashes.end(), hash);
 		if (it != clink.m_curMatchedHashes.end()) {
 			clink.m_curMerkleBlock.m_pimpl->m_txes.push_back(Tx);

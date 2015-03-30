@@ -109,9 +109,13 @@ Blob BuggyAes::Decrypt(const ConstBuf& cbuf) {
 	for (size_t pos=0;  pos<cbuf.Size; pos+=block.Size) {
 		VectorXor(block.data(), cbuf.P+pos, cbBlock);
 		EncryptBlock(ekey, block.data());		
-		if (pos+cbBlock==cbuf.Size)
-			ms.WriteBuffer(block.constData(), cbBlock-block.constData()[cbBlock-1]);		
-		else
+		if (pos+cbBlock==cbuf.Size) {
+			byte nPad = block.constData()[cbBlock-1];
+			for (int i=0; i<nPad; ++i)
+				if (block.constData()[cbBlock-1-i] != nPad)
+					Throw(E_EXT_Crypto);									//!!!TODO Must be EXT_Crypto_DecryptFailed
+			ms.WriteBuffer(block.constData(), cbBlock-nPad);		
+		} else
 			ms.WriteBuf(block);
 	}
 	return ms;
