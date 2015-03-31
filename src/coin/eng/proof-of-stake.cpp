@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -12,11 +10,13 @@
 namespace Coin {
 
 static const TimeSpan STAKE_TARGET_SPACING = TimeSpan::FromMinutes(10);
-static const TimeSpan MODIFIER_INTERVAL = TimeSpan::FromHours(6);
+
+static const seconds MODIFIER_INTERVAL_SECONDS(6 * 3600);
+
 const int MODIFIER_INTERVAL_RATIO = 3;
 
 static TimeSpan GetStakeModifierSelectionIntervalSection(int nSection) {
-	return TimeSpan::FromSeconds(double(((int64_t)MODIFIER_INTERVAL.TotalSeconds * 63 / (63 + ((63 - nSection) * (MODIFIER_INTERVAL_RATIO - 1))))));
+	return TimeSpan::FromSeconds(double((MODIFIER_INTERVAL_SECONDS.count() * 63 / (63 + ((63 - nSection) * (MODIFIER_INTERVAL_RATIO - 1))))));
 }
 
 static TimeSpan GetStakeModifierSelectionInterval() {
@@ -42,7 +42,7 @@ int64_t PosTxObj::GetCoinAge() const {
 				if (Timestamp < dtPrev)
 					Throw(E_COIN_TimestampViolation);
 				if (eng.GetBlockByHeight(txPrev.Height).get_Timestamp()+TimeSpan::FromDays(30) <= Timestamp)
-					centSecond += BigInteger(txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value) * int((Timestamp-dtPrev).TotalSeconds) / (eng.ChainParams.CoinValue/100);
+					centSecond += BigInteger(txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value) * duration_cast<seconds>(Timestamp-dtPrev).count() / (eng.ChainParams.CoinValue/100);
 			}
 			m_coinAge = explicit_cast<int64_t>(centSecond / (100 * 24*60*60));
 		}
@@ -82,9 +82,7 @@ HashValue PosBlockObj::Hash() const {
 	return m_hash.get();
 }
 
-void PosBlockObj::Write(DbWriter& wr) const {
-	base::Write(wr);
-	CoinSerialized::WriteBlob(wr, Signature);
+void PosBlockObj::WriteDbSuffix(BinaryWriter& wr) const {
 	byte flags = (ProofType()==ProofOf::Stake ? 1 : 0) | (!!StakeModifier ? 4 : 0);			
 	wr << flags;
 	if (ProofType() == ProofOf::Stake)
@@ -93,18 +91,28 @@ void PosBlockObj::Write(DbWriter& wr) const {
 		wr << StakeModifier.get();
 }
 
-void PosBlockObj::Read(const DbReader& rd) {
-	base::Read(rd);
-	Signature = CoinSerialized::ReadBlob(rd);
+void PosBlockObj::Write(DbWriter& wr) const {
+	base::Write(wr);
+	CoinSerialized::WriteBlob(wr, Signature);
+	WriteDbSuffix(wr);
+}
+
+void PosBlockObj::ReadDbSuffix(const BinaryReader& rd) {
 	byte flags = rd.ReadByte();
 	if (flags & 1) {
 		HashValue h;
 		rd >> h;
 		m_hashProofOfStake = h;
 	}
-//		m_stakeEntropyBit = flags & 2;
+	//		m_stakeEntropyBit = flags & 2;
 	if (flags & 4)
 		StakeModifier = rd.ReadUInt64();
+}
+
+void PosBlockObj::Read(const DbReader& rd) {
+	base::Read(rd);
+	Signature = CoinSerialized::ReadBlob(rd);
+	ReadDbSuffix(rd);
 }
 
 void PosBlockObj::WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockPrev) const {
@@ -139,7 +147,7 @@ HashValue PosBlockObj::HashProofOfStake() const {
 			Throw(E_COIN_CoinsAreTooRecent);
 	
 		int64_t val = txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value;
-		BigInteger cdays = BigInteger(val) * int64_t(std::min(dtTx-dtPrev, TimeSpan::FromDays(90)).TotalSeconds) / (24 * 60 * 60 * eng.ChainParams.CoinValue);
+		BigInteger cdays = BigInteger(val) * duration_cast<seconds>(std::min(dtTx-dtPrev, TimeSpan::FromDays(90))).count() / (24 * 60 * 60 * eng.ChainParams.CoinValue);
 
 		DBG_LOCAL_IGNORE(E_COIN_CoinstakeCheckTargetFailed);
 
@@ -191,9 +199,10 @@ Target PosEng::GetNextTargetRequired(const Block& blockLast, const Block& block)
 	if (!prevPrev || prevPrev.PrevBlockHash==HashValue())
 		return ChainParams.InitTarget;
 
-	TimeSpan nTargetSpacing = proofType==ProofOf::Stake ? STAKE_TARGET_SPACING : std::min(GetTargetSpacingWorkMax(blockLast.Timestamp), TimeSpan::FromMinutes(10)*(blockLast.Height - prev.Height + 1));
-	int64_t interval = TimeSpan::FromDays(7).Ticks / nTargetSpacing.Ticks;
-	BigInteger r = BigInteger(prev.get_DifficultyTarget()) * (nTargetSpacing.Ticks*(interval-1) + (prev.get_Timestamp() - prevPrev.get_Timestamp()).Ticks*2) / (nTargetSpacing.Ticks*(interval+1));
+	TimeSpan nTargetSpacing = proofType==ProofOf::Stake ? STAKE_TARGET_SPACING
+													: std::min(GetTargetSpacingWorkMax(blockLast.Timestamp), TimeSpan(TimeSpan::FromMinutes(10)*(blockLast.Height - prev.Height + 1)));
+	int64_t interval = TimeSpan::FromDays(7).count() / nTargetSpacing.count();
+	BigInteger r = BigInteger(prev.get_DifficultyTarget()) * (nTargetSpacing.count() * (interval-1) + (prev.get_Timestamp() - prevPrev.get_Timestamp()).count()*2) / (nTargetSpacing.count()*(interval+1));
 
 //		TRC(2, hex << r << "  " << int((prev.Timestamp - prevPrev.Timestamp).TotalSeconds) << " s");
 
@@ -229,7 +238,7 @@ void PosBlockObj::Check(bool bCheckMerkleRoot) {
 		if (txes[i].IsCoinStake())
 			Throw(E_COIN_CoinstakeInWrongPos);
 
-	if (Timestamp > GetTxObj(0).Timestamp+TimeSpan::FromSeconds(MAX_FUTURE_SECONDS))
+	if (Timestamp > GetTxObj(0).Timestamp + seconds(MAX_FUTURE_SECONDS))
 		Throw(E_COIN_CoinbaseTimestampIsTooEarly);
 	if (ProofType() == ProofOf::Stake) {
 		CheckCoinStakeTimestamp();
@@ -311,9 +320,9 @@ void PosBlockObj::ComputeStakeModifier() {
 				Throw(E_FAIL);
 		}
 
-		DateTime dtStartOfPrevInterval = DateTime::from_time_t(to_time_t(blockPrev.get_Timestamp()) / (int)MODIFIER_INTERVAL.TotalSeconds * (int)MODIFIER_INTERVAL.TotalSeconds);
+		DateTime dtStartOfPrevInterval = DateTime::from_time_t(to_time_t(blockPrev.get_Timestamp()) / MODIFIER_INTERVAL_SECONDS.count() * MODIFIER_INTERVAL_SECONDS.count());
 		if (dtModifier < dtStartOfPrevInterval) {
-			DateTime dtStartOfCurInterval = DateTime::from_time_t(to_time_t(Timestamp) / (int)MODIFIER_INTERVAL.TotalSeconds * (int)MODIFIER_INTERVAL.TotalSeconds);
+			DateTime dtStartOfCurInterval = DateTime::from_time_t(to_time_t(Timestamp) / MODIFIER_INTERVAL_SECONDS.count() * MODIFIER_INTERVAL_SECONDS.count());
 			if (!IsV04Protocol() || dtModifier < dtStartOfCurInterval) {
 				typedef multimap<DateTime, Block> CCandidates;
 				CCandidates candidates;
@@ -400,7 +409,6 @@ void CheckPointMessage::Process(P2P::Link& link) {
 PosEng::PosEng(CoinDb& cdb)
 	:	base(cdb)
 {
-	MaxBlockVersion = 3;
 	AllowFreeTxes = false;
 }
 

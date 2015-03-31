@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -303,6 +301,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue 
 void BlockObj::Write(BinaryWriter& wr) const {
 	WriteHeader(wr);
 	CoinSerialized::Write(wr, get_Txes());
+	WriteSuffix(wr);
 }
 
 void BlockObj::Read(const BinaryReader& rd) {
@@ -334,10 +333,12 @@ void BlockObj::Write(DbWriter& wr) const {
 
 	CoinSerialized::WriteVarInt(wr, Ver);
 	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
-	if (eng.LiteMode)
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		wr << MerkleRoot();
-	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
-		AuxPow->Write(wr);
+	if (eng.Mode!=EngMode::BlockParser) {
+		if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
+			AuxPow->Write(wr);
+	}
 }
 
 void BlockObj::Read(const DbReader& rd) {
@@ -347,14 +348,16 @@ void BlockObj::Read(const DbReader& rd) {
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
-	if (eng.LiteMode) {
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser) {
 		HashValue merkleRoot;
 		rd >> merkleRoot;
 		m_merkleRoot = merkleRoot;
 	} else
 		m_merkleRoot.reset();
-	if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
-		(AuxPow = new Coin::AuxPow)->Read(rd);
+	if (eng.Mode!=EngMode::BlockParser) {
+		if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
+			(AuxPow = new Coin::AuxPow)->Read(rd);
+	}
 }
 
 BigInteger BlockObj::GetWork() const {
@@ -388,8 +391,8 @@ Target CoinEng::KimotoGravityWell(const Block& blockLast, const Block& block, in
 	Block b = blockLast;
 	for (int mass=1; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevBlock()) {
 		average += (BigInteger(b.get_DifficultyTarget()) - average)/mass;
-		actualSeconds = max(0, int((blockLast.get_Timestamp() - b.get_Timestamp()).get_TotalSeconds()));
-		targetSeconds = int((ChainParams.BlockSpan * mass).get_TotalSeconds());
+		actualSeconds = max(0, (int)duration_cast<seconds>(blockLast.get_Timestamp() - b.get_Timestamp()).count());
+		targetSeconds = (int)duration_cast<seconds>(ChainParams.BlockSpan * (double)mass).count();
 		if (mass >= minBlocks) {
 			double eventHorizonDeviation = 1 + 0.7084 * pow(mass / 28.2, -1.228);
 			double ratio = actualSeconds && targetSeconds ? double(targetSeconds) / actualSeconds :	1;		
@@ -442,7 +445,7 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 		TimeSpan targetSpan1 = eng.ChainParams.BlockSpan * nInterval;
 		TimeSpan actualSpan1 = (Timestamp - eng.GetBlockByHeight(Height-720).Timestamp);
 		TimeSpan span1 = std::min(std::max(actualSpan1, targetSpan1/4), targetSpan1*4);
-		double dAs0 = eng.GetActualSpanForCalculatingTarget(_self, nInterval).TotalSeconds;
+		double dAs0 = duration_cast<seconds>(eng.GetActualSpanForCalculatingTarget(_self, nInterval)).count();
 		double dAs = actualSpan1.TotalSeconds,
 			dSpan = span1.TotalSeconds,
 			dTarget    = targetSpan1.TotalSeconds;
@@ -457,16 +460,18 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 	int len = strlen(shex);
 #endif
 
-	return Target(BigInteger(blockLast.get_DifficultyTarget())*span.get_Ticks()/targetSpan.get_Ticks());
+	return Target(BigInteger(blockLast.get_DifficultyTarget()) * span.count() / targetSpan.count());
 }
 
 Target CoinEng::GetNextTarget(const Block& blockLast, const Block& block) {
 	return std::min(ChainParams.MaxTarget, GetNextTargetRequired(blockLast, block));
 }
 
+static const TimeSpan s_spanFuture = seconds(MAX_FUTURE_SECONDS);
+
 void BlockObj::Check(bool bCheckMerkleRoot) {
 	CoinEng& eng = Eng();
-	if (!eng.LiteMode && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
+	if (eng.Mode!=EngMode::Lite && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
 		Throw(E_COIN_SizeLimits);
 
 	if (Height != -1) {
@@ -488,17 +493,19 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 			byte ar[33];
 			memcpy(ar, hash.data(), 32);
 			ar[32] = 0;
-			if (BigInteger(ar, sizeof ar) >= BigInteger(get_DifficultyTarget()))
+			if (BigInteger(ar, sizeof ar) >= BigInteger(get_DifficultyTarget())) {
+				TRC(2, "E_COIN_ProofOfWorkFailed in block " << GetHash());
 				Throw(E_COIN_ProofOfWorkFailed);
+			}
 		}
 	}
 
-	if (Timestamp > DateTime::UtcNow()+TimeSpan::FromSeconds(MAX_FUTURE_SECONDS))
+	if (Timestamp > DateTime::UtcNow() + s_spanFuture)
 		Throw(E_COIN_BlockTimestampInTheFuture);
 
-	if (!eng.LiteMode) {
+	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		if (!m_txes[0].IsCoinBase())
-			Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);
+			Throw(E_COIN_FirstTxIsNotCoinbase);
 		for (int i=1; i<m_txes.size(); ++i)
 			if (m_txes[i].IsCoinBase())
 				Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
@@ -512,7 +519,7 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 }
 
 void Block::Check(bool bCheckMerkleRoot) const {
-	if (!Eng().LiteMode)
+	if (Eng().Mode != EngMode::Lite)
 		get_Txes();
 	m_pimpl->Check(bCheckMerkleRoot);
 }
@@ -520,7 +527,7 @@ void Block::Check(bool bCheckMerkleRoot) const {
 void BlockObj::CheckCoinbaseTx(int64_t nFees) {
 	CoinEng& eng = Eng();
 
-	if (!eng.LiteMode) {
+	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		int64_t valueOut = m_txes[0].ValueOut;
 		if (valueOut > eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true)+nFees) {
 			Throw(E_COIN_SubsidyIsVeryBig);
@@ -536,6 +543,20 @@ int BlockObj::GetBlockHeightFromCoinbase() const {
 	BigInteger bi;
 	BinaryReader(stm) >> bi;
 	return explicit_cast<int>(bi);
+}
+
+uint32_t Block::OffsetOfTx(const HashValue& hashTx) const {
+	MemoryStream ms;
+	BinaryWriter wr(ms);
+	m_pimpl->WriteHeader(wr);
+	const CTxes& txes = m_pimpl->get_Txes();	
+	CoinSerialized::WriteVarInt(wr, txes.size());
+	for (size_t i=0; i<txes.size(); ++i) {
+		if (Hash(txes[i]) == hashTx)
+			return uint32_t(ms.Position);
+		wr << txes[i];
+	}
+	Throw(E_FAIL);
 }
 
 void Block::LoadToMemory() {							//!!! Really don't loads TxIn Scripts
@@ -565,7 +586,7 @@ int64_t RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 		EXT_FOR (const Tx& ptx, task.Txes) {
 			int64_t nValueIn = 0;
 			const Tx& tx = ptx;
-			if (Interlocked::Add(job.SigOps, tx.SigOpCount) > MAX_BLOCK_SIGOPS)
+			if (job.aSigOps+=tx.SigOpCount > MAX_BLOCK_SIGOPS)
 				Throw(E_COIN_TxTooManySigOps);
 			for (int nIn=0; nIn<tx.TxIns().size(); ++nIn) {
 				if (job.Failed)
@@ -577,7 +598,7 @@ int64_t RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 
 				const TxOut& txOut = txPrev.TxOuts()[op.Index];
 				if (t_bPayToScriptHash &&  IsPayToScriptHash(txOut.PkScript)) {
-					if (Interlocked::Add(job.SigOps, CalcSigOpCount(txOut.PkScript, txIn.Script())) > MAX_BLOCK_SIGOPS)
+					if (job.aSigOps+=CalcSigOpCount(txOut.PkScript, txIn.Script()) > MAX_BLOCK_SIGOPS)
 						Throw(E_COIN_TxTooManySigOps);
 				}
 
@@ -603,7 +624,7 @@ static void RecoverPubKey(CoinEng *eng, const TxOut *txOut, TxObj* pTxObj, int n
 	TxIn& txIn = pTxObj->m_txIns[nIn];
 	ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
 	if (pk.P) {
-		ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);		
+		ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);
 		try {
 			Sec256Signature sigObj;
 			sigObj.AssignCompact(Sec256Signature(sig).ToCompact());
@@ -613,6 +634,21 @@ static void RecoverPubKey(CoinEng *eng, const TxOut *txOut, TxObj* pTxObj, int n
 					txIn.RecoverPubKeyType = 8;
 				else {
 					HashValue hashSig = SignatureHash(pkScript, *pTxObj, nIn, 1);
+#ifdef X_DEBUG//!!!D
+					static int s_i;
+					s_i++;
+					if (s_i >= 1) {
+						if (!memcmp(pk.P, "\x41\x04\x06\xF3", 4)) {
+							cout << "hashSig: " << hashSig << endl;
+							cout << "pkScript: " << pkScript << endl;
+							cout << "Pk: " << pk << endl;
+							cout << "Sig: " << sig << endl;
+							cout << "Recover: " << Sec256Dsa::RecoverPubKey(hashSig, sigObj, 1, false) << endl;
+							s_i = s_i;
+						}
+						s_i = s_i;
+					}
+#endif
 					bool bCompressed = pk.Size<35;
 					for (byte recid=0; recid<3; ++recid) {
 						if (Sec256Dsa::RecoverPubKey(hashSig, sigObj, recid, bCompressed) == ConstBuf(pk.P+1, pk.Size-1)) {
@@ -636,7 +672,7 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 			if (tx.IsCoinStake())
 				tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
 			ptr<ConnectTask> task(new ConnectTask);
-			for (int nIn=0; nIn<tx.TxIns().size(); ++nIn) {
+			for (size_t nIn=0; nIn<tx.TxIns().size(); ++nIn) {
 				const OutPoint& op = tx.TxIns()[nIn].PrevOutPoint;
 				const HashValue& hashPrev = op.TxHash;
 				CHashToTask::iterator it = HashToTask.find(hashPrev);
@@ -649,13 +685,16 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 						}
 						Tasks.erase(taskPrev);
 					}
-				} else if (!TxMap.count(hashPrev))
+				} else if (!TxMap.count(hashPrev)) {
 					TxMap.insert(make_pair(hashPrev, Tx::FromDb(hashPrev)));
+				}
+				if (Eng.Mode != EngMode::Bootstrap) {
 #if UCFG_COIN_PKSCRIPT_FUTURES
-				futsTxOut.push_back(std::async(RecoverPubKey, &Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn));
+					futsTxOut.push_back(std::async(RecoverPubKey, &Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn));
 #else
-				RecoverPubKey(&Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn);
+					RecoverPubKey(&Eng, &TxMap.at(hashPrev).TxOuts().at(op.Index), tx.m_pimpl.get(), nIn);
 #endif
+				}
 			}
 			task->Txes.push_back(tx);
 			Tasks.insert(task);
@@ -764,15 +803,6 @@ void CConnectJob::Prepare(const Block& block) {
 					break;
 				}
 			}
-#if 0//!!!R
-			EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-				ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
-				if (pk.P && pk.Size) {
-					ConstBuf pubKey(pk.P+1, pk.Size-1);
-					PrepareTask(Hash160(pubKey), pubKey);
-				}
-			}
-#endif
 		}
 	}
 }
@@ -797,45 +827,9 @@ void CConnectJob::Calculate() {
 	}
 }
 
-class CoinEngTransactionScope : noncopyable {
-public:
-	CoinEng& Eng;
-	ITransactionable& m_db;
-
-	CoinEngTransactionScope(CoinEng& eng)
-		:	Eng(eng)
-		,	m_db(Eng.Db->GetSavepointObject())
-	{
-		Eng.BeginTransaction();
-		m_db.BeginTransaction();
-	}
-
-	~CoinEngTransactionScope() {
-		if (!m_bCommitted) {
-			if (InException) {
-				m_db.Rollback();
-				Eng.Rollback();
-			} else {
-				m_db.Commit();
-				Eng.Commit();
-			}
-		}
-	}
-
-	void Commit() {
-		m_db.Commit();
-		Eng.Commit();
-		m_bCommitted = true;
-	}
-private:
-	CInException InException;
-	CBool m_bCommitted;
-};
-
-
 void Block::Connect() const {
 	CoinEng& eng = Eng();
-	TRC(3, " " << Hash(_self) << " Height: " << Height << "  " << (eng.LiteMode ? 0 : get_Txes().size()) << " Txes");
+	TRC(3, " " << Hash(_self) << " Height: " << Height << (eng.Mode==EngMode::Lite ? String() : EXT_STR(" " << setw(4) << get_Txes().size() << " Txes")));
 
 	Check(false);		// Check Again without bCheckMerkleRoot
 	int64_t nFees = 0;
@@ -844,7 +838,11 @@ void Block::Connect() const {
 
 	CConnectJob job(eng);
 	job.DifficultyTarget = DifficultyTarget;
-	if (!eng.LiteMode) {
+
+	switch (eng.Mode) {
+	case EngMode::Normal:
+	case EngMode::Bootstrap:
+	case EngMode::BlockExplorer:
 		job.PayToScriptHash = (void*)t_bPayToScriptHash;
 		job.Height = Height;
 
@@ -853,7 +851,8 @@ void Block::Connect() const {
 			Throw(E_COIN_ProofOfWorkFailed);
 		nFees = job.Fee;
 
-		job.Prepare(_self);
+		if (eng.Mode != EngMode::Bootstrap)
+			job.Prepare(_self);
 		job.Calculate();
 	}
 
@@ -881,12 +880,15 @@ void Block::Connect() const {
 			}
 		}
 
-		if (!eng.LiteMode) {
+		if (eng.Mode != EngMode::Lite) {
 			EXT_FOR (const Tx& tx, get_Txes()) {
 				if (!tx.IsCoinBase()) {
 					vector<Tx> vTxPrev;
-					for (int i=0; i<tx.TxIns().size(); ++i)
-						vTxPrev.push_back(job.TxMap.at(tx.TxIns()[i].PrevOutPoint.TxHash));	
+					if (eng.Mode != EngMode::BlockParser) {
+						const vector<TxIn>& txIns = tx.TxIns();
+						for (size_t i=0; i<txIns.size(); ++i)
+							vTxPrev.push_back(job.TxMap.at(txIns[i].PrevOutPoint.TxHash));
+					}
 					eng.OnConnectInputs(tx, vTxPrev, true, false);
 				}
 			}
@@ -897,57 +899,60 @@ void Block::Connect() const {
 
 		MemoryStream ms;
 		DbWriter wr(ms);
-		wr.ConnectJob = &job;
+		wr.ConnectJob.reset(&job);
 		m_pimpl->Write(wr);
 //!!!?			wr << byte(0);
 
-#ifdef X_DEBUG//!!!D
-		static ofstream ofsapp("c:\\work\\coin\\tx.log", ios::app);
-		ofsapp << "\nBlock  " << Hash(_self) << " Height: " << Height << "  " << get_Txes().size() << " Txes\n";
-#endif
-
+		HashValue hashBlock = Hash(_self);
 		Coin::TxHashesOutNums txHashOutNums;
-		for (int i=0; i<m_pimpl->m_txes.size(); ++i) {
-			if (!eng.Runned)
-				Throw(E_EXT_ThreadInterrupted);
-			const Tx& tx = m_pimpl->m_txes[i];
-			if (eng.ShouldBeSaved(tx)) {
-				Coin::HashValue txHash = Coin::Hash(tx);
-#ifdef X_DEBUG//!!!D
-				ofsapp << "  " << i << "\t" << txHash << "\n";
-#endif
 
-				MemoryStream msTx;
-				DbWriter dw(msTx);
-				dw.ConnectJob = &job;
-				dw << tx;
-				MemoryStream msTxIns;
-				DbWriter wrIns(msTxIns);
-				wrIns.PCurBlock = this;
-				wrIns.ConnectJob = &job;
-				wrIns.PTxHashesOutNums = &txHashOutNums;
-				tx.WriteTxIns(wrIns);
-				eng.Db->InsertTx(tx, txHashOutNums, txHash, Height, msTxIns, CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), msTx);
-
-				TxHashOutNum hom = { txHash, (uint32_t)tx.TxOuts().size() };
-				txHashOutNums.push_back(hom);
-
-				if (!tx.IsCoinBase()) {
-					EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-						vector<bool> vSpend = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
-						if (txIn.PrevOutPoint.Index >= vSpend.size() || !vSpend[txIn.PrevOutPoint.Index])
-							Throw(E_COIN_InputsAlreadySpent);
-						vSpend[txIn.PrevOutPoint.Index] = false;
-						eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vSpend);
-					}
+		switch (eng.Mode) {
+		case EngMode::Bootstrap:
+			{
+				vector<uint32_t> txOffsets = eng.Db->InsertBlock(_self, ms, ConstBuf());
+				for (size_t i=0; i<m_pimpl->m_txes.size(); ++i) {
+					const Tx& tx = m_pimpl->m_txes[i];
+					Coin::HashValue txHash = Coin::Hash(tx);
+					uint32_t offset = htole(txOffsets[i]);
+					eng.Db->InsertTx(tx, txHashOutNums, txHash, Height, ConstBuf(), CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), ConstBuf(&offset, 3));
+					tx.SpendInputs();
 				}
 			}
+			break;
+		default:
+			for (size_t i=0; i<m_pimpl->m_txes.size(); ++i) {
+				if (!eng.Runned)
+					Throw(E_EXT_ThreadInterrupted);
+				const Tx& tx = m_pimpl->m_txes[i];
+				if (eng.ShouldBeSaved(tx)) {
+					Coin::HashValue txHash = Coin::Hash(tx);
+	#ifdef X_DEBUG//!!!D
+					ofsapp << "  " << i << "\t" << txHash << "\n";
+	#endif
 
-//				tx.SaveCoins();
+					MemoryStream msTx;
+					DbWriter dw(msTx);
+					dw.ConnectJob.reset(&job);
+					dw << tx;
+					MemoryStream msTxIns;
+					DbWriter wrIns(msTxIns);
+					wrIns.PCurBlock.reset(this);
+					wrIns.ConnectJob.reset(&job);
+					wrIns.PTxHashesOutNums.reset(&txHashOutNums);
+					tx.WriteTxIns(wrIns);
+					eng.Db->InsertTx(tx, txHashOutNums, txHash, Height, msTxIns, CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), msTx);
+
+					TxHashOutNum hom = { txHash, (uint32_t)tx.TxOuts().size() };
+					txHashOutNums.push_back(hom);
+
+					tx.SpendInputs();
+				}
+
+	//				tx.SaveCoins();
+			}
+
+			eng.Db->InsertBlock(_self, ms, EXT_BIN(txHashOutNums));
 		}
-
-		HashValue hashBlock = Hash(_self);
-		eng.Db->InsertBlock(Height, hashBlock, ms, EXT_BIN(txHashOutNums));
 		eng.OnConnectBlock(_self);
 		eng.Caches.DtBestReceived = DateTime::UtcNow();
 
@@ -976,37 +981,6 @@ void Block::Connect() const {
 	}
 }
 
-void Block::Disconnect() const {
-	CoinEng& eng = Eng();
-	
-	vector<int64_t> txids;
-	txids.reserve(get_Txes().size());
-
-	eng.EnsureTransactionStarted();
-	CoinEngTransactionScope scopeBlockSavepoint(eng);
-
-	if (!eng.LiteMode) {
-		for (int i=get_Txes().size(); i--;) {		// reverse order is important
-			const Tx& tx = get_Txes()[i];
-			Coin::HashValue txhash = Coin::Hash(tx);
-			txids.push_back(letoh(*(int64_t*)txhash.data()));
-
-			eng.OnDisconnectInputs(tx);
-
-			if (!tx.IsCoinBase()) {
-				EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-					vector<bool> vec = eng.Db->GetCoinsByTxHash(txIn.PrevOutPoint.TxHash);
-					vec.resize(std::max(vec.size(), size_t(txIn.PrevOutPoint.Index+1)));
-					vec[txIn.PrevOutPoint.Index] = true;
-					eng.Db->SaveCoinsByTxHash(txIn.PrevOutPoint.TxHash, vec);
-				}
-			}
-		}
-	}
-
-	eng.Db->DeleteBlock(Height, txids);
-}
-
 DateTime Block::GetMedianTimePast() {
 	CoinEng& eng = Eng();
 
@@ -1017,62 +991,6 @@ DateTime Block::GetMedianTimePast() {
 		*--beg = block.Timestamp;
 	sort(beg, end);
 	return *(beg + (end-beg)/2);
-}
-
-void Block::Reorganize() {
-	TRC(1, "");
-
-	CoinEng& eng = Eng();
-	Block prevBlock = _self;
-	Block forkBlock = eng.BestBlock();
-	vector<Block> vConnect;
-	list<Tx> vResurrect;
-	while (true) {
-		while (prevBlock.Height > forkBlock.Height)
-			vConnect.push_back(exchange(prevBlock, prevBlock.GetPrevBlock()));
-		if (Hash(forkBlock) == Hash(prevBlock))
-			break;
-		forkBlock.LoadToMemory();
-		forkBlock.Disconnect();
-		const CTxes& txes = forkBlock.get_Txes();
-		for (CTxes::const_reverse_iterator it=txes.rbegin(); it!=txes.rend(); ++it) {
-			if (!it->IsCoinBase())
-				vResurrect.push_front(*it);
-		}
-		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.insert(make_pair(Hash(forkBlock), forkBlock)));
-		forkBlock = forkBlock.GetPrevBlock();
-	}
-	TRC(1, "Fork Block: " << Hash(forkBlock) << "  H: " << forkBlock.Height);
-
-	EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HeightToHashCache.clear());
-
-	for (int i=vConnect.size(); i--;) {
-		Block& block = vConnect[i];
-		block.Connect();
-		eng.Caches.m_bestBlock = block;
-		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.erase(Hash(block)));
-		EXT_FOR (const Tx& tx, block.get_Txes()) {
-			eng.RemoveFromMemory(tx);
-		}
-	}
-
-	vector<HashValue> vQueue;
-	EXT_FOR (const Tx& tx, vResurrect) {
-		try {
-			DBG_LOCAL_IGNORE(E_COIN_InputsAlreadySpent);
-			DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
-
-			eng.AddToPool(tx, vQueue);
-		} catch (system_error& ex) {
-			switch (ToHResult(ex)) {
-			case E_COIN_InputsAlreadySpent:
-			case E_COIN_TxNotFound:
-				break;
-			default:
-				throw;
-			}
-		}
-	}
 }
 
 bool Block::HasBestChainWork() const {
@@ -1123,13 +1041,17 @@ void Block::Accept() {
 	m_pimpl->ComputeAttributes();
 
 	ChainParams::CCheckpoints::iterator itCheckPoint = eng.ChainParams.Checkpoints.find(Height);
-	if (itCheckPoint != eng.ChainParams.Checkpoints.end() && itCheckPoint->second != hash)
+	if (itCheckPoint != eng.ChainParams.Checkpoints.end() && itCheckPoint->second != hash) {
+		TRC(3, "Checkpoint failed for block: " << hash << "  H: " << Height);
 		Throw(E_COIN_RejectedByCheckpoint);
+	}
 
 //!!!T	if (Ver >= 2 && IsSuperMajority(2, 750, 1000) && Height != m_pimpl->GetBlockHeightFromCoinbase())				// very expensive check
 //		Throw(E_COIN_BlockHeightMismatchInCoinbase);
 
 	EXT_LOCK (eng.Mtx) {
+		if (!eng.Runned)
+			Throw(E_EXT_ThreadInterrupted);
 		if (Height <= eng.BestBlockHeight() && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
 		if (!HasBestChainWork()) {
@@ -1149,14 +1071,14 @@ void Block::Accept() {
 #endif
 				}
 
-				if (!eng.LiteMode) {
+				if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 					EXT_FOR (const Tx& tx, get_Txes()) {
 						eng.RemoveFromMemory(tx);
 					}
 				}
 			}
 		
-			Inventory inv(eng.LiteMode ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, hash);
+			Inventory inv(eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, hash);
 
 			EXT_LOCK (eng.MtxPeers) {
 				for (CoinEng::CLinks::iterator it=begin(eng.Links); it!=end(eng.Links); ++it) {
@@ -1207,6 +1129,8 @@ void Block::Process(P2P::Link *link) {
 		for (int i=0; i<vec.size(); ++i) {
 			HashValue h = vec[i];
 LAB_AGAIN:
+			if (!eng.Runned)
+				Throw(E_EXT_ThreadInterrupted);
 			Block blk(nullptr);
 			EXT_LOCK (eng.Caches.Mtx) {
 				for (ChainCaches::COrphanMap::iterator it=eng.Caches.OrphanBlocks.begin(); it!=eng.Caches.OrphanBlocks.end(); ++it) {
@@ -1238,7 +1162,7 @@ LAB_FOUND_ORPHAN:
 		if (orphanRoot)
 			link->Send(new GetBlocksMessage(eng.BestBlock(), Hash(orphanRoot)));
 
-		TRC(4, "Added to OrphanBlocks, size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
+		TRC(4, "B " << hash << " added to OrphanBlocks, size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
 	}
 }
 

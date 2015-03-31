@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -55,8 +53,9 @@ public:
 		return Hash().data()[0] & 1;
 	}
 
-	void Write(BinaryWriter& wr) const override {
-		base::Write(wr);
+	using base::Write;
+	void WriteSuffix(BinaryWriter& wr) const {
+		base::WriteSuffix(wr);
 		CoinSerialized::WriteBlob(wr, Signature);
 	}
 
@@ -64,6 +63,9 @@ public:
 		base::Read(rd);
 		Signature = CoinSerialized::ReadBlob(rd);
 	}
+
+	void WriteDbSuffix(BinaryWriter& wr) const override;
+	void ReadDbSuffix(const BinaryReader& rd) override;
 
 	ProofOf ProofType() const override {
 		return get_Txes().size() > 1 && get_Txes()[1].IsCoinStake() ? ProofOf::Stake : ProofOf::Work;

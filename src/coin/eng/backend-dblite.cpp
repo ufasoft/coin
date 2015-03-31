@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "param.h"
@@ -67,16 +72,10 @@ DbliteBlockChainDb::DbliteBlockChainDb()
 #endif
 
 	m_db.AsyncClose = true;
-	m_db.Durability = false;
-	m_db.UseFlush = false;			//!!!?
+	m_db.Durability = false;			// Blockchain DB always can be restored from the Net, so we need not guarantee Commits
+
 	m_db.ProtectPages = false;	//!!!?
 	m_db.CheckpointPeriod = TimeSpan::FromMinutes(5);
-#ifdef X_DEBUG//!!!T
-		
-//		m_db.Durability = true;
-//		m_db.UseFlush = false;
-#endif
-
 }
 
 class SavepointTransaction : public DbTransaction {
@@ -122,6 +121,7 @@ ITransactionable& DbliteBlockChainDb::GetSavepointObject() {
 
 
 const ConstBuf MAX_HEIGHT_KEY("MaxHeight", 9);
+const ConstBuf PROPERTY_BOOTSTRAP_OFFSET("BootstrapOffset", strlen("BootstrapOffset"));
 
 int DbliteBlockChainDb::GetMaxHeight() {
 	DbReadTxRef dbt(m_db);
@@ -135,6 +135,18 @@ int DbliteBlockChainDb::GetMaxHeight() {
 			return letoh(*(int32_t*)c.get_Data().P);
 	}
 	return -1;
+}
+
+uint64_t DbliteBlockChainDb::GetBoostrapOffset() {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableProperties);
+	return c.SeekToKey(PROPERTY_BOOTSTRAP_OFFSET) ? letoh(*(uint64_t*)c.get_Data().P) : 0;
+}
+
+void DbliteBlockChainDb::SetBoostrapOffset(uint64_t v) {
+	DbTxRef dbt(m_db);
+	v = htole(v);
+	m_tableProperties.Put(dbt, PROPERTY_BOOTSTRAP_OFFSET, ConstBuf(&v, sizeof v));
 }
 
 #if UCFG_COIN_CONVERT_TO_UDB
@@ -243,14 +255,15 @@ uint64_t DbliteBlockChainDb::GetBlockOffset(int height) {
 }
 
 void DbliteBlockChainDb::OpenBootstrapFile(const path& dir) {
+	CoinEng& eng = Eng();
 	File::OpenInfo oi;
-	oi.Path = dir / "bootstrap.dat";
+	oi.Path = eng.GetBootstrapPath(); //!!!R dir / (eng.ChainParams.Symbol + ".bootstrap.dat");
 	oi.Mode = FileMode::OpenOrCreate;
 	oi.Share = FileShare::Read;
 	oi.Options = FileOptions::RandomAccess;
 	m_fileBootstrap.Open(oi);
 	int h = GetMaxHeight();
-	if (h != -1)
+	if (h != -1) {
 		PositionOwningFileStream stm(m_fileBootstrap, GetBlockOffset(h));
 		Block block;
 		BinaryReader(stm) >> block;
@@ -258,7 +271,7 @@ void DbliteBlockChainDb::OpenBootstrapFile(const path& dir) {
 	}
 
 	MappedSize = 0;
-#if UCFG_CPU_X86_X64
+#if UCFG_PLATFORM_X64
 	if (m_fileBootstrap.Length > MIN_MM_LENGTH) {
 		m_mmBootstrap = MemoryMappedFile::CreateFromFile(m_fileBootstrap, nullptr, 0, MemoryMappedFileAccess::Read);
 		m_viewBootstrap = m_mmBootstrap.CreateView(0, MappedSize = m_fileBootstrap.Length & ~0xFFFFull, MemoryMappedFileAccess::Read);
@@ -266,11 +279,22 @@ void DbliteBlockChainDb::OpenBootstrapFile(const path& dir) {
 #endif	
 }
 
+void DbliteBlockChainDb::BeforeDbOpenCreate() {
+	switch (Eng().Mode) {
+	case EngMode::Normal:
+	case EngMode::BlockExplorer:
+		m_db.UseFlush = false;			//!!!? this optimization lowers DB reliability, but improves performance for huge DBs
+		break;
+	default:
+		m_db.UseFlush = true;
+		break;
+	}
+}
+
 bool DbliteBlockChainDb::Create(const path& p) {
 	CoinEng& eng = Eng();
 	
-	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
-		m_db.UseFlush = true;
+	BeforeDbOpenCreate();
 	m_db.AppName = VER_INTERNALNAME_STR;
 	m_db.UserVersion = Version(VER_PRODUCTVERSION);
 	m_db.Create(p);
@@ -300,8 +324,7 @@ bool DbliteBlockChainDb::Create(const path& p) {
 bool DbliteBlockChainDb::Open(const path& p) {
 	CoinEng& eng = Eng();
 
-	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
-		m_db.UseFlush = true;
+	BeforeDbOpenCreate();
 	m_db.Open(p);
 	{
 		DbTransaction dbt(m_db, true);
@@ -395,10 +418,14 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, const Co
 	Block r;
 	r.m_pimpl->Height = height;
 	if (eng.Mode == EngMode::Bootstrap) {
-		uint64_t off = letoh(*(uint64_t UNALIGNED *)cbuf.P);
-		PositionOwningFileStream stm(m_fileBootstrap, off);
+		CMemReadStream msDb(cbuf);
+		BinaryReader rdDb(msDb);
+		uint64_t off = rdDb.ReadUInt64();
+		PositionOwningFileStream stmFile(m_fileBootstrap, off);
+		BufferedStream stm(stmFile);
 		r.Read(BinaryReader(stm));
 		r.m_pimpl->OffsetInBootstrap = off;
+		r.m_pimpl->ReadDbSuffix(rdDb);
 	} else {
 		CMemReadStream msBlock(cbuf);
 		BinaryReader rd(msBlock);
@@ -492,15 +519,19 @@ vector<uint32_t> DbliteBlockChainDb::InsertBlock(const Block& block, const Const
 		*(uint32_t*)(blob.data() + 4) = htole(uint32_t(blob.Size - 8));
 
 		if (!block.m_pimpl->OffsetInBootstrap) {
-			m_fileBootstrap.Write(blob.constData(), blob.Size, OffsetInBootstrap);
+			m_fileBootstrap.Write(blob.constData(), blob.Size, eng.OffsetInBootstrap);
 //!!!?T			m_fileBootstrap.Flush();
-			block.m_pimpl->OffsetInBootstrap = OffsetInBootstrap + 8;
-			OffsetInBootstrap += blob.Size;
+			block.m_pimpl->OffsetInBootstrap = eng.OffsetInBootstrap + 8;
+			eng.OffsetInBootstrap += blob.Size;
 		}
 		wrT << block.m_pimpl->OffsetInBootstrap;
+		block.m_pimpl->WriteDbSuffix(wrT);
 	} else
 		wrT << ConstBuf(ReducedBlockHash(hash)) << data << txData;
 	DbTxRef dbt(m_db);
+	if (eng.NextOffsetInBootstrap)													// changed only in BootstrapDbThread
+		SetBoostrapOffset(eng.NextOffsetInBootstrap);
+
 	m_tableBlocks.Put(dbt, blockKey, msB, true);
 	m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
 	if (m_db.UserVersion >= VER_BLOCKS_TABLE_IS_HASHTABLE) {
@@ -523,7 +554,10 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd) {
 	default:
 		rd >> Data >> TxIns;
 	}
-	rd >> Coins;
+	if (rd.BaseStream.Eof())
+		Coins = Blob();
+	else
+		rd >> Coins;
 }
 
 void DbliteBlockChainDb::TxData::Write(BinaryWriter& wr, bool bWriteHash) const {
@@ -536,9 +570,73 @@ void DbliteBlockChainDb::TxData::Write(BinaryWriter& wr, bool bWriteHash) const 
 	default:
 		wr << Data << TxIns;
 	}
-	wr << Coins;
+	if (Coins.Size!=0 || bWriteHash)
+		wr << Coins;
 	if (bWriteHash)
 		wr << HashTx;
+}
+
+bool DbliteBlockChainDb::FindTxDatas(DbCursor& c, const ConstBuf& txid8, TxDatas& txDatas) {
+	ASSERT(txDatas.Items.empty());
+
+	if (!c.Get(TxKey(txid8)))
+		return false;
+	CMemReadStream msT(c.Data);
+	BinaryReader rdT(msT);
+	TxData txData;
+	txData.Read(rdT);
+	txDatas.Items.push_back(txData);
+	if (msT.Eof()) {
+		txDatas.Index = 0;
+		return true;
+	} else {
+		rdT >> txDatas.Items.back().HashTx;
+		while (!msT.Eof()) {
+			TxData txData;
+			txData.Read(rdT);
+			rdT >> txData.HashTx;
+			txDatas.Items.push_back(txData);
+		}
+		for (size_t i=0; i<txDatas.Items.size(); ++i) {
+			if (!memcmp(txDatas.Items[i].HashTx.data(), txid8.P, 8)) {
+				txDatas.Index = i;
+				return true;
+			}
+		}
+		return false;
+	}	
+}
+
+DbliteBlockChainDb::TxDatas DbliteBlockChainDb::GetTxDatas(const ConstBuf& txid8) {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableTxes);
+
+	TxDatas txDatas;
+	if (!FindTxDatas(c, txid8, txDatas))
+		Throw(E_COIN_InconsistentDatabase);
+	return txDatas;
+}
+
+void DbliteBlockChainDb::PutTxDatas(DbCursor& c, const ConstBuf& txKey, const TxDatas& txDatas, bool bUpdate) {
+	ASSERT(!txDatas.Items.empty() || bUpdate);
+
+	if (txDatas.Items.empty())
+		c.Delete();
+	else {
+		MemoryStream ms;
+		BinaryWriter wr(ms);
+		if (txDatas.Items.size() == 1)
+			txDatas.Items[0].Write(wr, false);
+		else {
+			EXT_FOR (const TxData& txData, txDatas.Items) {
+				txData.Write(wr, true);
+			}
+		}
+		if (bUpdate)
+			c.Update(ms);
+		else
+			c.Put(txKey, ms);
+	}
 }
 
 pair<int, int> DbliteBlockChainDb::FindPrevTxCoords(DbWriter& wr, int height, const HashValue& hash) {
@@ -606,71 +704,25 @@ void DbliteBlockChainDb::InsertPubkeyToTxes(DbTransaction& dbTx, const Tx& tx) {
 	}
 }
 
-bool DbliteBlockChainDb::FindTxDatas(const ConstBuf& txid8, TxDatas& txDatas) {
-	ASSERT(txDatas.Items.empty());
-
-	DbReadTxRef dbt(m_db);
-	DbCursor c(dbt, m_tableTxes);
-	if (!c.Get(TxKey(txid8)))
-		return false;
-	CMemReadStream msT(c.Data);
-	BinaryReader rdT(msT);
-	TxData txData;
-	txData.Read(rdT);
-	txDatas.Items.push_back(txData);
-	if (msT.Eof()) {
-		txDatas.Index = 0;
-		return true;
-	} else {
-		rdT >> txDatas.Items.back().HashTx;
-		while (!msT.Eof()) {
-			TxData txData;
-			txData.Read(rdT);
-			rdT >> txData.HashTx;
-			txDatas.Items.push_back(txData);
-		}
-		for (size_t i=0; i<txDatas.Items.size(); ++i) {
-			if (!memcmp(txDatas.Items[i].HashTx.data(), txid8.P, 8)) {
-				txDatas.Index = i;
-				return true;
-			}
-		}
-		return false;
-	}	
-}
-
-DbliteBlockChainDb::TxDatas DbliteBlockChainDb::GetTxDatas(const ConstBuf& txid8) {
-	TxDatas txDatas;
-	if (!FindTxDatas(txid8, txDatas))
-		Throw(E_COIN_InconsistentDatabase);
-	return txDatas;
-}
-
-void DbliteBlockChainDb::PutTxDatas(const ConstBuf& txKey, const TxDatas& txDatas) {
-	ASSERT(!txDatas.Items.empty());
-
-	MemoryStream ms;
-	BinaryWriter wr(ms);
-	if (txDatas.Items.size() == 1)
-		txDatas.Items[0].Write(wr, false);
-	else {
-		EXT_FOR (const TxData& txData, txDatas.Items) {
-			txData.Write(wr, true);
-		}
-	}
-	DbTxRef dbt(m_db);
-	m_tableTxes.Put(dbt, txKey, ms);
-	dbt.CommitIfLocal();
-}
-
 void DbliteBlockChainDb::DeleteBlock(int height, const vector<int64_t>& txids) {
 	DbTxRef dbt(m_db);
 	DbCursor c(dbt, m_tableBlocks);
 	if (c.Get(BlockKey(height))) {
-		Blob blob;
-		BinaryReader(CMemReadStream(c.Data)) >> blob;
+		Blob blobHash;
+		switch (Eng().Mode) {
+		case EngMode::Bootstrap:
+			{
+				uint64_t off = letoh(*(uint64_t UNALIGNED *)c.get_Data().P);
+				Block block;
+				block.Read(BinaryReader(PositionOwningFileStream(m_fileBootstrap, off)));
+				blobHash = Hash(block);
+			}
+			break;
+		default:
+			BinaryReader(CMemReadStream(c.Data)) >> blobHash;
+		}
 		c.Delete();
-		m_tableHashToBlock.Delete(dbt, blob);
+		m_tableHashToBlock.Delete(dbt, blobHash);
 	}
 	if (m_db.UserVersion >= VER_BLOCKS_TABLE_IS_HASHTABLE) {
 		int32_t h = htole(height-1);
@@ -686,8 +738,10 @@ void DbliteBlockChainDb::DeleteBlock(int height, const vector<int64_t>& txids) {
 		}
 		if (txDatas.Items.empty())
 			m_tableTxes.Delete(dbt, TxKey(txid8));
-		else
-			PutTxDatas(TxKey(txid8), txDatas);
+		else {
+			DbCursor cTxes(dbt, m_tableTxes);
+			PutTxDatas(cTxes, TxKey(txid8), txDatas);
+		}
 	}
 	dbt.CommitIfLocal();
 }
@@ -702,8 +756,11 @@ void DbliteBlockChainDb::ReadTx(uint64_t off, Tx& tx) {
 }
 
 bool DbliteBlockChainDb::FindTxById(const ConstBuf& txid8, Tx *ptx) {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableTxes);
+
 	TxDatas txDatas;
-	if (!FindTxDatas(txid8, txDatas))
+	if (!FindTxDatas(c, txid8, txDatas))
 		return false;
 	if (ptx) {
 		ptx->EnsureCreate();
@@ -720,15 +777,15 @@ bool DbliteBlockChainDb::FindTxById(const ConstBuf& txid8, Tx *ptx) {
 			DbReader rd(stm, &eng);
 			rd >> *ptx;
 		}
-		ptx->SetReducedHash(txid8);
 	}
 	return true;
 }
 
 bool DbliteBlockChainDb::FindTx(const HashValue& hash, Tx *ptx) {
 	bool r = FindTxById(ConstBuf(hash.data(), 8), ptx);
-	if (r && ptx)
+	if (r && ptx) {
 		ptx->SetHash(hash);
+	}
 	return r;
 }
 
@@ -754,6 +811,59 @@ vector<bool> DbliteBlockChainDb::GetCoinsByTxHash(const HashValue& hash) {
 			vec.push_back(v & (1 << i));
 	}
 	return vec;
+}
+
+void DbliteBlockChainDb::SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) {
+	TxDatas txDatas = GetTxDatas(ConstBuf(hash.data(), 8));
+	TxData& txData = txDatas.Items[txDatas.Index];
+	txData.Coins = find(vec.begin(), vec.end(), true) != vec.end() ? CoinEng::SpendVectorToBlob(vec) : Blob();
+	
+	DbTxRef dbt(m_db);
+	DbCursor cTxes(dbt, m_tableTxes);
+	PutTxDatas(cTxes, TxKey(hash), txDatas);
+	dbt.CommitIfLocal();
+}
+
+void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend) {
+	ConstBuf txid8 = ConstBuf(op.TxHash.data(), 8);
+	DbTxRef dbt(m_db);
+	DbCursor cTxes(dbt, m_tableTxes);
+
+	TxDatas txDatas;
+	if (!FindTxDatas(cTxes, txid8, txDatas))
+		Throw(E_COIN_InconsistentDatabase);
+	TxData& txData = txDatas.Items[txDatas.Index];
+	int pos = op.Index >> 3;
+	byte mask = 1 << (op.Index & 7);
+	byte *p;
+	if (bSpend) {
+		p = txData.Coins.data();
+		if (pos >= txData.Coins.Size || !(p[pos] & mask))
+			Throw(E_COIN_InputsAlreadySpent);
+		p[pos] &= ~mask;
+	} else {
+		if (pos >= txData.Coins.Size)
+			txData.Coins.Size = pos+1;
+		(p = txData.Coins.data())[pos] |= mask;
+	}
+	size_t i;
+	for (i=txData.Coins.Size; i-- && !p[i];)
+		;
+	if (i+1 != txData.Coins.Size)
+		txData.Coins.Size = i+1;
+	CoinEng& eng = Eng();
+	if (txData.Coins.Size == 0 && eng.Mode == EngMode::Bootstrap) {
+		ChainCaches::SpentTx stx = { op.TxHash, txData.Height, letoh(*(uint32_t*)txData.Data.constData()) };
+		EXT_LOCK(eng.Caches.Mtx) {
+			eng.Caches.m_cacheSpentTxes.push_front(stx);
+			if (eng.Caches.m_cacheSpentTxes.size() > ChainCaches::MAX_LAST_SPENT_TXES)
+				eng.Caches.m_cacheSpentTxes.pop_back();
+		}
+		txDatas.Items.erase(txDatas.Items.begin() + txDatas.Index);
+	}
+
+	PutTxDatas(cTxes, TxKey(txid8), txDatas, true);
+	dbt.CommitIfLocal();
 }
 
 void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) {
@@ -783,7 +893,8 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 	} catch (DbException& ex) {
 		TxDatas txDatas;
 
-		if (FindTxDatas(ConstBuf(txHash.data(), 8), txDatas)) {
+		DbCursor cTxes(dbt, m_tableTxes);
+		if (FindTxDatas(cTxes, ConstBuf(txHash.data(), 8), txDatas)) {
 			if (txDatas.Items.size() == 1) {
 				if (eng.Mode == EngMode::Bootstrap) {
 					Tx txOld;
@@ -803,7 +914,7 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 
 			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
 				Throw(E_COIN_DupNonSpentTx);
-			PutTxDatas(TxKey(txHash), txDatas);
+			PutTxDatas(cTxes, TxKey(txHash), txDatas);
 			goto LAB_END;
 		}
 LAB_OTHER_TX:
@@ -828,7 +939,7 @@ LAB_FOUND:
 			txData.Coins = spend;
 			txData.HashTx = txHash;
 			txDatas.Items.push_back(txData);
-			PutTxDatas(TxKey(txHash), txDatas);
+			PutTxDatas(cTxes, TxKey(txHash), txDatas);
 		}
 LAB_END:
 		;
@@ -838,11 +949,15 @@ LAB_END:
 	dbt.CommitIfLocal();
 }
 
-void DbliteBlockChainDb::SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) {
-	TxDatas txDatas = GetTxDatas(ConstBuf(hash.data(), 8));
-	TxData& txData = txDatas.Items[txDatas.Index];
-	txData.Coins = find(vec.begin(), vec.end(), true) != vec.end() ? CoinEng::SpendVectorToBlob(vec) : Blob();
-	PutTxDatas(TxKey(hash), txDatas);
+void DbliteBlockChainDb::InsertSpentTxOffsets(const unordered_map<HashValue, pair<uint32_t, uint32_t>>& spentTxOffsets) {
+	ASSERT(Eng().Mode == EngMode::Bootstrap);
+
+	DbTxRef dbt(m_db);
+	for (unordered_map<HashValue, pair<uint32_t, uint32_t>>::const_iterator it=spentTxOffsets.begin(), e=spentTxOffsets.end(); it!=e; ++it) {
+		uint32_t off = htole(it->second.second);
+		InsertTx(Tx(), TxHashesOutNums(), it->first, it->second.first, ConstBuf(), ConstBuf(), ConstBuf(&off, 3));
+	}
+	dbt.CommitIfLocal();
 }
 
 Blob DbliteBlockChainDb::FindPubkey(int64_t id) {

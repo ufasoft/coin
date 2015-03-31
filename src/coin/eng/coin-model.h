@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -80,9 +78,9 @@ struct PeerInfo : public PeerInfoBase {
 class DbWriter : public BinaryWriter {
 	typedef BinaryWriter base;
 public:
-	CPointer<TxHashesOutNums> PTxHashesOutNums;
-	CPointer<const Block> PCurBlock;
-	CPointer<CConnectJob> ConnectJob;
+	observer_ptr<TxHashesOutNums> PTxHashesOutNums;
+	observer_ptr<const Block> PCurBlock;
+	observer_ptr<CConnectJob> ConnectJob;
 	bool BlockchainDb;
 
 	DbWriter(Stream& stm)
@@ -98,7 +96,7 @@ public:
 	CoinEng *Eng;
 	bool BlockchainDb;
 	bool ReadTxHashes;
-	CPointer<const Block> PCurBlock;
+	observer_ptr<const Block> PCurBlock;
 
 	DbReader(const Stream& stm, CoinEng *eng = 0)
 		:	base(stm)
@@ -253,7 +251,7 @@ class COIN_CLASS TxObj : public Object, public CoinSerialized  {
 
 //	DBG_OBJECT_COUNTER(class_type);
 public:
-	typedef Interlocked interlocked_policy;
+	typedef InterlockedPolicy interlocked_policy;
 
 	vector<TxOut> TxOuts;
 	DateTime LockTimestamp;
@@ -343,6 +341,7 @@ public:
 	int GetP2SHSigOpCount(const CTxMap& txMap) const;
 	bool IsFinal(int height = 0, const DateTime dt = DateTime(0)) const { return m_pimpl->IsFinal(height, dt); }
 	bool IsNewerThan(const Tx& txOld) const;
+	void SpendInputs() const;
 	void WriteTxIns(DbWriter& wr) const;
 
 	const vector<TxOut>& TxOuts() const { return m_pimpl->TxOuts; }
@@ -390,7 +389,7 @@ class AuxPow;
 
 } namespace Ext {
 	template <> struct ptr_traits<Coin::AuxPow> {
-		typedef Interlocked interlocked_policy;
+		typedef InterlockedPolicy interlocked_policy;
 	};
 } namespace Coin {
 
@@ -446,12 +445,14 @@ public:
 	ptr<Coin::AuxPow> AuxPow;
 	
 	TxHashesOutNums m_txHashesOutNums;
+	mutable uint64_t OffsetInBootstrap;
 	
 	mutable volatile bool m_bTxesLoaded;
 	mutable optional<Coin::HashValue> m_hash;
 
 	BlockObj()
 		:	m_bTxesLoaded(false)
+		,	OffsetInBootstrap(0)
 	{}
 
 	~BlockObj();
@@ -468,10 +469,13 @@ public:
 	virtual ProofOf ProofType() const { return ProofOf::Work; }
 	const Coin::CTxes& get_Txes() const;
 	virtual HashValue HashFromTx(const Tx& tx, int n) const;
+	void WriteHeader(BinaryWriter& wr) const override;
+	virtual void WriteSuffix(BinaryWriter& wr) const {}
+	virtual void WriteDbSuffix(BinaryWriter& wr) const {}
+	virtual void ReadDbSuffix(const BinaryReader& rd) {}
 protected:	
 	mutable mutex m_mtx;
 	mutable CTxes m_txes;
-
 
 	BlockObj(BlockObj& bo)
 		:	base(bo)
@@ -481,11 +485,11 @@ protected:
 		,	m_merkleTree(bo.m_merkleTree)
 		,	m_bTxesLoaded(bo.m_bTxesLoaded)
 		,	m_txHashesOutNums(bo.m_txHashesOutNums)
+		,	OffsetInBootstrap(bo.OffsetInBootstrap)
 	{
 	}
 
 	virtual BlockObj *Clone() { return new BlockObj(*this); }
-	void WriteHeader(BinaryWriter& wr) const override;
 	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
 	virtual void Write(BinaryWriter& wr) const;
 	virtual void Read(const BinaryReader& rd);
@@ -524,6 +528,7 @@ public:
 
 	void Write(BinaryWriter& wr) const override { m_pimpl->Write(wr); }
 	void Read(const BinaryReader& rd) override { m_pimpl->Read(rd); }
+	uint32_t OffsetOfTx(const HashValue& hashTx) const;
 
 	void LoadToMemory();
 
@@ -581,7 +586,7 @@ public:
 		m_pimpl->m_bTxesLoaded = true;
 		m_pimpl->m_txes.push_back(tx);	
 	}
-
+		
 	Tx& GetFirstTxRef() { return m_pimpl->m_txes[0]; }
 	void CheckPow(const Target& target) const { return m_pimpl->CheckPow(target); }
 	BigInteger GetWork() const { return m_pimpl->GetWork(); }
@@ -612,6 +617,7 @@ public:
 	Block Clone() const {
 		return Block(m_pimpl->Clone());
 	}
+	
 protected:
 	friend class BlockObj;
 	friend class MerkleBlockMessage;
@@ -712,50 +718,18 @@ public:
 
 	Block m_bestBlock;
 
+	struct SpentTx {
+		HashValue HashTx;
+		uint32_t Height;
+		uint32_t Offset;
+	};
+	typedef list<SpentTx> CCacheSpentTxes;
+	CCacheSpentTxes m_cacheSpentTxes;											// used for fast Reorganize()
+	static const size_t MAX_LAST_SPENT_TXES = 5000;
+
 	ChainCaches();
 
 	friend class CoinEng;
-};
-
-
-class COIN_CLASS Address : public HashValue160, public CPrintable {
-public:
-	CoinEng& Eng;
-	String Comment;
-	byte Ver;
-
-	Address(CoinEng& eng);
-	explicit Address(CoinEng& eng, const HashValue160& hash, RCString comment = "");
-	explicit Address(CoinEng& eng, const HashValue160& hash, byte ver);
-	explicit Address(CoinEng& eng, RCString s);
-
-	Address& operator=(const Address& a) {
-		if (&Eng != &a.Eng)
-			Throw(E_INVALIDARG);
-		HashValue160::operator=(a);
-		Comment = a.Comment;
-		Ver = a.Ver;
-		return *this;
-	}
-
-	void CheckVer(CoinEng& eng) const;
-	String ToString() const override;
-
-	bool operator<(const Address& a) const {
-		return Ver < a.Ver ||
-			(Ver == a.Ver && memcmp(data(), a.data(), 20) < 0);
-	}
-};
-
-class PrivateKey : public CPrintable {
-public:
-	PrivateKey() {}
-	PrivateKey(const ConstBuf& cbuf, bool bCompressed);
-	explicit PrivateKey(RCString s);
-	pair<Blob, bool> GetPrivdataCompressed() const;
-	String ToString() const override;
-private:
-	Blob m_blob;
 };
 
 
@@ -824,13 +798,12 @@ public:
 
 	unordered_set<int64_t> InsertedIds;
 
-
-	mutable volatile int32_t SigOps;
+	mutable atomic<int> aSigOps;
 	mutable volatile bool Failed;
 
 	CConnectJob(CoinEng& eng)
 		:	Eng(eng)
-		,	SigOps(0)
+		, aSigOps(0)
 		,	Fee(0)
 		,	Failed(false)
 	{}
