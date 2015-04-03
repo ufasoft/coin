@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -105,7 +103,7 @@ class DBLITE_CLASS BTreeCursor : public CursorObj {
 	typedef BTreeCursor class_type;
 public:
 	vector<PagePos> Path;
-	CPointer<BTree> Tree;
+	observer_ptr<BTree> Tree;
 
 	BTreeCursor();
 
@@ -116,7 +114,7 @@ public:
 
 	void SetMap(PagedMap *pMap) override {
 		base::SetMap(pMap);
-		Tree = dynamic_cast<BTree*>(pMap);
+		Tree.reset(dynamic_cast<BTree*>(pMap));
 	}
 
 	void PageTouch(int height);
@@ -124,8 +122,7 @@ public:
 	bool SeekToFirst() override;
 	bool SeekToLast() override;
 	bool SeekToSibling(bool bToRight) override;
-	bool SeekToKey(const ConstBuf& k) override;
-	
+	bool SeekToKey(const ConstBuf& k) override;	
 
 	void Put(ConstBuf k, const ConstBuf& d, bool bInsert) override;
 	void PushFront(ConstBuf k, const ConstBuf& d) override;
@@ -140,6 +137,7 @@ private:
 	bool PageSearch(const ConstBuf& k, bool bModify = false);
 	void Drop() override;
 	void Balance() override;
+	int CompareEntry(LiteEntry *entries, int idx, const ConstBuf& kk);
 
 	Page FindLeftSibling();
 	Page FindRightSibling();
@@ -149,7 +147,6 @@ private:
 	friend class BTree;
 	friend class DbTable;
 };
-
 
 
 }}} // Ext::DB::KV::

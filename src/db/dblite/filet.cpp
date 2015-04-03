@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -192,7 +190,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 	uint32_t vpage = uint32_t(offset >> PageSizeBits);
 	size_t off = size_t(offset & (m_tx.Storage.PageSize-1));
 
-	if (m_tx.Storage.m_accessViewMode == KVStorage::ViewMode::Full) {
+	if (m_tx.Storage.m_accessViewMode == ViewMode::Full) {
 #if UCFG_DB_TLB
 		CTlbAddress::iterator it = TlbAddress.find(vpage);
 		if (it != TlbAddress.end())
@@ -216,6 +214,29 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 			return it->second.first ? letoh(*(uint32_t*)((byte*)it->second.first.get_Address() + off)) : 0;
 #endif
 
+#if 1
+		uint32_t pgno = PageRoot.N;
+		void *pageAddress = PageRoot.get_Address();
+		ptr<ViewBase> view;
+		EXT_LOCK(g_lruViewCache->Mtx) {
+			EXT_LOCK(m_tx.Storage.MtxViews) {
+				for (int levels=IndirectLevels, level=levels;;) {
+					--level;
+					int bits = PageSizeBits + level*(PageSizeBits-2);
+					m_tx.Storage.OnOpenPage(pgno);			
+					if (level == -1)
+						return letoh(*(uint32_t*)((byte*)pageAddress + off));
+					if (!(pgno = letoh(((uint32_t*)pageAddress)[int(offset >> bits)])))
+						return 0;
+					PageObj *po = m_tx.Storage.OpenedPages.at(pgno);
+					pageAddress = po ? po->GetAddress()
+						: m_tx.Storage.GetPageAddress(m_tx.Storage.GetViewNoLock(pgno >> m_tx.Storage.m_bitsViewPageRatio), pgno);
+					offset &= (1LL<<bits) - 1;
+				}
+			}
+		}
+#else //!!!T	
+
 		struct GetPathOffVisitor : PathVisitor {
 			bool OnPathLevel(int level, Page& page) override {
 				return bool(page);
@@ -226,7 +247,8 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 		TlbPage.insert(make_pair(vpage, page));
 #endif
 		uint32_t r = page ? letoh(*(uint32_t*)((byte*)page.get_Address() + off)) : 0;
-		return r;
+		return r; 
+#endif
 	}
 }
 

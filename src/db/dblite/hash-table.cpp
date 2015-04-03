@@ -1,15 +1,14 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
 #include "dblite.h"
 #include "b-tree.h"
 #include "hash-table.h"
+
 
 namespace Ext { namespace DB { namespace KV {
 
@@ -245,39 +244,64 @@ void HashTable::Split(uint32_t nPage, int level) {
 	page.ClearEntries();
 }
 
+bool HtCursor::UpdateImpl(const ConstBuf& k, const ConstBuf& d, bool bInsert) {
+	pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.Size);
+	size_t ksize = Map->KeySize ? Map->KeySize-m_pagePos.Page.Header().KeyOffset() : 1+k.Size;
+	size_t entrySize = GetEntrySize(ppEntry, ksize, d.Size);
+	if (m_pagePos.Page.SizeLeft(Map->KeySize) < entrySize) {
+		for (int level = BitOps::ScanReverse(NPage); level<Ht->MaxLevel; ++level) {
+			if (!Ht->GetPgno((1 << level) | NPage)) {
+				Ht->Split(NPage, level);
+				return false;
+			}
+		}
+		(SubCursor = new BTreeSubCursor(_self))->Put(k, d, bInsert);
+		UpdateFromSubCursor();
+		return true;
+	}
+	InsertImpHeadTail(ppEntry, k, d, d.Size, DB_EOF_PGNO);
+	return true;
+}
+
+void HtCursor::Update(const ConstBuf& d) {
+	if (SubCursor) {
+		SubCursor->Update(d);
+		UpdateFromSubCursor();
+	} else {
+		ConstBuf k = get_Key();
+		byte key[256];
+		memcpy(key, k.P, k.Size);
+		k = ConstBuf(key, k.Size);
+		Touch();
+		Delete();
+		if (!UpdateImpl(k, d, false)) {
+			uint32_t hash = Ht->Hash(k);
+			do {
+				SeekToKeyHash(k, hash);
+			} while (!UpdateImpl(k, d, false));	
+		}
+	}
+}
+
 void HtCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 	if (Ht->PageMap.Length == 0) {
 		Ht->PageMap.PutUInt32(0, dynamic_cast<DbTransaction&>(Ht->Tx).Allocate(PageAlloc::Leaf).N);
 		Map->Dirty = true;
 	}
-	for (uint32_t hash = Ht->Hash(k);;) {
-LAB_AGAIN:
-		bool bExists = SeekToKeyHash(k, hash);
-		if (SubCursor)
-			break;
+	uint32_t hash = Ht->Hash(k);
+	bool bExists = SeekToKeyHash(k, hash);
+	if (SubCursor) {
+		SubCursor->Put(k, d, bInsert);
+		UpdateFromSubCursor();
+	} else {
 		if (bExists && bInsert)
 			throw DbException(E_EXT_DB_DupKey, nullptr);
 		Touch();
 		if (bExists)
 			Delete();
-		pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.Size);
-		size_t ksize = Map->KeySize ? Map->KeySize-m_pagePos.Page.Header().KeyOffset() : 1+k.Size;
-		size_t entrySize = GetEntrySize(ppEntry, ksize, d.Size);
-		if (m_pagePos.Page.SizeLeft(Map->KeySize) < entrySize) {
-			for (int level = BitOps::ScanReverse(NPage); level<Ht->MaxLevel; ++level) {
-				if (!Ht->GetPgno((1 << level) | NPage)) {
-					Ht->Split(NPage, level);
-					goto LAB_AGAIN;
-				}
-			}
-			SubCursor = new BTreeSubCursor(_self);
-			break;
-		}
-		InsertImpHeadTail(ppEntry, k, d, d.Size, DB_EOF_PGNO);
-		return;
+		while (!UpdateImpl(k, d, bInsert))
+			SeekToKeyHash(k, hash);
 	}
-	SubCursor->Put(k, d, bInsert);
-	UpdateFromSubCursor();
 }
 
 void HtCursor::Delete() {

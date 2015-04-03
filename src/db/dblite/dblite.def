@@ -1,40 +1,39 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 LIBRARY dblite
 
 EXPORTS
 
 ??0KVStorage@KV@DB@Ext@@QAE@XZ												@ 1 NONAME
 ??1KVStorage@KV@DB@Ext@@QAE@XZ												@ 2 NONAME
-?Create@KVStorage@KV@DB@Ext@@QAEXABVString@4@@Z								@ 3 NONAME
-?Open@KVStorage@KV@DB@Ext@@QAEXABVString@4@@Z								@ 4 NONAME
+?Create@KVStorage@KV@DB@Ext@@QAEXABVpath@sys@ExtSTL@@@Z						@ 3 NONAME
+?Open@KVStorage@KV@DB@Ext@@QAEXABVpath@sys@ExtSTL@@@Z						@ 4 NONAME
 ?Close@KVStorage@KV@DB@Ext@@QAEX_N@Z										@ 5 NONAME
 ?Vacuum@KVStorage@KV@DB@Ext@@QAEXXZ											@ 6 NONAME
 ?DoCheckpoint@KVStorage@KV@DB@Ext@@AAE_N_N@Z								@ 7 NONAME
-??0DbCursor@KV@DB@Ext@@QAE@AAVDbTransaction@123@AAVDbTable@123@@Z			@ 8 NONAME
+??0DbCursor@KV@DB@Ext@@QAE@AAVDbTransactionBase@123@AAVDbTable@123@@Z		@ 8 NONAME
 ??1DbCursor@KV@DB@Ext@@QAE@XZ												@ 9 NONAME
-?get_Key@DbCursor@KV@DB@Ext@@QAEABUConstBuf@4@XZ							@ 10 NONAME
-?get_Data@DbCursor@KV@DB@Ext@@QAEABUConstBuf@4@XZ							@ 11 NONAME
-?SeekToKey@DbCursor@KV@DB@Ext@@QAE_NABUConstBuf@4@@Z						@ 12 NONAME
+;?get_Key@DbCursor@KV@DB@Ext@@QAEABUConstBuf@4@XZ							@ 10 NONAME
+?Main@DbTable@KV@DB@Ext@@SGAAV1234@XZ										@ 11 NONAME
+?OpenPage@DbTransaction@KV@DB@Ext@@UAE?AVPage@234@I@Z						@ 12 NONAME
 ?Delete@DbTable@KV@DB@Ext@@QAE_NAAVDbTransaction@234@ABUConstBuf@4@@Z		@ 13 NONAME
 ?Put@DbTable@KV@DB@Ext@@QAEXAAVDbTransaction@234@ABUConstBuf@4@1_N@Z		@ 14 NONAME
 ?Open@DbTable@KV@DB@Ext@@QAEXAAVDbTransaction@234@_N@Z						@ 15 NONAME
 ?Rollback@DbTransaction@KV@DB@Ext@@UAEXXZ									@ 16 NONAME
 ?Commit@DbTransaction@KV@DB@Ext@@UAEXXZ										@ 17 NONAME
 ??1DbTransaction@KV@DB@Ext@@UAE@XZ											@ 18 NONAME
-?PushFront@DbCursor@KV@DB@Ext@@QAEXUConstBuf@4@ABU54@@Z						@ 19 NONAME
+??0DbTransactionBase@KV@DB@Ext@@QAE@AAVKVStorage@123@@Z						@ 19 NONAME
 ?Seek@DbCursor@KV@DB@Ext@@QAE_NW4CursorPos@34@ABUConstBuf@4@@Z				@ 20 NONAME
-?Delete@DbCursor@KV@DB@Ext@@QAEXXZ											@ 21 NONAME
+?Update@DbCursor@KV@DB@Ext@@QAEXABUConstBuf@4@@Z							@ 21 NONAME
 ??0DbTransaction@KV@DB@Ext@@QAE@AAVKVStorage@123@_N@Z						@ 22 NONAME
-?SeekToNext@DbCursor@KV@DB@Ext@@QAE_NXZ										@ 23 NONAME
-?SeekToLast@DbCursor@KV@DB@Ext@@QAE_NXZ										@ 24 NONAME
-?SeekToPrev@DbCursor@KV@DB@Ext@@QAE_NXZ										@ 25 NONAME
+?Delete@DbCursor@KV@DB@Ext@@QAEXXZ											@ 23 NONAME
+?get_Data@CursorObj@KV@DB@Ext@@IAEABUConstBuf@4@XZ							@ 24 NONAME
+?get_Key@CursorObj@KV@DB@Ext@@IAEABUConstBuf@4@XZ							@ 25 NONAME
 ?Put@DbCursor@KV@DB@Ext@@QAEXUConstBuf@4@ABU54@_N@Z							@ 26 NONAME
+??1DbTransactionBase@KV@DB@Ext@@UAE@XZ										@ 27 NONAME
 
+; _DEBUG
+?NumKeys@KV@DB@Ext@@YAHABVPage@123@@Z										@ 100 NONAME
+;?OpenPage@DbTransaction@KV@DB@Ext@@QAE?AVPage@234@I@Z						@ 101 NONAME
+;?GetPgno@HashTable@KV@DB@Ext@@QAEII@Z										@ 102 NONAME
 
+DllRegisterServer  PRIVATE
+DllUnregisterServer PRIVATE

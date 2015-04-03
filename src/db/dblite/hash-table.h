@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -56,7 +54,7 @@ class HtCursor : public CursorObj {
 	typedef CursorObj base;
 	typedef HtCursor class_type;
 public:
-	CPointer<HashTable> Ht;
+	observer_ptr<HashTable> Ht;
 
 	HtCursor() {}
 
@@ -64,7 +62,7 @@ public:
 
 	void SetMap(PagedMap *pMap) override {
 		base::SetMap(pMap);
-		Ht = dynamic_cast<HashTable*>(pMap);
+		Ht.reset(dynamic_cast<HashTable*>(pMap));
 	}
 
 	PagePos& Top() override { return SubCursor ? SubCursor->Top() : m_pagePos; }
@@ -78,6 +76,7 @@ public:
 	bool SeekToKey(const ConstBuf& k) override;	
 	bool Get(const ConstBuf& k) { return SeekToKey(k); }
 	void Put(ConstBuf k, const ConstBuf& d, bool bInsert = false) override;
+	void Update(const ConstBuf& d) override;
 	void Delete() override;
 
 
@@ -94,6 +93,8 @@ private:
 	HtCursor *Clone() override { return new HtCursor(*this); }
 
 	friend class BTreeSubCursor;
+
+	bool UpdateImpl(const ConstBuf& k, const ConstBuf& d, bool bInsert);
 };
 
 

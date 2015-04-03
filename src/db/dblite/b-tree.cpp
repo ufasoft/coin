@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -443,6 +448,13 @@ BTreeCursor::BTreeCursor()
 {
 }
 
+int BTreeCursor::CompareEntry(LiteEntry *entries, int idx, const ConstBuf& kk) {
+	int rc = Tree->m_pfnCompare(entries[idx].Key(Tree->KeySize).P, kk.P, kk.Size);
+	if (!rc)
+		ReturnFromSeekKey(idx);
+	return rc;
+}
+
 bool BTreeCursor::SeekToKey(const ConstBuf& k) {
 	if (Tree->KeySize && Tree->KeySize!=k.Size)
 		Throw(errc::invalid_argument);
@@ -457,21 +469,16 @@ bool BTreeCursor::SeekToKey(const ConstBuf& k) {
 		}
 		ConstBuf kk(k.P+h.KeyOffset(), k.Size-h.KeyOffset());
 		LiteEntry *entries = page.Entries(Tree->KeySize);
-		ConstBuf nk = entries[0].Key(Tree->KeySize);
-		int rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size);
-		if (0 == rc)
-			return ReturnFromSeekKey(0);
-		else if (rc < 0) {
+		int rc = CompareEntry(entries, 0, kk);
+		if (!rc)
+			return true;
+		if (rc < 0) {
 			if (h.Num > 1) {
-				nk = entries[h.Num-1].Key(Tree->KeySize);
-				if (0 == (rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size)))
-					return ReturnFromSeekKey(h.Num-1);
-				else if (rc > 0) {
-					if (Top().Pos < h.Num) {
-						nk = entries[Top().Pos].Key(Tree->KeySize);
-						if (0 == (rc = Tree->m_pfnCompare(nk.P, kk.P, kk.Size)))
-							return ReturnFromSeekKey(Top().Pos);
-					}
+				if (!(rc = CompareEntry(entries, h.Num-1, kk)))
+					return true;
+				if (rc > 0) {
+					if (Top().Pos<h.Num && !CompareEntry(entries, Top().Pos, kk))
+						return true;
 					goto LAB_ENTRY_SEARCH;
 				}
 			}

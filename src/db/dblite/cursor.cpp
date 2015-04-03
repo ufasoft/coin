@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -234,15 +239,6 @@ void DbCursor::AssignImpl(TableType type) {
 		Throw(errc::invalid_argument);
 	}
 	m_pimpl->m_aRef = 1000;
-
-/*
-	switch (type) {
-	case TableType::BTree: m_pimpl = new BTreeCursor; break;
-	case TableType::HashTable: m_pimpl = new HtCursor; break;
-	default:
-		Throw(E_INVALIDARG);
-	}
-	*/
 }
 
 bool DbCursor::Seek(CursorPos cPos, const ConstBuf& k) {
@@ -282,6 +278,15 @@ void DbCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 
 	m_pimpl->Put(k, d, bInsert);
 }
+
+void DbCursor::Update(const ConstBuf& d) {
+	if (m_pimpl->Map->Tx.ReadOnly)
+		Throw(errc::permission_denied);
+	if (!m_pimpl->Initialized || m_pimpl->Deleted || !m_pimpl->Positioned)
+		Throw(errc::invalid_argument);
+	m_pimpl->Update(d);
+}
+
 
 }}} // Ext::DB::KV::
 
