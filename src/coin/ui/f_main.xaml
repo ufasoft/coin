@@ -2,68 +2,161 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 	    xmlns:k="clr-namespace:Coin" 		
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ufasoft Coin" Height="300" Width="664" Loaded="Window_Loaded" Closed="Window_Closed" Icon="coin-3.ico">
-    <DockPanel>
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_File">
-                <MenuItem Header="_Import Wallet..." Click="OnFileImport"/>
-				<MenuItem Header="_Export Wallet..." Click="OnFileExport"/>
-                <Separator/>
-                <MenuItem Header="_Compact Databases" Click="OnFileCompact"/>
-                <Separator/>				
-                <MenuItem Header="E_xit" Click="OnFileExit" />
-            </MenuItem>
-			<MenuItem Header="_Currency" Name="menuCurrency">
-			</MenuItem>
-			<MenuItem Header="_Tools">
-                <MenuItem Header="_Rescan" Click="OnToolsRescan"/>
-				<MenuItem Header="Change Wallet _Password..." Click="OnChangeWalletPassword"/>
-                <MenuItem Header="_Options" Click="OnToolsOptions"/>
-            </MenuItem>
-            <MenuItem Header="_Help">
-				<MenuItem Header="_Help" Click="OnHelp"/>
-				<Separator/>
-				<MenuItem Header="_About..." Click="OnHelpAbout" />
-            </MenuItem>
-        </Menu>
+        xmlns:tb="http://www.hardcodet.net/taskbar"
+        Title="Ufasoft Coin" Height="300" Width="664" Loaded="Window_Loaded" Closed="Window_Closed" Icon="coin.ico" Closing="Window_Closing">
+    <Grid>
+        <DockPanel>
+            <Menu DockPanel.Dock="Top">
+                <MenuItem Header="_File">
+                    <MenuItem Header="_Import Wallet..." Click="OnFileImport"/>
+				    <MenuItem Header="_Export Wallet..." Click="OnFileExport"/>
+					<Separator/>
+					<MenuItem Header="Import Blockchain from bootstrap.dat..." Click="OnFileImportBlockchain"/>
+				    <MenuItem Header="Export Blockchain to bootstrap.dat..." Click="OnFileExportBlockchain"/>
+                    <Separator/>
+                    <MenuItem Header="E_xit" Click="OnFileExit" />
+                </MenuItem>
+			    <MenuItem Header="_Currency" Name="menuCurrency">
+			    </MenuItem>
+			    <MenuItem Header="_Tools">
+                    <MenuItem Header="_Rescan" Click="OnToolsRescan"/>
+				    <MenuItem Header="Change Wallet _Password..." Click="OnChangeWalletPassword"/>
+                    <MenuItem Header="_Options" Click="OnToolsOptions"/>
+                </MenuItem>
+                <MenuItem Header="_Help">
+				    <MenuItem Header="_Help" Click="OnHelp"/>
+				    <Separator/>
+				    <MenuItem Header="_About..." Click="OnHelpAbout" />
+                </MenuItem>
+            </Menu>
 
-		<StatusBar DockPanel.Dock="Bottom" Height="20">
-			<StatusBarItem Name="statusItem1" Width="100"/>
-			<StatusBarItem Name="statusItem2" Width="100"/>
-		</StatusBar>
-		<TabControl >
-			<TabItem Header="Wallets">
-                <ListView Name="LvWallet" MouseDoubleClick="LvWallet_MouseDoubleClick">
-					<ListView.ContextMenu>
-						<ContextMenu Opened="ContextMenu_Opened">
-							<MenuItem Header="Transactions" Click="OnTransactions"/>
-							<MenuItem Header="Send money" Click="OnSendMoney"/>
-							<MenuItem Header="Address Book"  Click="OnAddressBook"/>
-							<MenuItem Header="Mining" IsCheckable="True" IsEnabled="{Binding Path=MiningAllowed}" IsChecked="{Binding Path=MiningEnabled}" Name="menuMining" Unchecked="menuMining_Checked" Checked="menuMining_Checked" />
-						</ContextMenu>
-					</ListView.ContextMenu>
-					<ListView.View>
-                        <GridView>
-                            <GridViewColumn Width="30" ><GridViewColumn.CellTemplate><DataTemplate> <Image Width="16" Height="16" Source="{Binding IconUri}"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
-                            <GridViewColumn Header="Currency" DisplayMemberBinding="{Binding Path=CurrencySymbol}" Width="70" />
-                            <GridViewColumn Header="Balance" DisplayMemberBinding="{Binding Path=Balance}" Width="80" />
-							<GridViewColumn Header="Block" DisplayMemberBinding="{Binding Path=BlockHeight}" Width="60"/>
-							<GridViewColumn Header="State" DisplayMemberBinding="{Binding Path=State}" Width="300" />
-        					<GridViewColumn Header="Peers" DisplayMemberBinding="{Binding Path=Peers}" Width="50" />
-        				</GridView>
-                    </ListView.View>
-                </ListView>
-			</TabItem>
-			<TabItem Header="Events">
-                <ListView Name="LvEvent">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Date Time" DisplayMemberBinding="{Binding Path=Timestamp}" Width="70" />
-                            <GridViewColumn Header="Event" DisplayMemberBinding="{Binding Path=Comment}" Width="300"/>
-        				</GridView>
-                    </ListView.View>
-                </ListView>
-			</TabItem>
-		</TabControl>
-	</DockPanel>
+		    <StatusBar DockPanel.Dock="Bottom" Height="20">
+			    <StatusBarItem Name="statusItem1" Width="100"/>
+			    <StatusBarItem Name="statusItem2" Width="100"/>
+		    </StatusBar>
+		    <TabControl >
+			    <TabItem Header="Wallets" Height="22" VerticalAlignment="Bottom">
+                    <ListView Name="LvWallet" MouseDoubleClick="LvWallet_MouseDoubleClick">
+					    <ListView.ContextMenu>
+						    <ContextMenu Opened="ContextMenu_Opened">
+							    <MenuItem Header="Transactions" Click="OnTransactions"/>
+							    <MenuItem Header="Send money" Click="OnSendMoney"/>
+							    <MenuItem Header="Address Book"  Click="OnAddressBook"/>
+								<MenuItem Name="MenuDBMode" Header="DB _Mode" >
+									<MenuItem Name="MenuModeNormal" Header="_Normal" IsCheckable="True"  Click="MenuDBMode_Click" />	
+									<MenuItem Name="MenuModeBootstrap" Header="_bootstrap.dat (Fast)" IsCheckable="True" Click="MenuDBMode_Click"  />	
+									<MenuItem Name="MenuModeLite" Header="_Lite" IsCheckable="True" Click="MenuDBMode_Click"  />	
+								</MenuItem>
+								
+								
+<!--							    <MenuItem Header="Mining" IsCheckable="True" IsEnabled="{Binding Path=MiningAllowed}" IsChecked="{Binding Path=MiningEnabled}" Name="menuMining" Unchecked="menuMining_Checked" Checked="menuMining_Checked" />
+-->
+						    </ContextMenu>
+					    </ListView.ContextMenu>
+					    <ListView.View>
+                            <GridView>
+                                <GridViewColumn Width="30" ><GridViewColumn.CellTemplate><DataTemplate> <Image Width="16" Height="16" Source="{Binding IconUri}"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                                <GridViewColumn Header="Currency" DisplayMemberBinding="{Binding Path=CurrencySymbol}" Width="70" />
+                                <GridViewColumn Header="Balance" DisplayMemberBinding="{Binding Path=Balance}" Width="80" />
+							    <GridViewColumn Header="Block" DisplayMemberBinding="{Binding Path=BlockHeight}" Width="60"/>
+							    <GridViewColumn Header="State" DisplayMemberBinding="{Binding Path=State}" Width="300" />
+        					    <GridViewColumn Header="Peers" DisplayMemberBinding="{Binding Path=Peers}" Width="50" />
+        				    </GridView>
+                        </ListView.View>
+                    </ListView>
+			    </TabItem>
+			    <TabItem Header="Events">
+                    <ListView Name="LvEvent">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Date Time" DisplayMemberBinding="{Binding Path=Timestamp}" Width="70" />
+                                <GridViewColumn Header="Event" DisplayMemberBinding="{Binding Path=Comment}" Width="300"/>
+        				    </GridView>
+                        </ListView.View>
+                    </ListView>
+			    </TabItem>        
+            </TabControl>        
+	    </DockPanel>
+        <tb:TaskbarIcon Name="TrayIcon" IconSource="coin.ico"  ToolTipText="Ufasoft Coin" TrayLeftMouseUp="TrayIcon_TrayMouseClick" TrayMouseDoubleClick="TrayIcon_TrayMouseClick" Margin="4,0,-4,0">
+            <tb:TaskbarIcon.ContextMenu>
+                <ContextMenu>
+                    <MenuItem x:Name="TrayMenu_Exit" Header="E_xit" Click="OnTrayExit" />
+                </ContextMenu>
+            </tb:TaskbarIcon.ContextMenu>
+        </tb:TaskbarIcon>
+    </Grid>
+    <Window.Resources>
+       
+        <LinearGradientBrush x:Key="NormalBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientBrush.GradientStops>
+                <GradientStopCollection>
+                    <GradientStop Color="#FFF" Offset="0.0"/>
+                    <GradientStop Color="#CCC" Offset="1.0"/>
+                </GradientStopCollection>
+            </GradientBrush.GradientStops>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="DisabledForegroundBrush" Color="#888" />
+        <SolidColorBrush x:Key="DisabledBackgroundBrush" Color="#EEE" />
+        <SolidColorBrush x:Key="SelectedBackgroundBrush" Color="#DDD" />
+        <LinearGradientBrush x:Key="NormalBorderBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientBrush.GradientStops>
+                <GradientStopCollection>
+                    <GradientStop Color="#CCC" Offset="0.0"/>
+                    <GradientStop Color="#444" Offset="1.0"/>
+                </GradientStopCollection>
+            </GradientBrush.GradientStops>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="GlyphBrush" Color="#444" />
+
+        <ControlTemplate x:Key="currencyMenu" TargetType="MenuItem">
+            <Border Name="Border" >
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Check"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut"/>
+                        <ColumnDefinition Width="13"/>
+                    </Grid.ColumnDefinitions>
+                        <Path 
+                          Name="CheckMark"
+                          Width="9" Height="11" 
+                          Visibility="Hidden" 
+                          SnapsToDevicePixels="False" 
+                          Stroke="{StaticResource GlyphBrush}"
+                           StrokeThickness="2"
+                          Data="M 2,4 C 2,4 3,5 5,13 C 5,13 5,3 12,0" />
+                    <ContentPresenter Name="Icon" Grid.Column="1" Width="16" Height="16" Margin="6,0,6,0" VerticalAlignment="Center" ContentSource="Icon"/>
+                    <ContentPresenter 
+                        Name="HeaderHost"
+                        Grid.Column="2"
+                        ContentSource="Header"
+                        RecognizesAccessKey="True"/>
+                                    <TextBlock x:Name="InputGestureText"
+                        Grid.Column="2"
+                        Text="{TemplateBinding InputGestureText}"
+                        Margin="5,2,0,2"
+                           DockPanel.Dock="Right" />
+                            </Grid>
+                      </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Icon" Value="{x:Null}">
+                    <Setter TargetName="Icon" Property="Visibility" Value="Hidden"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="true">
+                    <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <Trigger Property="IsHighlighted" Value="true">
+                    <Setter TargetName="Border" Property="Background"
+                        Value="{StaticResource SelectedBackgroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="false">
+                    <Setter Property="Foreground" Value="{StaticResource DisabledForegroundBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+    </Window.Resources>
 </Window>
+
+    

@@ -1,4 +1,9 @@
-﻿using System;
+﻿/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;

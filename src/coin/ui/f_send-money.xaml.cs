@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +24,11 @@ namespace Coin {
 
 		public IWallet Wallet;
 
-		private void Window_Closed(object sender, EventArgs e) {
+        private void Window_Loaded(object sender, RoutedEventArgs e) {
+            labelCurrencySymbol.Content = Wallet.CurrencySymbol;
+        }
+
+        private void Window_Closed(object sender, EventArgs e) {
 			if (DialogResult == true) {
 				if (FormMain.I.EnsurePassphraseUnlock()) {
 					var prevCursor = Cursor;
@@ -40,13 +49,7 @@ namespace Coin {
 					}
 				}
 			}
-
 		}
-
-		private void Window_Loaded(object sender, RoutedEventArgs e) {
-			labelCurrencySymbol.Content = Wallet.CurrencySymbol;
-		}
-
 
 		private void OnSend(object sender, RoutedEventArgs e) {
 			DialogResult = true;

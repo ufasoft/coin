@@ -9,7 +9,7 @@ using System.Windows;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Ufasoft")]
 [assembly: AssemblyProduct("Coin")]
-[assembly: AssemblyCopyright("Copyright © Ufasoft 2011-2013")]
+[assembly: AssemblyCopyright("Copyright © Ufasoft 2011-2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -34,5 +34,5 @@ using System.Windows;
     // app, or any theme specific resource dictionaries)
 )]
 
-[assembly: AssemblyVersion("0.73")]
-[assembly: AssemblyFileVersion("0.73")]
+[assembly: AssemblyVersion("0.110")]
+[assembly: AssemblyFileVersion("0.110")]

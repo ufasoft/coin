@@ -15,10 +15,15 @@ namespace Coin {
 	public partial class FormOptions : Window {
 		public FormOptions() {
 			InitializeComponent();
-		}
+			cbProxy.SelectedIndex = 0;
+        }
 
 		private void OnOk(object sender, RoutedEventArgs e) {
 			DialogResult = true;
+		}
+
+		void OnProxyTypeChanged(object sender, RoutedEventArgs e) {
+			editProxy.IsEnabled = cbProxy.SelectedIndex == 1 || cbProxy.SelectedIndex == 2;
 		}
 	}
 }

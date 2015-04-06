@@ -1,4 +1,9 @@
-﻿using System;
+﻿/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -72,7 +77,9 @@ namespace Coin {
 			var dlg = new DialogTextInfo();
 			dlg.Title = "Transaction Info";
 			dlg.textInfo.Text = string.Format("DateTime:  {0}\nValue:   {1}\nFee:  {6}\nConfirmations: {2}\nTo:   {3}\nComment:  {4}\nHash:   {5}", tx.Timestamp, tx.m_iTx.Amount, tx.Confirmations.ToString(), tx.Address + " " + tx.m_iTx.Address.Comment, tx.m_iTx.Comment, tx.Hash, tx.Fee);
-			Dialog.ShowDialog(dlg, this);
+            dlg.Width = 600;
+            dlg.Height = 200;
+            Dialog.ShowDialog(dlg, this);
 		}
 
 		private void lv_MouseDoubleClick(object sender, MouseButtonEventArgs e) {

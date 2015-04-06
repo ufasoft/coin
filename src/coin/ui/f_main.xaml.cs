@@ -1,4 +1,9 @@
-﻿using System;
+﻿/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -22,14 +27,20 @@ using GuiComp;
 
 using Interop.coineng;
 
+using Hardcodet.Wpf.TaskbarNotification;
+
+using Coin.Properties;
 
 namespace Coin {
 	public partial class FormMain : Window {
 		public static FormMain I;
 		CultureInfo CultureInfo = (CultureInfo)Thread.CurrentThread.CurrentCulture.Clone();
 
+        ControlTemplate menuTemplate;
+
 		public FormMain() {
 			InitializeComponent();
+            menuTemplate = (ControlTemplate)FindResource("currencyMenu");
 
 			I = this;
 			CultureInfo.NumberFormat = (NumberFormatInfo)CultureInfo.NumberFormat.Clone();
@@ -56,7 +67,6 @@ namespace Coin {
 
 		ObservableCollection<WalletForms> ActiveWalletForms = new ObservableCollection<WalletForms>();
 		ObservableCollection<WalletEvent> WalletEvents = new ObservableCollection<WalletEvent>();
-
 
 
 		void UpdateData(WalletForms wf) {
@@ -99,6 +109,7 @@ namespace Coin {
 
 		void UpdateView() {
 			WalletEvents.Clear();
+            AllAlerts.Clear();
 			foreach (var wf in ActiveWalletForms)
 				UpdateData(wf);
 		}
@@ -139,7 +150,7 @@ namespace Coin {
 		}
 
 
-		DispatcherTimer timer1 = new DispatcherTimer() { Interval = TimeSpan.FromSeconds(2) };
+		DispatcherTimer timer1 = new DispatcherTimer() { Interval = TimeSpan.FromSeconds(1) };
 
 		void RegisterUriHandler() {
 			try {
@@ -160,11 +171,25 @@ namespace Coin {
 					}
 				}
 			} catch (Exception) {
-
 			}		
 		}
 
+		static string ToProxyString(string proxyType, string proxyEndPoint) {
+			switch (proxyType) {
+				case "None": return "";
+				case "TOR": return "TOR";
+				case "SOCKS5": return "socks5://" + proxyEndPoint;
+				case "CONNECT": return "connect://" + proxyEndPoint;
+			}
+			return "";
+		}
+
 		private void Window_Loaded(object sender, RoutedEventArgs e) {
+			MenuModeNormal.Tag = EEngMode.Normal;
+			MenuModeBootstrap.Tag = EEngMode.Bootstrap;
+			MenuModeLite.Tag = EEngMode.Lite;
+
+
 			LvWallet.ItemsSource = ActiveWalletForms;
 			LvEvent.ItemsSource = WalletEvents;
 
@@ -175,7 +200,15 @@ namespace Coin {
 				} catch (Exception) {
 				}
 			}
-			
+
+			var proxyType = UserAppRegistryKey.GetValue("ProxyType");
+			if (proxyType != null) {
+				try {
+					Eng.ProxyString = ToProxyString(Convert.ToString(proxyType), Convert.ToString(UserAppRegistryKey.GetValue("ProxyEndPoint")));
+                } catch (Exception) {
+				}
+			}
+
 			Wallet[] wallets = null;
 			try {
 				wallets = Eng.Wallets;
@@ -184,7 +217,7 @@ namespace Coin {
 				Application.Current.Shutdown();
 				return;
 			}
-
+            
 			foreach (var wallet in wallets) {
                 string currencyName = wallet.CurrencyName;
 
@@ -192,14 +225,26 @@ namespace Coin {
 				wf.Wallet = wallet;
                 MenuItem mi = new MenuItem();
                 wf.MenuItem = mi;
-				mi.Header = string.Format("{0} ({1})", currencyName, wallet.CurrencySymbol);                
-//                mi.Icon = new Image() { Source = new BitmapImage(new Uri(String.Format("images/{0}.ico", currencyName), UriKind.Relative)) };
+				mi.Header = string.Format("{0}  {1}", wallet.CurrencySymbol, currencyName);
+                mi.Icon = new Image() { Source = new BitmapImage(new Uri(String.Format("images/{0}.ico", currencyName), UriKind.Relative)) };
 				menuCurrency.Items.Add(mi);
+                mi.Template = menuTemplate;
 				mi.IsCheckable = true;
 				mi.Tag = wf;
 				mi.Checked += Currency_CheckChanged;
 				mi.Unchecked += Currency_CheckChanged;
 				m_wallet2forms[wallet] = wf;
+
+				EEngMode mode = wallet.CurrencySymbol == "BTC" ? EEngMode.Bootstrap : EEngMode.Normal;
+                var sk = UserAppRegistryKey.OpenSubKey(wf.Wallet.CurrencySymbol);
+				if (sk != null) {
+					switch ((string)sk.GetValue("DBMode")) {
+					case "Normal": mode = EEngMode.Normal; break;
+					case "Bootstrap": mode = EEngMode.Bootstrap; break;
+					case "Lite": mode = EEngMode.Lite; break;
+					}
+				}
+				wallet.Mode = mode;
 			}
 
 			timer1.Tick += (s, e1) => {
@@ -250,6 +295,7 @@ namespace Coin {
 			CheckForCommands();
 			RegisterUriHandler();
 
+			
 //			OnFileImport(null, null);//!!!D
 		}
 
@@ -260,7 +306,7 @@ namespace Coin {
 				dlg.textRetype.Visibility = Visibility.Hidden;
 				dlg.Title = "Wallet Password";
 				if (Dialog.ShowDialog(dlg, this)) {
-					Eng.Password = dlg.textPassword.Password;
+					Eng.SetPassword(dlg.textPassword.Password);
 				} else
 					return false;
 			}
@@ -288,18 +334,46 @@ namespace Coin {
 			Close();
 		}
 
+        void OnTrayExit(object sender, RoutedEventArgs argg) {
+            TrayIcon.Dispose();
+            Close();
+        }
+
 		void OnToolsOptions(object sender, RoutedEventArgs argg) {
 			var d = new FormOptions();
 			d.textListeningPort.Text = Eng.LocalPort.ToString();
+
+			var proxyEp = UserAppRegistryKey.GetValue("ProxyEndPoint");
+			if (proxyEp != null)
+				try {
+					d.editProxy.Text = Convert.ToString(proxyEp);
+				} catch (Exception) {
+				}
+			var proxyType = UserAppRegistryKey.GetValue("ProxyType");
+			if (proxyType != null)
+				try {
+					d.cbProxy.Text = Convert.ToString(proxyType);
+				} catch (Exception) {
+				}
 			if (Dialog.ShowDialog(d, this)) {
 				UInt16 port = Convert.ToUInt16(d.textListeningPort.Text);
 				Eng.LocalPort = port;
-				UserAppRegistryKey.SetValue("LocalPort", port, RegistryValueKind.DWord);
+				Eng.ProxyString = ToProxyString(d.cbProxy.Text, d.editProxy.Text);
+                UserAppRegistryKey.SetValue("LocalPort", port, RegistryValueKind.DWord);
+				UserAppRegistryKey.SetValue("ProxyType", d.cbProxy.Text);
+				UserAppRegistryKey.SetValue("ProxyEndPoint", d.editProxy.Text);
 			}
 		}
 
 		WalletForms SelectedWallet() {
 			return (WalletForms)LvWallet.SelectedItem;
+		}
+
+		WalletForms SelectedWalletNotNull() {
+			WalletForms r = (WalletForms)LvWallet.SelectedItem;
+			if (r == null)
+				throw new ApplicationException("No Currency selected in the List");
+			return r;
 		}
 
 		WalletForms FindWallet(string netName) {
@@ -359,10 +433,20 @@ namespace Coin {
 			}
 		}
 
+        private void Window_Closing(object sender, CancelEventArgs e) {
+//            Settings.Default.MainWindowPlacement = this.GetPlacement();
+//!!!?            Settings.Default.Save();
+        }
+
 		private void Window_Closed(object sender, EventArgs e) {
 			Eng.Stop();
 			ReleaseComObjects();
 		}
+
+        protected override void OnSourceInitialized(EventArgs e) {
+            base.OnSourceInitialized(e);
+//            this.SetPlacement(Settings.Default.MainWindowPlacement);
+        }
 
 		void ShowTransactions() {
 			WalletForms wf = SelectedWallet();
@@ -380,6 +464,27 @@ namespace Coin {
 			ShowTransactions();
 		}
 
+		void SetMenuDBMode() {
+			var wf = SelectedWallet();
+			var mode = wf.Wallet.Mode;
+			MenuModeNormal.IsChecked = mode == EEngMode.Normal;
+			MenuModeBootstrap.IsChecked = mode == EEngMode.Bootstrap;
+			MenuModeLite.IsChecked = mode == EEngMode.Lite;
+			MenuModeLite.IsEnabled = wf.Wallet.LiteModeAllowed;
+        }
+
+		private void MenuDBMode_Click(object sender, RoutedEventArgs e) {
+			MenuItem mi = (MenuItem)sender;
+			if (!mi.IsChecked)
+				mi.IsChecked = true;
+			else {
+				WalletForms wf = SelectedWallet();
+				wf.Wallet.Mode = (EEngMode)mi.Tag;
+				UserAppRegistryKey.CreateSubKey(wf.Wallet.CurrencySymbol).SetValue("DBMode", ((EEngMode)mi.Tag).ToString());
+                SetMenuDBMode();
+			}				
+		}
+
 		private void OnAddressBook(object sender, RoutedEventArgs e) {
 			WalletForms wf = SelectedWallet();
 			if (wf.FormAddressBook == null)
@@ -390,13 +495,13 @@ namespace Coin {
 
 		private void OnHelpAbout(object sender, RoutedEventArgs e) {
 			var d = new GuiComp.DialogAbout();
-			d.Image.Source = new BitmapImage(new Uri("/coin;component/coin-3.ico", UriKind.Relative));
+            d.SourceCodeUri = new Uri("https://github.com/ufasoft/coin");
+            d.Image.Source = new BitmapImage(new Uri("/coin;component/coin.ico", UriKind.Relative));
 			Dialog.ShowDialog(d, this);
 		}
 
 		private void OnToolsRescan(object sender, RoutedEventArgs e) {
-			foreach (var wf in ActiveWalletForms)
-				wf.Wallet.Rescan();
+			SelectedWalletNotNull().Wallet.Rescan();
 		}
 
 		private void OnFileImport(object sender, RoutedEventArgs e) {
@@ -406,15 +511,16 @@ namespace Coin {
 
 			if (!EnsurePassphraseUnlock())
 				return;
-			var d = new OpenFileDialog();
-			d.InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Bitcoin");
+			var wf = SelectedWalletNotNull();
+            var d = new OpenFileDialog();
+			d.InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), wf.Wallet.CurrencyName);
 			d.Filter = "Bitcoin Wallet format|wallet.dat|All Files|*.*";
 			d.FileName = "wallet.dat";
 			if (Dialog.ShowDialog(d, this)) {
 				string password = "";
 				while (true) {
 					try {
-						Eng.ImportWallet(d.FileName, password);
+						wf.Wallet.ImportWallet(d.FileName, password);
 						break;
 					} catch (Exception) {
 						var dlg = new FormPassphrase();
@@ -442,13 +548,8 @@ namespace Coin {
 					if (File.Exists(d.FileName))
 						File.Delete(d.FileName);
 					switch (d.FilterIndex) {
-						case 1: {
-								var wf = SelectedWallet();
-								if (wf == null)
-									MessageBox.Show("No Currency selected in the List", "Wallet Export", MessageBoxButton.OK, MessageBoxImage.Stop);
-								else
-									wf.Wallet.ExportWalletToBdb(d.FileName);
-							}
+						case 1:
+							SelectedWalletNotNull().Wallet.ExportWalletToBdb(d.FileName);
 							break;
 					case 2:
 						Eng.ExportWalletToXml(d.FileName);
@@ -456,6 +557,24 @@ namespace Coin {
 					}
 				}
 			}
+		}
+
+		void OnFileImportBlockchain(object sender, RoutedEventArgs e) {
+			var wf = SelectedWalletNotNull();
+			var d = new OpenFileDialog();
+			d.FileName = "bootstrap.dat";
+			d.Filter = "Bitcoin Bootstrap.dat format|bootstrap.dat";
+			if (Dialog.ShowDialog(d, this))
+				wf.Wallet.ImportFromBootstrapDat(d.FileName);
+		}
+
+		void OnFileExportBlockchain(object sender, RoutedEventArgs e) {
+			var wf = SelectedWalletNotNull();
+			var d = new SaveFileDialog();
+			d.FileName = "bootstrap.dat";
+			d.Filter = "Bitcoin Bootstrap.dat format|bootstrap.dat";
+			if (Dialog.ShowDialog(d, this))
+				wf.Wallet.ExportToBootstrapDat(d.FileName);
 		}
 
 		private void OnHelp(object sender, RoutedEventArgs e) {
@@ -470,7 +589,11 @@ namespace Coin {
 
 		private void ContextMenu_Opened(object sender, RoutedEventArgs e) {
 			ContextMenu menu = (ContextMenu)sender;
-			menu.DataContext = SelectedWallet();
+			var wf = SelectedWallet();
+			menu.DataContext = wf;
+			MenuDBMode.IsEnabled = wf != null;
+			if (MenuDBMode.IsEnabled)
+				SetMenuDBMode();
 		}
 
 		private void menuMining_Checked(object sender, RoutedEventArgs e) {
@@ -486,6 +609,11 @@ namespace Coin {
 				Eng.ChangePassword(dlg.textOldPassword.Text, dlg.textPassword.Password);
 			}
 		}
+
+        private void TrayIcon_TrayMouseClick(object sender, RoutedEventArgs e) {
+            Activate();
+        }
+
 	}
 
 	public class WalletForms : INotifyPropertyChanged {
@@ -515,6 +643,9 @@ namespace Coin {
 		public int Peers { get { return Wallet.Peers; } }
 		public bool MiningEnabled { get { return Wallet.MiningEnabled; } set { Wallet.MiningEnabled = value; } }
 		public bool MiningAllowed { get { return Wallet.MiningAllowed; } }
+
+		public bool LiteModeEnabled { get { return Wallet.Mode == EEngMode.Lite; } set { Wallet.Mode = value ? EEngMode.Lite : (Wallet.CurrencySymbol=="BTC" ? EEngMode.Bootstrap : EEngMode.Normal); } }
+		public bool LiteModeAllowed { get { return Wallet.LiteModeAllowed; } }
 
 		public bool CheckForChanges() {
 			bool r = Wallet.GetAndResetStateChangedFlag();
