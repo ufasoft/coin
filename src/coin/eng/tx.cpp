@@ -19,6 +19,7 @@ using namespace Ext::Num;
 
 #include "coin-protocol.h"
 #include "script.h"
+#include "crypter.h"
 #include "eng.h"
 #include "coin-msg.h"
 #include "coin-model.h"
@@ -52,20 +53,15 @@ void TxIn::Read(const BinaryReader& rd) {
 }
 
 void TxOut::Write(BinaryWriter& wr) const {
-	wr << Value;
-	CoinSerialized::WriteBlob(wr, get_PkScript());
+	CoinSerialized::WriteBlob(wr << Value, get_PkScript());
 }
 
 void TxOut::Read(const BinaryReader& rd) {
-	Value = rd.ReadUInt64();
-	m_pkScript = CoinSerialized::ReadBlob(rd);
+	m_pkScript = CoinSerialized::ReadBlob(rd >> Value);
 }
 
 const TxOut& CTxMap::GetOutputFor(const OutPoint& prev) const {
-	const_iterator it = find(prev.TxHash);
-	if (it == end())
-		Throw(E_FAIL);
-	return it->second.TxOuts().at(prev.Index);
+	return at(prev.TxHash).TxOuts().at(prev.Index);
 }
 
 bool CoinsView::HasInput(const OutPoint& op) const {
@@ -352,9 +348,7 @@ bool Tx::TryFromDb(const HashValue& hash, Tx *ptx) {
 	if (ptx) {
 		// ASSERT(ReducedHashValue(Hash(*ptx)) == ReducedHashValue(hash));
 
-		EXT_LOCK (eng.Caches.Mtx) {
-			eng.Caches.HashToTxCache.insert(make_pair(hash, *ptx));
-		}
+		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToTxCache.insert(make_pair(hash, *ptx)));
 	}
 	return true;
 }
@@ -403,13 +397,22 @@ bool Tx::IsNewerThan(const Tx& txOld) const {
 	return r;
 }
 
+void Tx::SpendInputs() const {
+	if (!IsCoinBase()) {
+		CoinEng& eng = Eng();
+
+		EXT_FOR (const TxIn& txIn, TxIns()) {
+			eng.Db->UpdateCoins(txIn.PrevOutPoint, true);
+		}
+	}
+}
+
 Blob ToCompressedKey(const ConstBuf& cbuf) {
 	ASSERT(cbuf.Size==33 || cbuf.Size==65);
 
 	if (cbuf.Size == 33)
 		return cbuf;
-	CngKey key = CngKey::Import(cbuf, CngKeyBlobFormat::OSslEccPublicBlob);
-	Blob r = key.Export(CngKeyBlobFormat::OSslEccPublicCompressedBlob);
+	Blob r = CCrypter::PublicKeyBlobToCompressedBlob(cbuf);
 	r.data()[0] |= 0x80;
 	if (cbuf.P[0] & 2)
 		r.data()[0] |= 4; // POINT_CONVERSION_HYBRID
@@ -565,6 +568,11 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 	Throw(E_EXT_CodeNotReachable); //!!!
 	Db->InsertPubkey((int64_t)id, compressed);
 	return true;
+}
+
+void TxOut::CheckForDust() const {
+	if (Value < 3*(Eng().ChainParams.MinTxFee * (EXT_BIN(_self).Size + 148) / 1000))
+		Throw(E_COIN_TxAmountTooSmall);
 }
 
 const Blob& TxOut::get_PkScript() const {
@@ -757,12 +765,18 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 void Tx::Check() const {
 	CoinEng& eng = Eng();
 
-	if (TxIns().empty() || TxOuts().empty())
-		Throw(E_FAIL);
+	if (TxIns().empty())
+		Throw(E_COIN_BadTxnsVinEmpty);
+	if (TxOuts().empty())
+		Throw(E_COIN_BadTxnsVoutEmpty);
+
+	bool bIsCoinBase = IsCoinBase();
 	int64_t nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
         if (!txOut.IsEmpty()) {
-			if (!IsCoinBase() && txOut.Value < eng.ChainParams.MinTxOutAmount)
+			if (txOut.Value < 0)
+				Throw(E_COIN_BadTxnsVoutNegative);
+			if (!bIsCoinBase && txOut.Value < eng.ChainParams.MinTxOutAmount)
 				Throw(E_COIN_TxOutBelowMinimum);
 		}
 		eng.CheckMoneyRange(nOut += eng.CheckMoneyRange(txOut.Value));
@@ -771,7 +785,12 @@ void Tx::Check() const {
 	EXT_FOR(const TxIn& txIn, TxIns()) {									// Check for duplicate inputs
 		if (!outPoints.insert(txIn.PrevOutPoint).second)
 			Throw(E_COIN_DupTxInputs);
+		if (!bIsCoinBase && txIn.PrevOutPoint.IsNull())
+			Throw(E_COIN_BadTxnsPrevoutNull);
 	}
+	if (bIsCoinBase && !between(int(TxIns()[0].Script().Size), 2, 100))
+		Throw(E_COIN_BadCbLength);
+
 	eng.OnCheck(_self);
 }
 
@@ -802,7 +821,7 @@ int64_t Tx::GetMinFee(uint32_t blockSize, bool bAllowFree, MinFeeMode mode, uint
 
     if (bAllowFree) {
         if (blockSize == 1) {          
-            if (nBytes < 10000)					// Transactions under 10K are free
+            if (nBytes < MAX_FREE_TRANSACTION_CREATE_SIZE)
                 nMinFee = 0;					// (about 4500bc if made of 50bc inputs)
         } else if (nNewBlockSize < 27000)		// Free transaction area
 			nMinFee = 0;

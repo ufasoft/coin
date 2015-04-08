@@ -208,6 +208,8 @@ public:
 	const Blob& get_PkScript() const;
 	DEFPROP_GET(const Blob&, PkScript);
 
+	void CheckForDust() const;
+
 	bool IsEmpty() const {
 		return Value==0 && get_PkScript().Size==0;
 	}

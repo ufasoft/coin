@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -50,7 +48,7 @@ CoinDb::CoinDb()
 {
 	ListeningPort = 8333;
 	SoftPortRestriction = true;
-	IrcManager.m_pTr = &m_tr;
+	IrcManager.m_pTr.reset(&m_tr);
 
 	DbWalletFilePath = AfxGetCApp()->get_AppDataDir() / "wallet.db";
 	DbPeersFilePath = AfxGetCApp()->get_AppDataDir() / "peers.db";
@@ -68,7 +66,7 @@ void CoinDb::CreateWalletNetDbEntry(int netid, RCString name) {
 		.ExecuteNonQuery();
 }
 
-void CoinDb::InitAes(Aes& aes, RCString password, byte encrtyptAlgo) {
+void CoinDb::InitAes(BuggyAes& aes, RCString password, byte encrtyptAlgo) {
 	int mul = 1000;
 	switch (encrtyptAlgo) {
 	case 'A': mul = PASSWORD_ENCRYPT_ROUNDS_A; break;
@@ -83,7 +81,7 @@ void CoinDb::InitAes(Aes& aes, RCString password, byte encrtyptAlgo) {
 }
 
 MyKeyInfo& CoinDb::AddNewKey(MyKeyInfo& ki) {
-	Aes aes;
+	BuggyAes aes;
 	if (!m_masterPassword.empty())
 		InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 		
@@ -118,14 +116,7 @@ void CoinDb::TopUpPool(int lim) {
 	EXT_LOCK (MtxDb) {
 		int nRes = (int)SqliteCommand("SELECT COUNT(*) FROM privkeys WHERE reserved", m_dbWallet).ExecuteInt64Scalar();
 		for (int i=0; i<lim-nRes; ++i) {
-			ECDsa dsa(256);
-			MyKeyInfo ki;
-			ki.Comment = nullptr;
-			ki.Key = dsa.Key;
-			Blob privData = ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);
-			ki.SetPrivData(privData, true);
-			ki.PubKey = ki.Key.Export(CngKeyBlobFormat::OSslEccPublicCompressedBlob);
-			AddNewKey(ki);
+			AddNewKey(CCrypter::GenRandomKey());
 		}
 	}
 }
@@ -223,7 +214,7 @@ void CoinDb::CreateDbWallet() {
 
 		SetUserVersion(m_dbWallet);
 
-		RandomRef().NextBytes(Buf(Salt.data(), sizeof Salt));
+		GetSystemURandomReader().BaseStream.ReadBuffer(Salt.data(), sizeof Salt);
 		m_dbWallet.ExecuteNonQuery(EXT_STR("INSERT INTO globals (name, value) VALUES(\'salt\', " << *(int64_t*)Salt.data() << ")"));
 
 		GenerateNewAddress("", 2);	//!!! reserve more keys
@@ -303,13 +294,13 @@ void CoinDb::SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers) {
 	}
 }
 
-void CoinDb::OnIpDetected(const IPAddress& ip) {
+/*!!!R void CoinDb::OnIpDetected(const IPAddress& ip) {
 	EXT_LOCK (MtxDb) {
 		TRC(1, ip);
 		LocalIp4 = ip;
 	}
 	AddLocal(ip);
-}
+}*/
 
 bool CoinDb::get_WalletDatabaseExists() {
 	return exists(DbWalletFilePath);
@@ -320,8 +311,8 @@ bool CoinDb::get_PeersDatabaseExists() {
 }
 
 void CoinDb::LoadKeys(RCString password) {
-	Aes aesA;
-	Aes aesB;
+	BuggyAes aesA;
+	BuggyAes aesB;
 	if (!password.empty()) {
 		InitAes(aesA, password, 'A');
 		InitAes(aesB, password, 'B');
@@ -355,7 +346,7 @@ void CoinDb::LoadKeys(RCString password) {
 				} else {
 // try { //!!!T
 					try {
-						Aes *pAes = 0;
+						BuggyAes *pAes = 0;
 						switch (buf.P[0]) {
 						case 'A': pAes = &aesA; break;
 						case 'B': pAes = &aesB; break;
@@ -368,6 +359,10 @@ void CoinDb::LoadKeys(RCString password) {
 							Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
 					} catch (OpenSslException&) {
 						Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
+					} catch (Exception& ex) {
+						if (ex.code().value() == E_EXT_Crypto)
+							Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
+						throw;
 					}
 // } catch (RCExc ex) {//!!!T
 // 	TRC(1, ex.what());
@@ -417,7 +412,7 @@ void CoinDb::LoadKeys(RCString password) {
 void CoinDb::Load() {
 	if (!m_bLoaded) {
 		m_bLoaded = true;
-		DetectGlobalIp::Start(&m_tr);
+//!!!R		DetectGlobalIp::Start(&m_tr);
 
 		if (!DbWalletFilePath.empty()) {
 			TRC(1, "DbWallet File: " << DbWalletFilePath);
@@ -465,8 +460,8 @@ void CoinDb::Load() {
 				BannedIPs.insert(IPAddress(rd.GetBytes(0)));
 		}
 
-		if (ListeningPort != -1)
-			(new P2P::ListeningThread(_self, m_tr))->Start();
+		if (ListeningPort != -1 && ProxyString.empty())
+			P2P::ListeningThread::StartListeners(_self, m_tr);
 		MsgLoopThread->Start();
 	}
 }
@@ -506,7 +501,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		throw;
 	}
 
-	Aes aes;
+	BuggyAes aes;
 	if (!newPassword.empty())
 		InitAes(aes, newPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 
@@ -522,6 +517,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		dbtx.Commit();
 		m_masterPassword = newPassword;
 	}
+	m_dbWallet.ExecuteNonQuery("VACUUM");		// to clean old unencrypted keys
 }
 
 MyKeyInfo CoinDb::GetMyKeyInfo(const HashValue160& hash160) {
@@ -532,7 +528,9 @@ MyKeyInfo CoinDb::GetMyKeyInfo(const HashValue160& hash160) {
 }
 
 Link *CoinDb::CreateLink(thread_group& tr) {
-	return new CoinLink(_self, tr);
+	Link *r = new CoinLink(_self, tr);
+	r->Tcp.ProxyString = ProxyString;
+	return r;
 }
 
 

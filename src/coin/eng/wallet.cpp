@@ -210,6 +210,12 @@ bool Wallet::IsMine(const Tx& tx) {
 }
 
 bool Wallet::IsFromMe(const Tx& tx) {
+	EXT_LOCK(m_mtxMyTxHashes) {
+		EXT_FOR (const TxIn& txIn, tx.TxIns()) {
+			if (!m_myTxHashes.count(txIn.PrevOutPoint.TxHash))
+				return false;
+		}
+	}
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		SqliteCommand& cmd = m_eng->m_cdb.m_cmdIsFromMe.Bind(1, m_dbNetId);
 		EXT_FOR (const TxIn& txIn, tx.TxIns()) {
@@ -229,6 +235,7 @@ int64_t Wallet::GetTxId(const HashValue& hashTx) {
 
 int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 	HashValue hashTx = Hash(wtx);
+	EXT_LOCKED(m_mtxMyTxHashes, m_myTxHashes.insert(hashTx));
 	int64_t r = GetTxId(hashTx);
 	if (r != -1) {
 		SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
@@ -620,7 +627,7 @@ void Wallet::ReacceptWalletTxes() {
 }
 
 void Wallet::SetNextResendTime(const DateTime& dt) {
-	m_dtNextResend = dt + TimeSpan::FromSeconds(Ext::Random().Next(30*60));
+	m_dtNextResend = dt + seconds(Ext::Random().Next(30*60));
 	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
 #ifdef X_DEBUG//!!!D
 	m_dtNextResend = dt + TimeSpan::FromSeconds(3);
@@ -635,14 +642,26 @@ void Wallet::Start() {
 
 	bool bIsInitialBlockDownload = m_eng->IsInitialBlockDownload();	
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=?", m_eng->m_cdb.m_dbWallet);		
-		DbDataReader dr = cmd.Bind(1, m_eng->ChainParams.Name).ExecuteVector();
-		m_dbNetId = dr.GetInt32(0);
-		ConstBuf mb = dr.GetBytes(1);
-		BestBlockHash = mb.Size ? HashValue(mb) : HashValue();
+		{
+			SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=?", m_eng->m_cdb.m_dbWallet);		
+			DbDataReader dr = cmd.Bind(1, m_eng->ChainParams.Name).ExecuteVector();
+			m_dbNetId = dr.GetInt32(0);
+			ConstBuf mb = dr.GetBytes(1);
+			BestBlockHash = mb.Size ? HashValue(mb) : HashValue();
+		}
+		EXT_LOCK(m_mtxMyTxHashes) {
+			SqliteCommand cmd("SELECT hash FROM mytxes", m_eng->m_cdb.m_dbWallet);
+			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();)
+				m_myTxHashes.insert(HashValue(dr.GetBytes(0)));
+		}
 	}
 	if (Block block = m_eng->Db->FindBlock(BestBlockHash))
 		CurrentHeight = block.Height;
+
+#ifdef X_DEBUG//!!!D
+	auto fee = CalcFee(decimal64(0.0003615));
+	String sFee = EXT_STR(fee);
+#endif
 
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		if (m_eng->Mode!=EngMode::Lite) {
@@ -814,6 +833,7 @@ bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConf
 			coins.push_back(coin);
 		}
 	}
+
 	Penny coinBestLarger;
 	int64_t totalLower = 0;
 	for (int i=coins.size(); i--;) {
@@ -861,7 +881,7 @@ pair<unordered_set<Penny>, uint64_t> Wallet::SelectCoins(uint64_t amount, uint64
 
 pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vector<pair<Blob, int64_t>>& vSend) {
 	if (vSend.empty())
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	int64_t nVal = 0;
 	for (int i=0; i<vSend.size(); ++i)
 		m_eng->CheckMoneyRange(nVal += vSend[i].second);
@@ -873,8 +893,11 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 			tx.m_bFromMe = true;
 
 			int64_t nTotal = nVal + fee;
-			for (int i=0; i<vSend.size(); ++i)
-				tx.TxOuts().push_back(TxOut(vSend[i].second, vSend[i].first));
+			for (int i=0; i<vSend.size(); ++i) {
+				TxOut txOut(vSend[i].second, vSend[i].first);
+				txOut.CheckForDust();
+				tx.TxOuts().push_back(txOut);
+			}
 
 			pair<unordered_set<Penny>, uint64_t> ppCoins = SelectCoins(nTotal, 0);
 			double priority = 0;
@@ -907,15 +930,20 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 				Sign(randomDsa, penny.PkScript, tx, nIn++);
 			}
 
+			m_eng->CheckForDust(tx);
+
 			uint32_t size = tx.GetSerializeSize();
-			if (size >= MAX_BLOCK_SIZE_GEN/5)
+			if (size >= MAX_STANDARD_TX_SIZE)
 				Throw(E_COIN_TxTooLong);
 			priority /= size;
 
-			int64_t minFee = tx.GetMinFee(1, Tx::AllowFree(priority));
-			if (fee >= minFee)  {
+//!!!?			int64_t minFee = tx.GetMinFee(1, Tx::AllowFree(priority));
+			int64_t minFee = tx.GetMinFee(1, false);
+			if (fee >= minFee) {
+				decimal64 dfee = make_decimal64((long long)fee, -m_eng->ChainParams.Log10CoinValue());
+				TRC(3, make_decimal64((long long)nVal, -m_eng->ChainParams.Log10CoinValue()) << " " << Eng.ChainParams.Symbol << ",  Fee: " << dfee << " " << Eng.ChainParams.Symbol);
 				tx.Timestamp = DateTime::UtcNow();
-				return make_pair(tx, make_decimal64((long long)fee, -m_eng->ChainParams.Log10CoinValue()));
+				return pair<WalletTx, decimal64>(tx, dfee);
 			}
 			fee = minFee;
 		}

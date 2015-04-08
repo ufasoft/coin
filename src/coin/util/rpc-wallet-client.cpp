@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/libext/ext-net.h>
@@ -90,20 +95,26 @@ public:
 
 				if (!PathDaemon.empty()) {
 					try {
-						vector<Process> ps = Process::GetProcessesByName(PathDaemon.stem());	//!!! incorrect process can be selected and then terminated
+						vector<Process> ps = Process::GetProcessesByName(PathDaemon.stem().c_str());	//!!! incorrect process can be selected and then terminated
 						if (!ps.empty())
 							m_process = ps.back();
 					} catch (RCExc) {
 					}
 				}
 				return;
-			} catch (RCExc) {
+			} catch (system_error& DBG_PARAM(ex)) {
+				TRC(1, ex.code() << " " << ex.what());
 			}
 		}
 
 		if (PathDaemon.empty()) {
 			LOG("Currency daemon for " << Name << " is unavailable");
 			return;
+		}
+		if (m_process) {
+			if (!m_process.HasExited)
+				return;
+			TRC(2, "Process " << m_process.get_ID() << " exited with code " << m_process.get_ExitCode());
 		}
 		
 		String exeFilePath = System.get_ExeFilePath();
@@ -112,8 +123,9 @@ public:
 		Listen ? (os << " -port=" << GetFreePort()) : (os << " -listen=0");
 		os << " -rpcport=" << RpcUrl.get_Port()
 			<< " -rpcallowip=127.0.0.1"
-			<< " -rpcuser=" << Login
-			<< " -rpcpassword=" << Password
+			<< " -rpcuser=" << (!Login.empty() ? Login : RpcUrl.UserName)
+			<< " -rpcpassword=" << (!Password.empty() ? Password : RpcUrl.Password)
+//			<< " -daemon"
 			<< " -server"
 			<< (IsTestNet ? " -testnet" : "")
 			<< " -datadir=\"" << DataDir << "\"";
@@ -123,6 +135,8 @@ public:
 			if (WalletNotifications)
 				os << " -walletnotify=\"" << exeFilePath << " " << EpApi <<  " walletnotify " << Name << " %s\"";
 		}
+		if (!Args.empty())
+			os << " " << Args;
 		ProcessStartInfo psi;
 		psi.Arguments = os.str();
 		psi.FileName = PathDaemon;
@@ -147,13 +161,13 @@ public:
 			Stop();
 			if (m_process)
 				m_process.WaitForExit(10000);
-		} catch (RCExc ex) {
+		} catch (RCExc DBG_PARAM(ex)) {
 			TRC(1, ex.what());
 		}
 		if (m_process && !m_process.HasExited) {
 			try {
 				m_process.Kill();
-			} catch (RCExc ex) {
+			} catch (RCExc DBG_PARAM(ex)) {
 				TRC(1, ex.what());
 			}
 		}
@@ -246,23 +260,27 @@ public:
 		if (HasSubmitBlockMethod) {
 			try {
 				DBG_LOCAL_IGNORE(E_EXT_JSON_RPC_MethodNotFound);
-				ProcessSubmitResult(workid.empty() ?Call("submitblock", sdata) : Call("submitblock", sdata));
+				VarValue par;
+				if (!workid.empty())
+					par.Set("workid", workid);
+				ProcessSubmitResult(Call("submitblock", sdata, par));
 				return;
 			} catch (const system_error& ex) {
-				TRC(1, ex.what());
-				if (ex.code() != json_rpc_errc::MethodNotFound)
+				if (ex.code() != json_rpc_errc::MethodNotFound) {
+					TRC(1, ex.what());
 					throw;
+				}
 				HasSubmitBlockMethod = false;
 			}
 		}
 		if (!HasSubmitBlockMethod) {
 			VarValue par;
 			par.Set("data", sdata);
-			Call("getblocktemplate", par);
+			ProcessSubmitResult(Call("getblocktemplate", par));
 		}
 	}
 
-	void GetWork(const ConstBuf& data) {
+	void GetWork(const ConstBuf& data) override {
 		ProcessSubmitResult(Call("getwork", EXT_STR(data)));
 	}
 
@@ -283,9 +301,12 @@ protected:
 
 		String sjson;
 		try {
-			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_HTTP, 500));
+			DBG_LOCAL_IGNORE_CONDITION(error_condition(500, http_category()));
+
 			sjson = wc.UploadString(RpcUrl.ToString(), JsonRpc.Request(method, params));
 		} catch (WebException& ex) {
+			if (ex.code() == http_error::unauthorized)
+				throw;
 			sjson = ex.Result;
 		}
 #ifdef X_DEBUG//!!!D

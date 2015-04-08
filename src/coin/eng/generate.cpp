@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -36,7 +34,7 @@ public:
 	void UnregisterForMining();
 protected:
 	ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient) override;
-	bool SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) override;
+	void SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) override;
 private:
 	Wallet& m_wallet;
 
@@ -104,7 +102,7 @@ Block WalletBase::CreateNewBlock() {
 		else
 			wr << OP_DUP << OP_HASH160 << HashValue160(m_genHash160) << OP_EQUALVERIFY << OP_CHECKSIG;
 
-		tx.TxOuts()[0].m_pkScript = Blob(ms);
+		tx.TxOuts()[0].m_pkScript = Blob(ConstBuf(ms));
 		block.Add(tx);
 
 		COrhpans orphans;
@@ -291,7 +289,7 @@ LAB_START:
 	DateTime now = DateTime::UtcNow();		
 	Block block(nullptr);
 		
-	if (now > m_dtPrevGetwork+TimeSpan::FromSeconds(60) ||
+	if (now > m_dtPrevGetwork + seconds(60) ||
 		m_wallet.m_eng->IsInitialBlockDownload() || BestHash != EXT_LOCKED(m_wallet.m_eng->Mtx, Hash(m_wallet.m_eng->BestBlock())))
 	{	
 		block = m_wallet.CreateNewBlock();
@@ -335,7 +333,7 @@ LAB_START:
 	return wd;
 }
 
-bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
+void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
 	TRC(0, "FOUND BLOCK " << wd.Data);
 
 	if (wd.Data.Size != 128)
@@ -352,21 +350,13 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	EXT_LOCK (m_mtxMerkleToBlock) {
 		auto it = m_merkleToBlock.find(merkle);
 		if (it == m_merkleToBlock.end())
-			return false;
+			Throw(E_FAIL);		//!!!?TODO
 		block = it->second.first;
 		m_merkleToBlock.erase(it);
 	}
 	block.m_pimpl->Timestamp = DateTime::from_time_t(letoh(pd[17]));
 	block.m_pimpl->Nonce = letoh(pd[19]);
 	block.m_pimpl->m_hash.reset();
-#ifdef X_DEBUG//!!!D
-	HashValue hash = Hash(block);
-	if (*(uint32_t*)(hash.data()+28) != 0) {
-		block.m_pimpl->m_hash.reset();
-		hash = Hash(block);
-	}
-	return true;
-#endif
 	CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
 	ptr<BlockMessage> m = new BlockMessage(block);
 	EXT_LOCK (m_wallet.m_eng->Mtx) {
@@ -380,7 +370,6 @@ bool EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 		m_wallet.ReserveGenKey();
 		block.Process();
 	}
-	return true;
 }
 
 

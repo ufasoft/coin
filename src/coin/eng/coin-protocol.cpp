@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -108,6 +106,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	r->Link = &link;
 
 	try {
+		DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
 		r->Read(BinaryReader(ms));
 	} catch (RCExc ex) {
 		link.Send(new RejectMessage(RejectReason::Malformed, r->Command, "error parsing message"));
@@ -282,7 +281,7 @@ void GetBlocksMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 	CoinLink& clink = static_cast<CoinLink&>(link);
 
-	if (eng.LiteMode)
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		return;
 
 	int idx = Locators.FindIndexInMainChain();
@@ -445,9 +444,15 @@ void RejectMessage::Read(const BinaryReader& rd) {
 
 String RejectMessage::ToString() const {
 	ostringstream os;
+	if (Link)
+		os << "From " << Link->Peer->get_EndPoint() << ": ";
 	os << "Reject to command " << Command << ": " << Reason;
+#ifdef _DEBUG//!!!D
+	if (Reason != "insufficient priority")
+		os << "";
+#endif
 	if (Command=="block" || Command=="tx")
-		os << Hash;
+		os << " " << Hash;
 	return String(os.str());
 }
 

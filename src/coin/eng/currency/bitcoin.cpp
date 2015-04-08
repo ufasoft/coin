@@ -20,8 +20,7 @@ public:
 protected:
 	void CheckForDust(const Tx& tx) override {
 		EXT_FOR(const TxOut& txOut, tx.TxOuts()) {
-			if (txOut.Value < 3*(ChainParams.MinTxFee * (EXT_BIN(txOut).Size + 148) / 1000))
-				Throw(E_COIN_TxAmountTooSmall);
+			txOut.CheckForDust();
 		}
 	}
 
