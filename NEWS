@@ -1,3 +1,54 @@
+0.112 (2015-04-10)
+=================
+FIX: EarthCoin
+
+0.110 (2015-04-1)
+=================
+Work via SOCKS5 or TOR"
+Bootstrap DB Mode (fast for huge databases)
+
+
+0.101 (2015-01-20)
+=================
+NeoSCrypt hash mining
+
+
+0.92 (2014-05-06)
+=================
+SPV (Lite) mode
+
+0.91 (2014-04-27)
+=================
+PPCoin v0.4 update
+iXcoin (IXC) currency
+
+
+0.90 (2014-04-15)
+=================
+Using Sipa's secp256k1 library. https://github.com/bitcoin/secp256k1
+DB format optimization: Recover ECDSA Pubkey from signature. Old .udb files remain compatible
+UI improvement: NotifyIcon
+
+0.82 (2014-04-01)
+=================
+x64 version of coin.exe
+
+0.79 (2014-02-04)
+=================
+DogeCoin (DOGE) currency
+MetisCoin (MTC) currency
+EarthCoin (EAC) currency
+
+0.78 (2014-01-11)
+=================
+PrimeCoin (XPT) currency
+x64 miner included to Windows installation package
+
+0.77 (2013-12-30)
+=================
+ProtoShares (PTS) currency
+
+
 0.66 (2013-07-12)
 =================
 FeatherCoin (FTC) currency

@@ -24,20 +24,28 @@ protected:
 class EarthTxObj : public TxObj {
 	typedef TxObj base;
 public:
-	String Comment;
+//	String Comment;
+	Blob CommentBlob;
 
 protected:
 	EarthTxObj *Clone() const override { return new EarthTxObj(_self); }
-	String GetComment() const override { return Comment; }
+
+	String GetComment() const override { 
+		try {
+			return String((const char*)CommentBlob.constData(), CommentBlob.Size);
+		} catch (RCExc) {
+			return "<#INVALID-STRING>";
+		}
+	}
 
 	void WriteSuffix(BinaryWriter& wr) const {
 		if (Ver >= 2)
-			WriteString(wr, Comment);
+			WriteBlob(wr, CommentBlob);
 	}
 
 	void ReadSuffix(const BinaryReader& rd) {
 		if (Ver >= 2)
-			Comment = ReadString(rd);
+			CommentBlob = ReadBlob(rd);
 	}
 };
 
@@ -54,7 +62,7 @@ protected:
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
 		if (height == 1)
 			return ChainParams.MaxMoney / 50;
-		const int blocksPerDay = int(seconds(hours(4*24)) / ChainParams.BlockSpan);
+		const int blocksPerDay = int(seconds(hours(24)) / ChainParams.BlockSpan);
 		int64_t r = ChainParams.InitBlockValue + int(2000 * sin(double(height) / (365 * blocksPerDay) * 2 * MATH_M_PI)) * ChainParams.CoinValue;
 		switch (int day = height / blocksPerDay + 1) {
 		case 1:	r *= 5; break;

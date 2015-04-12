@@ -11,3 +11,5 @@ Ale110								-	Combined Bintoin/Litecoin Icon
 Bitboi								-	Bitcoin logo         https://bitcointalk.org/index.php?topic=1631.0
 
 Alex Nik <serg9988@gmail.com>		-	Provided "ModMiner Quad" hardware
+
+Sipa (Pieter Wuille)				-	secp256k1 optimized ECDSA library
