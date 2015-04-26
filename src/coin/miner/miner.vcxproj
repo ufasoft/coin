@@ -295,7 +295,8 @@
       </Command>
     </PreBuildEvent>
     <CustomBuildStep>
-      <Command>mkdir -p $(OutDir)\inc\miner
+      <Command>mkdir $(OutDir)\inc
+mkdir $(OutDir)\inc\miner
 copy $(SRCDIR)\coin\util\coin-msg.mc  + $(SRCDIR)\el\libext\ext_messages.mc  $(OutDir)\inc\miner_msg.mc
 mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
     </CustomBuildStep>
@@ -413,7 +414,8 @@ mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
       </Command>
     </PreBuildEvent>
     <CustomBuildStep>
-      <Command>mkdir -p $(OutDir)\inc\miner
+      <Command>mkdir $(OutDir)\inc
+mkdir $(OutDir)\inc\miner
 copy $(SRCDIR)\coin\util\coin-msg.mc  + $(SRCDIR)\el\libext\ext_messages.mc  $(OutDir)\inc\miner_msg.mc
 mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
     </CustomBuildStep>
@@ -534,7 +536,8 @@ mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
       </Command>
     </PreBuildEvent>
     <CustomBuildStep>
-      <Command>mkdir -p $(OutDir)\inc\miner
+      <Command>mkdir $(OutDir)\inc
+mkdir $(OutDir)\inc\miner
 copy $(SRCDIR)\coin\util\coin-msg.mc  + $(SRCDIR)\el\libext\ext_messages.mc  $(OutDir)\inc\miner_msg.mc
 mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
     </CustomBuildStep>
@@ -645,7 +648,8 @@ mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
       </Command>
     </PreBuildEvent>
     <CustomBuildStep>
-      <Command>mkdir -p $(OutDir)\inc\miner
+      <Command>mkdir $(OutDir)\inc
+mkdir $(OutDir)\inc\miner
 copy $(SRCDIR)\coin\util\coin-msg.mc  + $(SRCDIR)\el\libext\ext_messages.mc  $(OutDir)\inc\miner_msg.mc
 mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
     </CustomBuildStep>
@@ -712,6 +716,8 @@ mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">el/ext.h</PrecompiledHeaderFile>
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\sha256.cpp" />
+    <ClCompile Include="..\..\el\inet\proxy-client.cpp" />
+    <ClCompile Include="..\..\el\inet\proxy.cpp" />
     <ClCompile Include="..\..\el\libext\http.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -839,6 +845,7 @@ mc -h $(OutDir)\inc -r $(OutDir)\inc\miner $(OutDir)\inc\miner_msg.mc</Command>
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">Disabled</InlineFunctionExpansion>
     </ClCompile>
     <ClCompile Include="dynclock.cpp" />
+    <ClCompile Include="hasher\hasher-groestl.cpp" />
     <ClCompile Include="hasher\hasher-metis.cpp" />
     <ClCompile Include="hasher\hasher-neoscrypt.cpp" />
     <ClCompile Include="hasher\hasher-prime.cpp" />

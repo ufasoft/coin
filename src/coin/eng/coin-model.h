@@ -374,7 +374,6 @@ private:
 	friend class Txes;
 	friend interface WalletBase;
 	friend class Wallet;
-	friend class SolidcoinBlockObj;
 	friend class CoinDb;
 	friend class EmbeddedMiner;
 	friend COIN_EXPORT HashValue Hash(const Tx& tx);
@@ -471,6 +470,7 @@ public:
 	virtual ProofOf ProofType() const { return ProofOf::Work; }
 	const Coin::CTxes& get_Txes() const;
 	virtual HashValue HashFromTx(const Tx& tx, int n) const;
+	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
 	void WriteHeader(BinaryWriter& wr) const override;
 	virtual void WriteSuffix(BinaryWriter& wr) const {}
 	virtual void WriteDbSuffix(BinaryWriter& wr) const {}
@@ -492,7 +492,6 @@ protected:
 	}
 
 	virtual BlockObj *Clone() { return new BlockObj(*this); }
-	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
 	virtual void Write(BinaryWriter& wr) const;
 	virtual void Read(const BinaryReader& rd);
 	virtual BigInteger GetWork() const;

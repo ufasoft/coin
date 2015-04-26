@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include <el/win/idle-monitor.cpp>
@@ -143,12 +148,26 @@ void MinerService::CloseMiner() {
 
 void RunMinerAsService(BitcoinMiner& miner) {
 #if UCFG_TRC
-	void *posPrev = CTrace::s_pOstream;
-	int nLevelPrev = CTrace::s_nLevel;
-	static ofstream s_log("/var/log/miner-service.log");
-	CTrace::s_pOstream = &s_log;
-	CTrace::s_nLevel = 31;
-#endif
+	struct LogKeeper {
+		Stream *posPrev;
+		int nLevelPrev;
+
+		LogKeeper() {
+			posPrev = CTrace::GetOStream();
+			nLevelPrev = CTrace::s_nLevel;
+
+			CTrace::SetOStream(new TraceStream("/var/log/miner-service.log"));
+			CTrace::s_nLevel = 31;
+		}
+
+		~LogKeeper() {
+			CTrace::SetOStream(posPrev);
+			CTrace::s_nLevel = nLevelPrev;
+		}
+	} logKeeper;
+#endif // UCFG_TRC
+
+
 #ifdef X_DEBUG//!!!D
 	while (true) {
 		miner.Start();
@@ -159,15 +178,7 @@ void RunMinerAsService(BitcoinMiner& miner) {
 	return;
 #endif
 	MinerService svc(miner);
-	try {
-		svc.Run();
-	} catch (RCExc) {
-#if UCFG_TRC
-		CTrace::s_pOstream = posPrev;
-		CTrace::s_nLevel = nLevelPrev;
-#endif
-		throw;
-	}
+	svc.Run();
 }
 
 void TimerThread::Execute() {

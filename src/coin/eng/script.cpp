@@ -265,7 +265,7 @@ Blob Script::DeleteSubpart(const ConstBuf& mb, const ConstBuf& part) {
 		if (vm.m_stm->Eof())
 			break;
 		vm.GetOp();
-		r = r + Blob(mb.P+pos, (int)vm.m_stm->Position-pos);
+		r = r + ConstBuf(mb.P+pos, (int)vm.m_stm->Position-pos);
 	}
 	return r;
 }
@@ -275,8 +275,8 @@ HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int
 	txTmp.m_pimpl->m_nBytesOfHash = 0;
 	byte opcode = OP_CODESEPARATOR;
 	Blob script1 = Script::DeleteSubpart(script, ConstBuf(&opcode, 1));
-	for (int i=0; i<txTmp.TxIns().size(); ++i)
-		txTmp.m_pimpl->m_txIns.at(i).put_Script(Blob());
+	for (size_t i=0; i<txTmp.TxIns().size(); ++i)
+		txTmp.m_pimpl->m_txIns.at(i).put_Script(ConstBuf());
 	txTmp.m_pimpl->m_txIns.at(nIn).put_Script(script1);					// .at() checks 0<=nIn<size()
 
 	int nOut = -1;
@@ -301,7 +301,7 @@ HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int
         txTmp.m_pimpl->m_txIns.at(0) = txTmp.TxIns()[nIn];
         txTmp.m_pimpl->m_txIns.resize(1);
     }
-	return Hash(EXT_BIN(txTmp << nHashType));
+	return Eng().HashForSignature(EXT_BIN(txTmp << nHashType));
 }
 
 bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, int32_t nHashType) {
@@ -525,7 +525,7 @@ bool Vm::EvalImp(const Tx& txTo, uint32_t nIn, int32_t nHashType) {
 					{
 						Value key = Pop(),
 							sig = Pop();
-						Blob script = Script::DeleteSubpart(Blob(m_blob.constData()+m_posCodeHash, m_blob.Size-m_posCodeHash), sig);
+						Blob script = Script::DeleteSubpart(ConstBuf(m_blob.constData()+m_posCodeHash, m_blob.Size-m_posCodeHash), sig);
 						bool bOk = CheckSig(sig, key, script, txTo, nIn, nHashType);
 						if (OP_CHECKSIG == instr.Opcode)
 							Push(bOk ? TrueValue : FalseValue);

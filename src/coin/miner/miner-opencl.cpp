@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -94,9 +91,9 @@ public:
 
 	void SetDevicePortion() override {
 		if (Miner.HashAlgo == HashAlgo::SCrypt) {
-			size_t size = (size_t)std::min(UInt64(numeric_limits<size_t>::max()), (UInt64)Device.get_MaxMemAllocSize());
-			UInt64 sizeToUse = Device.GlobalMemSize*2/3;
-			DevicePortion = std::max(size_t(std::min(sizeToUse, UInt64(size)) >> 17), size_t(512)) / UCFG_BITCOIN_NPAR;		// Test Data has size 512
+			size_t size = (size_t)std::min(uint64_t(numeric_limits<size_t>::max()), (uint64_t)Device.get_MaxMemAllocSize());
+			uint64_t sizeToUse = Device.GlobalMemSize*2/3;
+			DevicePortion = std::max(size_t(std::min(sizeToUse, uint64_t(size)) >> 17), size_t(512)) / UCFG_BITCOIN_NPAR;		// Test Data has size 512
 			size_t bufSize = size_t(DevicePortion) * UCFG_BITCOIN_NPAR * 128*1024;
 			for (; sizeToUse >= bufSize; sizeToUse-=bufSize)
 				ScratchBuffers.push_back(cl::Buffer(Ctx, 0, bufSize));
@@ -121,7 +118,7 @@ OpenclTask::OpenclTask(OpenclMiner& clMiner)
 }
 
 void OpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) {
-	m_pwt = pwt;
+	m_pwt.reset(pwt);
 	WorkData = (BitcoinWorkData*)&wd;
 	m_nparOrig = WorkData->LastNonce - WorkData->FirstNonce + 1,
 	m_npar = m_nparOrig; //!!!?
@@ -141,7 +138,7 @@ void OpenclTask::Run() {
 	Kern.setArg(12, m_midstate_after_3[1]);	// G1
 	Kern.setArg(13, m_midstate_after_3[2]);	// H1
 	
-	Kern.setArg(14, m_bIsVector2 ? (UInt32(WorkData->FirstNonce) >> 1) : UInt32(WorkData->FirstNonce));
+	Kern.setArg(14, m_bIsVector2 ? (uint32_t(WorkData->FirstNonce) >> 1) : uint32_t(WorkData->FirstNonce));
 	Kern.setArg(15, m_w[2]);	
 	Kern.setArg(16, m_w[16]);
 	Kern.setArg(17, m_w[17]);
@@ -196,7 +193,7 @@ int OpenclTask::ParseResults() {
 	int r = 0;
 	if (m_bufTest[256]) {
 		for (int i=0; i<256; ++i) {
-			if (UInt32 nonce = m_bufTest[i]) {
+			if (uint32_t nonce = m_bufTest[i]) {
 				++r;
 				if (m_pwt)
 					m_pwt->Miner.TestAndSubmit(WorkData, nonce);
@@ -207,7 +204,7 @@ int OpenclTask::ParseResults() {
 	}
 
 	if (m_pwt)
-		Interlocked::Add(m_pwt->Miner.HashCount, m_nparOrig/UCFG_BITCOIN_NPAR);
+		m_pwt->Miner.aHashCount += m_nparOrig/UCFG_BITCOIN_NPAR;
 	return r;
 }
 
@@ -253,25 +250,25 @@ ScryptOpenclTask::ScryptOpenclTask(OpenclMiner& clMiner)
 }
 
 void ScryptOpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) {
-	m_pwt = pwt;
+	m_pwt.reset(pwt);
 	WorkData = (BitcoinWorkData*)&wd;
-	m_nparOrig = WorkData->LastNonce-WorkData->FirstNonce+1,
+	m_nparOrig = WorkData->LastNonce - WorkData->FirstNonce + 1,
 	m_npar = m_nparOrig; //!!!?
 	
-	UInt32 data[20];
-	for (int i=0; i<_countof(data); ++i)
-		data[i] = _byteswap_ulong(((UInt32*)WorkData->Data.data())[i]);
+	uint32_t data[20];
+	for (int i=0; i<size(data); ++i)
+		data[i] = _byteswap_ulong(((uint32_t*)WorkData->Data.data())[i]);
 
-	for (UInt32 nonce=wd.FirstNonce, end=wd.LastNonce+1, n=0; nonce!=end; ++nonce, ++n) {
+	for (uint32_t nonce=wd.FirstNonce, end=wd.LastNonce+1, n=0; nonce!=end; ++nonce, ++n) {
 		data[19] = nonce;
 
 		ConstBuf password(data, sizeof data);
 		SHA256 sha;
 		Blob ihash(sha.ComputeHash(password));
-		const UInt32 *pIhash = (UInt32*)ihash.constData();
+		const uint32_t *pIhash = (uint32_t*)ihash.constData();
 		memcpy(m_ihashes.data()+32*n, pIhash, 32);
 
-		UInt32 tmp[32];
+		uint32_t tmp[32];
 #if UCFG_CPU_X86_X64
 		CalcPbkdf2Hash_80_4way(tmp, pIhash, password);
 #else
@@ -280,16 +277,16 @@ void ScryptOpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt)
 			memcpy(tmp + i*8, blob.constData(), 32);
 		}
 #endif
-		ShuffleForSalsa((UInt32*)(m_iodata.data() + n*128), tmp);
+		ShuffleForSalsa((uint32_t*)(m_iodata.data() + n*128), tmp);
 
 #ifdef X_DEBUG//!!!D
-		AlignedMem am((1025*32)*sizeof(UInt32), 128);
+		AlignedMem am((1025*32)*sizeof(uint32_t), 128);
 		memcpy(tmp, m_iodata.data() + n*128, 128);
-		ScryptCore_x86x64(tmp, (UInt32*)am.get());
-		UInt32 tmp1[32];
+		ScryptCore_x86x64(tmp, (uint32_t*)am.get());
+		uint32_t tmp1[32];
 		UnShuffleForSalsa(tmp1, tmp);
-		Blob blob = CalcPbkdf2Hash((UInt32*)(m_ihashes.data()+32*n), ConstBuf(tmp1, sizeof tmp1), 1);
-		const UInt32 *p = (const UInt32*)blob.constData();
+		Blob blob = CalcPbkdf2Hash((uint32_t*)(m_ihashes.data()+32*n), ConstBuf(tmp1, sizeof tmp1), 1);
+		const uint32_t *p = (const uint32_t*)blob.constData();
 		if (p[7] < 0x10000) {
 			cout << endl;
 		}
@@ -302,10 +299,10 @@ int ScryptOpenclTask::ParseResults() {
 	int r = 0;
 
 	for (int n=0; n<m_npar; ++n) {
-		UInt32 tmp[32];
-		UnShuffleForSalsa(tmp, (UInt32*)(m_iodata.data() + n*128));
-		Blob blob(CalcPbkdf2Hash((UInt32*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1));
-		const UInt32 *p = (const UInt32*)blob.constData();
+		uint32_t tmp[32];
+		UnShuffleForSalsa(tmp, (uint32_t*)(m_iodata.data() + n*128));
+		Blob blob(CalcPbkdf2Hash((uint32_t*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1));
+		const uint32_t *p = (const uint32_t*)blob.constData();
 		if (p[7] < 0x10000) {
 			++r;
 			if (m_pwt)
@@ -314,7 +311,7 @@ int ScryptOpenclTask::ParseResults() {
 	}
 
 	if (m_pwt)
-		Interlocked::Add(m_pwt->Miner.HashCount, m_nparOrig/UCFG_BITCOIN_NPAR);
+		m_pwt->Miner.aHashCount += m_nparOrig/UCFG_BITCOIN_NPAR;
 	return r;
 }
 

@@ -43,6 +43,9 @@
     <Filter Include="Source Files\backend-sqlite">
       <UniqueIdentifier>{56311435-2adf-4160-b7b4-d85dae621222}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\currency\excluded">
+      <UniqueIdentifier>{a038683e-4e24-4a3b-82bb-0d19477f5859}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="coineng.cpp">
@@ -100,9 +103,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\ecdsa.cpp">
-      <Filter>comp\crypto</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\crypto\aes.cpp">
       <Filter>comp\crypto</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\num\mod.cpp">
@@ -177,9 +177,6 @@
     <ClCompile Include="currency\primecoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
-    <ClCompile Include="currency\solidcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
     <ClCompile Include="currency\terracoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
@@ -187,9 +184,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
-      <Filter>comp\crypto</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
       <Filter>comp\crypto</Filter>
     </ClCompile>
     <ClCompile Include="currency\dogecoin.cpp">
@@ -201,19 +195,34 @@
     <ClCompile Include="currency\earthcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
-    <ClCompile Include="currency\maxcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
     <ClCompile Include="backend-sqlite.cpp">
       <Filter>Source Files\backend-sqlite</Filter>
     </ClCompile>
     <ClCompile Include="currency\ixcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\crypto\sha-1.cpp">
-      <Filter>comp\crypto</Filter>
-    </ClCompile>
     <ClCompile Include="currency\litecoin.cpp">
+      <Filter>Source Files\currency</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy-client.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="bootstrap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="reorganize.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="buggy-aes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\maxcoin.cpp">
+      <Filter>Source Files\currency\excluded</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\groestlcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
   </ItemGroup>
@@ -292,6 +301,9 @@
     </ClInclude>
     <ClInclude Include="backend-sqlite.h">
       <Filter>Source Files\backend-sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="buggy-aes.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

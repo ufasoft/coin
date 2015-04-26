@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
-
 #include <el/ext.h>
 
 #include "miner.h"
@@ -20,7 +12,7 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 	Blob blob = Swab32(Blob::FromHexString(json[5].ToString()));
 	if (blob.Size != 4)
 		Throw(E_EXT_Protocol_Violation);
-	r->Ver = letoh(*(UInt32*)blob.constData());
+	r->Ver = letoh(*(uint32_t*)blob.constData());
 		
 	r->PrevBlockHash = HashValue(Swab32(Blob::FromHexString(json[1].ToString())));
 
@@ -36,11 +28,11 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 		
 	if ((blob = Swab32(Blob::FromHexString(json[6].ToString()))).Size != 4)
 		Throw(E_EXT_Protocol_Violation);
-	r->DifficultyTargetBits = letoh(*(UInt32*)blob.constData());
+	r->DifficultyTargetBits = letoh(*(uint32_t*)blob.constData());
 
 	if ((blob = Swab32(Blob::FromHexString(json[7].ToString()))).Size != 4)
 		Throw(E_EXT_Protocol_Violation);
-	r->SetTimestamps(DateTime::from_time_t(letoh(*(UInt32*)blob.constData())));
+	r->SetTimestamps(DateTime::from_time_t(letoh(*(uint32_t*)blob.constData())));
 
 	return r;
 }
@@ -48,6 +40,7 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 StratumClient::StratumClient(Coin::BitcoinMiner& miner)
 	:	ConnectionClient(miner)
 	,	State(0)
+	,	CurrentDifficulty(1)
 {
 	W.NewLine = "\n";
 	m_owner = miner.m_tr;
@@ -79,14 +72,14 @@ void StratumClient::Submit(BitcoinWorkData *wd) {
 	ptr<StratumTask> task = new StratumTask(State);
 	task->m_wd = wd;
 #ifdef X_DEBUG//!!!D
-	UInt32 ts = to_time_t(mblock.Timestamp);
-	UInt32 nonce = wd->Nonce;
+	uint32_t ts = to_time_t(mblock.Timestamp);
+	uint32_t nonce = wd->Nonce;
 #endif
 	Call("mining.submit", params, task);
 }
 
 void StratumClient::SetDifficulty(double difficulty) {
-	HashTarget = HashValue::FromShareDifficulty(difficulty, Miner.HashAlgo);
+	HashTarget = HashValue::FromShareDifficulty(CurrentDifficulty=difficulty, Miner.HashAlgo);
 }
 
 void StratumClient::OnLine(RCString line) {
@@ -100,6 +93,11 @@ void StratumClient::OnLine(RCString line) {
 				Throw(E_EXT_Protocol_Violation);
 			if (req.Method == "mining.notify") {
 				EXT_LOCK (MtxData) {
+#ifdef X_DEBUG//!!!D
+					ExtraNonce1 = Blob::FromHexString("f8003a06");
+					req.Params = ParseJson("{\"params\": [\"153c\", \"6cbbcc3a33d13a9059303cdde12d6ddecfb5573bb39595051e50422d00000000\",	\"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff270319a108062f503253482f048aea3b5508\",          \"0d2f7374726174756d506f6f6c2f0000000001fe0db062000000001976a91448b925a28f91cd8931cfa3c72698026389b91df788ac00000000\", [], \"00000070\", \"1c1eaa62\", \"553bea8a\", true], \"id\": null, \"method\": \"mining.notify\"}")["params"];
+#endif
+
 					MinerBlock = MinerBlock::FromStratumJson(req.Params);
 					MinerBlock->Algo = Miner.HashAlgo;
 					MinerBlock->HashTarget = HashTarget;
@@ -111,7 +109,7 @@ void StratumClient::OnLine(RCString line) {
 							Miner.TaskQueue.clear();
 							Miner.WorksToSubmit.clear();
 						}
-						*Miner.m_pTraceStream << "New Stratum data with Clean                    " << endl;
+						*Miner.m_pTraceStream << "New Stratum data with Clean. Diff: " << CurrentDifficulty << "                   " << endl;
 					}
 				}
 				Miner.m_evGetWork.Set();
@@ -140,9 +138,9 @@ void StratumClient::OnLine(RCString line) {
 		} else if (method == "mining.submit") {	
 			StratumTask *task = (StratumTask*)resp.Request.get();
 			String msg = resp.JsonMessage;
-			if (msg.IsEmpty() && resp.ErrorVal.type()==VarType::Array && resp.ErrorVal.size()>=2 && resp.ErrorVal[1].type()==VarType::String)
+			if (msg.empty() && resp.ErrorVal.type()==VarType::Array && resp.ErrorVal.size()>=2 && resp.ErrorVal[1].type()==VarType::String)
 				msg = resp.ErrorVal[1].ToString();
-			Interlocked::Increment(Miner.SubmittedCount);
+			++Miner.aSubmittedCount;
 			Miner.Print(*task->m_wd, resp.Success, msg);
 		} else {
 			TRC(2, "Unknown JSON-RPC method: " << method);

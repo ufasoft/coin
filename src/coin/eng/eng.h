@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include <el/db/ext-sqlite.h>
@@ -13,7 +18,6 @@
 #	include <crypto/cryp/secp256k1.h>
 #endif
 
-#include <el/crypto/ecdsa.h>
 #include <el/crypto/bloom-filter.h>
 using namespace Ext::Crypto;
 
@@ -29,6 +33,8 @@ using P2P::Peer;
 #if UCFG_COIN_GENERATE
 #	include "../miner/miner.h"
 #endif
+
+#include "crypter.h"
 
 using P2P::NetManager;
 
@@ -231,38 +237,6 @@ public:
 #endif
 };
 
-class MyKeyInfo {
-	typedef MyKeyInfo class_type;
-public:
-	int64_t KeyRowid;
-	Blob PubKey;
-	
-	CngKey Key;
-	DateTime Timestamp;
-	String Comment;
-
-	~MyKeyInfo();
-	Address ToAddress() const;
-	Blob PlainPrivKey() const;
-	Blob EncryptedPrivKey(Aes& aes) const;
-
-	Blob get_PrivKey() const { return m_privKey; }
-//	void put_PrivKey(const Blob& v);
-	DEFPROP_GET(Blob, PrivKey);
-
-	HashValue160 get_Hash160() const {
-		return Coin::Hash160(PubKey);
-	}
-	DEFPROP_GET(HashValue160, Hash160);
-
-	void SetPrivData(const ConstBuf& cbuf, bool bCompressed);
-	void SetPrivData(const PrivateKey& privKey);
-
-	bool IsCompressed() const { return PubKey.Size == 33; }
-private:
-	Blob m_privKey;
-};
-
 class CoinFilter : public BloomFilter, public Object, public CPersistent {
 	typedef BloomFilter base;
 public:
@@ -298,7 +272,7 @@ protected:
 	ConstBuf FindScriptData(const ConstBuf& script) const;
 };
 
-class COIN_CLASS CoinDb : public P2P::DetectGlobalIp, public NetManager {
+class COIN_CLASS CoinDb : /*!!!R public P2P::DetectGlobalIp,*/ public NetManager {
 	typedef NetManager base;
 	typedef CoinDb class_type;
 public:
@@ -367,7 +341,7 @@ public:
 	void ImportWallet(const path& filepath, RCString password);
 	void ExportWalletToXml(const path& filepath);
 
-	void OnIpDetected(const IPAddress& ip) override;
+//!!!R	void OnIpDetected(const IPAddress& ip) override;
 	Link *CreateLink(thread_group& tr) override;
 	void BanPeer(Peer& peer) override;
 	void SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers);
@@ -379,7 +353,7 @@ private:
 	void CreateDbPeers();
 
 	void CheckPasswordPolicy(RCString password);
-	void InitAes(Aes& aes, RCString password, byte encrtyptAlgo);
+	void InitAes(BuggyAes& aes, RCString password, byte encrtyptAlgo);
 	void UpdateOrInsertPeer(const Peer& peer);
 };
 
@@ -469,6 +443,7 @@ public:
 	virtual bool HaveBlock(const HashValue& hash)												=0;
 	virtual Block FindBlock(const HashValue& hash)												=0;
 	virtual Block FindBlock(int height)															=0;
+	virtual Block FindBlockPrefixSuffix(int height) { return FindBlock(height); }
 	virtual int GetMaxHeight()																	=0;
 	virtual TxHashesOutNums GetTxHashesOutNums(int height)										=0;
 	virtual vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) =0;
@@ -481,8 +456,12 @@ public:
 	virtual void ReadTxIns(const HashValue& hash, const TxObj& txObj)							=0;
 	virtual pair<int, int> FindPrevTxCoords(DbWriter& wr, int height, const HashValue& hash)	=0;
 	virtual void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) =0;
+
+	virtual void InsertSpentTxOffsets(const unordered_map<HashValue, pair<uint32_t, uint32_t>>& spentTxOffsets) { Throw(E_NOTIMPL); }	// used only for EngMode::Bootstrap
+
 	virtual vector<bool> GetCoinsByTxHash(const HashValue& hash)								=0;
 	virtual void SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec)				=0;
+	virtual void UpdateCoins(const OutPoint& op, bool bSpend);
 
 	virtual void BeginEngTransaction()															=0;
 	virtual void SetProgressHandler(int(* pfn)(void*), void*p = 0, int n = 1)					=0;
@@ -495,6 +474,8 @@ public:
 	virtual void Vacuum() {}
 	virtual void BeforeEnsureTransactionStarted() {}
 
+	virtual uint64_t GetBoostrapOffset() { return 0; }
+	virtual void SetBoostrapOffset(uint64_t v) {}
 };
 
 ptr<IBlockChainDb> CreateBlockChainDb();
@@ -512,7 +493,7 @@ public:
 	recursive_mutex Mtx;
 
 	ptr<IBlockChainDb> Db;
-	uint64_t OffsetInBootstrap;
+	uint64_t OffsetInBootstrap, NextOffsetInBootstrap;
 
 	int m_idPeersNet;
 	std::exception_ptr CriticalException;
@@ -540,11 +521,12 @@ public:
 
 	static const int HEIGHT_BOOTSTRAPING = -2;
 	int UpgradingDatabaseHeight;
+
+	mutex m_mtxStates;
+	set<String> m_setStates;
 	
 	ptr<Coin::ChannelClient> ChannelClient;
-	int CommitPeriod;
-
-
+	int CommitPeriod;	
 
 	ptr<CoinFilter> Filter;
 
@@ -605,25 +587,30 @@ public:
 	bool HaveBlock(const HashValue& hash);
 	bool HaveTxInDb(const HashValue& hashTx);
 	bool Have(const Inventory& inv);
+	Block GetPrevBlockPrefixSuffixFromMainTree(const Block& block);
 	bool IsFromMe(const Tx& tx);
 	void AddToMemory(const Tx& tx);
 	void RemoveFromMemory(const Tx& tx);	
 	void Push(const Inventory& inv);
 	void Push(const Tx& tx);
 	bool AddToPool(const Tx& tx, vector<HashValue>& vQueue);
+	void ExportToBootstrapDat(const path& pathBoostrap);
 	Block GetBlockByHeight(uint32_t height);
 	Block LookupBlock(const HashValue& hash);
 	static Blob SpendVectorToBlob(const vector<bool>& vec);
 	void EnsureTransactionStarted();
 	void CommitTransactionIfStarted();
 
-	virtual HashValue HashMessage(const ConstBuf& cbuf) { return Coin::Hash(cbuf); }
+	virtual HashValue HashMessage(const ConstBuf& cbuf);
+	virtual HashValue HashForSignature(const ConstBuf& cbuf);
+	virtual HashValue HashFromTx(const Tx& tx);
 
 	virtual void OnCheck(const Tx& tx) {}
 	virtual void OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner) {}
 	virtual void OnConnectBlock(const Block& block) {}
 	virtual void OnDisconnectInputs(const Tx& tx) {}
 	virtual bool ShouldBeSaved(const Tx& tx) { return Mode!=EngMode::Lite && Mode!=EngMode::BlockParser; }
+	virtual void CheckForDust(const Tx& tx) {}
 
 	virtual int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty = 0, bool bForCheck = false) {
 		return ChainParams.InitBlockValue >> (height/ChainParams.HalfLife);
@@ -694,6 +681,7 @@ public:
 	virtual TxObj *CreateTxObj() { return new TxObj; }	
 	virtual	bool CreateDb();
 	virtual bool OpenDb();
+	path GetBootstrapPath();
 
 	void BeginTransaction() override {}
 	void Commit() override {}
@@ -748,7 +736,7 @@ private:
 
 	void UpgradeTo(const Version& ver);
 	void LoadLastBlockInfo();
-	void Misbehaving(P2P::Message *m, int howMuch);
+	void Misbehaving(P2P::Message *m, int howMuch, RCString command = nullptr, RCString reason = nullptr);
 
 	friend class Block;
 	friend class Tx;
@@ -757,25 +745,57 @@ private:
 	friend class CoinMessage;
 };
 
+class CoinEngTransactionScope : noncopyable {
+public:
+	CoinEng& Eng;
+	ITransactionable& m_db;
+
+	CoinEngTransactionScope(CoinEng& eng)
+		:	Eng(eng)
+		,	m_db(Eng.Db->GetSavepointObject())
+	{
+		Eng.BeginTransaction();
+		m_db.BeginTransaction();
+	}
+
+	~CoinEngTransactionScope() {
+		if (!m_bCommitted) {
+			if (InException) {
+				m_db.Rollback();
+				Eng.Rollback();
+			} else {
+				m_db.Commit();
+				Eng.Commit();
+			}
+		}
+	}
+
+	void Commit() {
+		m_db.Commit();
+		Eng.Commit();
+		m_bCommitted = true;
+	}
+private:
+	CInException InException;
+	CBool m_bCommitted;
+};
+
 class BootstrapDbThread : public Thread {
 	typedef Thread base;
 public:
 	CoinEng& Eng;
 	path PathBootstrap;
+	CBool Exporting;
 
-	BootstrapDbThread(CoinEng& eng, const path& pthBootstrap)
+	BootstrapDbThread(CoinEng& eng, const path& pathBootstrap)
 		:	base(&eng.m_tr)
 		,	Eng(eng)
 		,	PathBootstrap(pathBootstrap)
 	{}
 protected:
-	void BeforeStart() override {
-		Eng.UpgradingDatabaseHeight = CoinEng::HEIGHT_BOOTSTRAPING;
-	}
-
+	void BeforeStart() override;
 	void Execute() override;
 };
-
 
 class CoinEngApp : public CAppBase {
 	typedef CoinEngApp class_type;
@@ -843,6 +863,23 @@ protected:
 };
 
 Version CheckUserVersion(SqliteConnection& db);
+
+class CEngStateDescription : noncopyable {
+public:
+	CEngStateDescription(CoinEng& eng, RCString s)
+		: m_eng(eng)
+		, m_s(s)
+	{
+		EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.insert(s));
+	}
+
+	~CEngStateDescription() {
+		EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.erase(m_s));
+	}
+private:
+	CoinEng& m_eng;
+	String m_s;
+};
 
 
 } // Coin::

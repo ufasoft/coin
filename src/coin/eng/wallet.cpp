@@ -139,10 +139,11 @@ void VerifySignature(const Tx& txFrom, const Tx& txTo, uint32_t nIn, int32_t nHa
     const TxOut& txOut = txFrom.TxOuts()[txIn.PrevOutPoint.Index]; 
     if (txIn.PrevOutPoint.TxHash != Hash(txFrom) || !VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType)) {
 #ifdef X_DEBUG//!!!D
+
 		TRC(1, "txTo " << Hash(txTo));		
-		bool bC = txIn.PrevOutPoint.TxHash == Hash(txFrom);
-		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType);
-		bb = bb;
+//		bool bC = txIn.PrevOutPoint.TxHash == Hash(txFrom);
+//		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType);
+//		bb = bb;
 #endif
 		Throw(E_COIN_VerifySignatureFailed);
 	}

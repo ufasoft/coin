@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -333,12 +331,12 @@ uint32_t PrimeHasher::MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& rwd) {
 				}
 				if (len >= 1) {
 					++nHashes;
-					Interlocked::Increment(miner.HashCount);
+					++miner.aHashCount;
 					if (len >= 5) {
 						TRC(3, "Prime FOUND, len: " << len);
 					}
-					if (len < wd.Client->LenStats.size())
-						Interlocked::Increment(wd.Client->LenStats[len]);
+					if (len < wd.Client->aLenStats.size())
+						++(wd.Client->aLenStats[len]);
 					else {
 						TRC(1, "Unexpected Chain Length " << len);
 					}

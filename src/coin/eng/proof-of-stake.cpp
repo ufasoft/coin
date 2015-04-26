@@ -121,7 +121,7 @@ void PosBlockObj::WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockP
 	for (DateTime dt=b.Timestamp, dtTarget=dt+STAKE_MODIFIER_SELECTION_INTERVAL; dt<dtTarget;) {
 		if (b == eng.BestBlock())
 			Throw(E_COIN_CoinstakeCheckTargetFailed);
-		if (!!PosBlockObj::Of(b = eng.GetBlockByHeight(b.Height+1)).StakeModifier)
+		if (!!PosBlockObj::Of(b = eng.Db->FindBlockPrefixSuffix(b.Height+1)).StakeModifier)			// don't use cache here because high probability of missing
 			dt = b.Timestamp;
 	}
 //	TRC(2, hex << PosBlockObj::Of(b).StakeModifier.get() << " at height " << dec << b.Height << " timestamp " << dt);

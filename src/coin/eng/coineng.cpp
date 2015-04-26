@@ -208,6 +208,18 @@ void CoinEng::CommitTransactionIfStarted() {
 	}
 }
 
+HashValue CoinEng::HashMessage(const ConstBuf& cbuf) {
+	return Coin::Hash(cbuf);
+}
+
+HashValue CoinEng::HashForSignature(const ConstBuf& cbuf) {
+	return Coin::Hash(cbuf);
+}
+
+HashValue CoinEng::HashFromTx(const Tx& tx) {
+	return Coin::Hash(EXT_BIN(tx));
+}
+
 void CoinEng::Close() {
 	TRC(1, "Closing " << GetDbFilePath());
 
@@ -577,6 +589,8 @@ protected:
 
 		DateTime date = DateTime::UtcNow() - TimeSpan::FromDays(1);
 		EXT_FOR (const String& dns, DnsServers) {
+			if (m_bStop)
+				break;
 			try {
 				IPHostEntry he = Dns::GetHostEntry(dns);
 				EXT_FOR (const IPAddress& a, he.AddressList) {
@@ -809,6 +823,9 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		case E_COIN_BadCbLength:
 			Misbehaving(m, 100, "block", "bad-cb-length");
 			break;
+		case E_COIN_ProofOfWorkFailed:
+			Misbehaving(m, 50, "block", "high-hash");
+			break;			
 		case E_COIN_BadTxnsVinEmpty:
 			Misbehaving(m, 10, "block", "bad-txns-vin-empty");
 			break;
@@ -835,7 +852,6 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		case E_COIN_DupVersionMessage:
 			m->Link->Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
 		case E_COIN_VeryBigPayload:
-		case E_COIN_ProofOfWorkFailed:
 		default:
 			TRC(2, ex.what());
 LAB_MIS:
@@ -927,6 +943,13 @@ bool CoinEng::Have(const Inventory& inv) {
 	}
 }
 
+Block CoinEng::GetPrevBlockPrefixSuffixFromMainTree(const Block& block) {
+	Block r(nullptr);
+	if (EXT_LOCKED(Caches.Mtx, Lookup(Caches.HashToBlockCache, block.PrevBlockHash, r) || Lookup(Caches.HashToAlternativeChain, block.PrevBlockHash, r)))
+		return r;
+	return Db->FindBlockPrefixSuffix(block.Height-1);
+}
+
 CoinPeer *CoinEng::CreatePeer() {
 	return new CoinPeer;
 }
@@ -1006,7 +1029,7 @@ CoinEngApp::CoinEngApp() {
 #if UCFG_TRC //!!!D
 	if (!CTrace::s_nLevel)
 		CTrace::s_nLevel = 0x3F;
-	CTrace::SetOStream(new ofstream((get_AppDataDir() / "coin.log").native().ToOsString(), ios::binary));
+	CTrace::SetOStream(new TraceStream(get_AppDataDir() / "coin.log"));
 	TRC(0, "Starting");
 #endif
 }

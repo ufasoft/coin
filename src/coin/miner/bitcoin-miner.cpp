@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #ifndef UCFG_BITCOIN_SOLO_MINING
@@ -168,11 +173,6 @@ public:
 	}
 
 	void Execute() override	{
-#ifdef X_DEBUG//!!!D
-		cerr <<  HResultToMessage(E_SOCKS_InvalidVersion) << endl;
-		cerr <<  HResultToMessage(E_COIN_VerifySignatureFailed) << endl;
-#endif
-
 #if UCFG_COIN_MINER_CHECK_EXE_NAME
 		if (System.get_ExeFilePath().stem().native().find(VER_INTERNALNAME_STR) == String::npos) {
 			cerr << "The EXE must not be renamed" << endl;
@@ -180,6 +180,8 @@ public:
 		}
 #endif
 
+		for (Hasher *p=Hasher::GetRoot(); p && (HashAlgo = p->Algo) != Coin::HashAlgo::Sha256; p=p->Next)		// Set any existing algorithm as Default, but SHA-256 has priority
+			;
 
 #if !UCFG_WIN32
 		CPreciseTimeBase::s_pCurrent = nullptr;
@@ -192,6 +194,7 @@ public:
 		bool bMine = false;
 
 		vector<String> selectedDevs;
+
 
 		for (int arg; (arg = getopt(Argc, Argv, "a:A:g:hi:I:l:"
 #if UCFG_BITCOIN_THERMAL_CONTROL
@@ -273,7 +276,7 @@ public:
 		}
 
 #if defined(_M_IX86) && UCFG_WIN32
-		if (System.Is64BitNativeSystem()) {
+		if (Environment::Is64BitOperatingSystem()) {
 //annonying			cerr << "Warning: You have 64-bit OS. Run " << Path::GetFileNameWithoutExtension(System.ExeFilePath)+"-64"+Path::GetExtension(System.ExeFilePath) << " for better performance" << endl;
 		}
 #endif
@@ -284,6 +287,8 @@ public:
 		case Coin::HashAlgo::Momentum:
 		case Coin::HashAlgo::Metis:
 		case Coin::HashAlgo::Solid:
+		case Coin::HashAlgo::NeoSCrypt:
+		case Coin::HashAlgo::Groestl:
 			m_bTryGpu = false;
 		case Coin::HashAlgo::SCrypt:
 			m_bTryFpga = false;

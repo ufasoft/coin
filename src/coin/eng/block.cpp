@@ -160,7 +160,7 @@ HashValue TxHashOf(const TxHashOutNum& hon, int n) {
 }
 
 HashValue BlockObj::HashFromTx(const Tx& tx, int n) const {
-	return Coin::Hash(tx);
+	return Eng().HashFromTx(tx);
 }
 
 #if UCFG_COIN_MERKLE_FUTURES
@@ -233,6 +233,9 @@ HashValue BlockObj::Hash() const {
 		case HashAlgo::Metis:
 			m_hash = MetisHash(hdata);
 			break;
+		case HashAlgo::Groestl:
+			m_hash = GroestlHash(hdata);
+			break;
 		default:
 			m_hash = Coin::Hash(hdata);
 		}
@@ -269,7 +272,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue 
 
 	Ver = rd.ReadUInt32();
 
-	if (!eng.ChainParams.IsTestNet) {
+	if (!eng.ChainParams.IsTestNet && !bParent) {
 		uint16_t ver = (Ver & 0xFF);
 		if (ver > 112)															//!!!?
 			Throw(E_EXT_Protocol_Violation);
@@ -529,7 +532,8 @@ void BlockObj::CheckCoinbaseTx(int64_t nFees) {
 
 	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		int64_t valueOut = m_txes[0].ValueOut;
-		if (valueOut > eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true)+nFees) {
+		int64_t subsidy = eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true);
+		if (valueOut > subsidy+nFees) {
 			Throw(E_COIN_SubsidyIsVeryBig);
 		}
 	}
@@ -1017,6 +1021,7 @@ void Block::Accept() {
 		
 		Target targetNext = eng.GetNextTarget(blockPrev, _self);
 		if (get_DifficultyTarget() != targetNext) {
+			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
 			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(get_DifficultyTarget()));
 			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
 #ifdef _DEBUG//!!!D

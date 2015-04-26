@@ -455,22 +455,11 @@ vector<SUrlTtr> GetUrlTtrs(RCString s) {
 	return r;
 }
 
-
-/*!!!R?
-void BitcoinMiner::SetNewData(const BitcoinWorkData& wd) {
-	if (wd.Midstate.Size != 32 || wd.Data.Size != 128 || wd.Target.Size != 32 || wd.Hash1.Size != 64)
-		Throw(E_FAIL);
-
-	DateTime now = DateTime::UtcNow();
-	EXT_LOCK (m_csCurrentData) {
-		TaskQueue.push_back(wd);
-		m_dtNextGetWork = now + TimeSpan::FromSeconds(m_LongPollingThread ? 60 : GetworkPeriod);
-		m_evDataReady.Set();
-	}
-}
-*/
-
 void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
+	static Coin::HashAlgo s_hashAlgo = (Coin::HashAlgo)-1;
+	if (exchange(s_hashAlgo, wd.HashAlgo) != wd.HashAlgo)
+		*m_pTraceStream << "Algo: " << AlgoToString(wd.HashAlgo) << endl;
+
 	if (wd.Data.Size != 128 ||
 		wd.HashAlgo == Coin::HashAlgo::Sha256 && (wd.Midstate.Size != 32 || wd.Hash1.Size != 64))
 		Throw(E_FAIL);
@@ -493,7 +482,7 @@ void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 		}
 		m_dtNextGetWork = now + TimeSpan::FromSeconds(m_LongPollingThread ? 60 : GetworkPeriod);
 #ifdef X_DEBUG//!!!D
-		m_dtNextGetWork = now+TimeSpan::FromSeconds(1000);
+		m_dtNextGetWork = now + TimeSpan::FromSeconds(1000);
 		this->m_minGetworkQueue = 1;
 #endif
 		m_evDataReady.Set();
@@ -846,6 +835,8 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 		case HashAlgo::Sha256:
 		case HashAlgo::Sha3:
 		case HashAlgo::SCrypt:
+		case HashAlgo::NeoSCrypt:
+		case HashAlgo::Groestl:
 		case HashAlgo::Metis:
 		default:
 			tx0 = mblock.Coinb1 + mblock.ExtraNonce1 + mblock.ExtraNonce2 + mblock.Coinb2;
@@ -853,7 +844,17 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 			hashPow = Hasher::Find(wd.HashAlgo).CalcWorkDataHash(wd);
 		}
 
-		HashValue hashMerkle = mblock.MerkleBranch.Apply(Hash(tx0));
+		HashValue hashTx0;
+		switch (wd.HashAlgo) {
+		case HashAlgo::Sha3:
+		case HashAlgo::Groestl:
+			hashTx0 = SHA256().ComputeHash(tx0);
+			break;
+		default:
+			hashTx0 = Hash(tx0);
+		}
+
+		HashValue hashMerkle = mblock.MerkleBranch.Apply(hashTx0);
 		ASSERT(hashMerkle == wd.MerkleRoot);
 		const vector<MinerTx>& txes = mblock.Txes;
 
@@ -1257,14 +1258,22 @@ void Hasher::MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, uint32_t *
 	size_t cbBuf = GetDataSize();
 	for (int i = 0; i < UCFG_BITCOIN_NPAR; ++i, ++nonce) {
 		SetNonce(buf, nonce);
+#ifdef X_DEBUG//!!!D
+		SetNonce(buf, 0xa5bb3e40);
+#endif
 		HashValue hash = CalcHash(ConstBuf(buf, cbBuf));
 #ifdef X_DEBUG //!!!D
-		if (rand() < 10) {
+		wd.Nonce = nonce;
+		HashValue hash2 = Hasher::Find(wd.HashAlgo).CalcWorkDataHash(wd);
+		ASSERT(hash == hash2);
+
+
+/*		if (rand() < 10) {
 			EXT_LOCK (miner.m_csCurrentData) {
 				miner.WorksToSubmit.push_back(&wd);
 			}
-			miner.m_evGetWork.Set();
-	}
+			miner.m_evGetWork.Set(); 
+		}*/
 #endif
 		if (!hash[31] && hash <= wd.HashTarget)
 			miner.TestAndSubmit(&wd, htobe(nonce));

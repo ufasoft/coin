@@ -272,10 +272,8 @@ void DbliteBlockChainDb::OpenBootstrapFile(const path& dir) {
 
 	MappedSize = 0;
 #if UCFG_PLATFORM_X64
-	if (m_fileBootstrap.Length > MIN_MM_LENGTH) {
-		m_mmBootstrap = MemoryMappedFile::CreateFromFile(m_fileBootstrap, nullptr, 0, MemoryMappedFileAccess::Read);
-		m_viewBootstrap = m_mmBootstrap.CreateView(0, MappedSize = m_fileBootstrap.Length & ~0xFFFFull, MemoryMappedFileAccess::Read);
-	}
+	if (m_fileBootstrap.Length > MIN_MM_LENGTH)
+		m_viewBootstrap = (m_mmBootstrap = MemoryMappedFile::CreateFromFile(m_fileBootstrap, nullptr, 0, MemoryMappedFileAccess::Read)).CreateView(0, MappedSize = m_fileBootstrap.Length & ~0xFFFFull);
 #endif	
 }
 
@@ -412,34 +410,35 @@ void DbliteBlockChainDb::TryUpgradeDb(const Version& verApp) {
 	UpgradeTo(VER_PUBKEY_RECOVER);
 }
 
-Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf) {
+Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf, bool bFullRead) {
 	CoinEng& eng = Eng();
 
 	Block r;
 	r.m_pimpl->Height = height;
+	CMemReadStream msDb(cbuf);
+	BinaryReader rdDb(msDb);
 	if (eng.Mode == EngMode::Bootstrap) {
-		CMemReadStream msDb(cbuf);
-		BinaryReader rdDb(msDb);
 		uint64_t off = rdDb.ReadUInt64();
 		PositionOwningFileStream stmFile(m_fileBootstrap, off);
 		BufferedStream stm(stmFile);
-		r.Read(BinaryReader(stm));
+		BinaryReader rd(stm);
+		if (bFullRead)
+			r.Read(rd);
+		else
+			r.m_pimpl->ReadHeader(rd, false, 0);
 		r.m_pimpl->OffsetInBootstrap = off;
 		r.m_pimpl->ReadDbSuffix(rdDb);
 	} else {
-		CMemReadStream msBlock(cbuf);
-		BinaryReader rd(msBlock);
-
 		Blob blob;
-		rd >> blob;
+		rdDb >> blob;
 		BlockHashValue hash(blob);
 
-		rd >> blob;
+		rdDb >> blob;
 		CMemReadStream ms(blob);
 		r.m_pimpl->Read(DbReader(ms, &eng));
 		r.m_pimpl->m_hash = hash;
 
-		rd >> blob;
+		rdDb >> blob;
 		r.m_pimpl->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
 
 		if (r.Height > 0) {
@@ -478,6 +477,15 @@ Block DbliteBlockChainDb::FindBlock(int height) {
 	if (!c.Get(BlockKey(height)))
 		Throw(E_COIN_BlockNotFound);
 	return LoadBlock(dbt, height, c.Data);
+}
+
+Block DbliteBlockChainDb::FindBlockPrefixSuffix(int height) {
+	DbReadTxRef dbt(m_db);
+
+	DbCursor c(dbt, m_tableBlocks);
+	if (!c.Get(BlockKey(height)))
+		Throw(E_COIN_BlockNotFound);
+	return LoadBlock(dbt, height, c.Data, false);
 }
 
 TxHashesOutNums DbliteBlockChainDb::GetTxHashesOutNums(int height) {
@@ -522,7 +530,7 @@ vector<uint32_t> DbliteBlockChainDb::InsertBlock(const Block& block, const Const
 			m_fileBootstrap.Write(blob.constData(), blob.Size, eng.OffsetInBootstrap);
 //!!!?T			m_fileBootstrap.Flush();
 			block.m_pimpl->OffsetInBootstrap = eng.OffsetInBootstrap + 8;
-			eng.OffsetInBootstrap += blob.Size;
+			eng.NextOffsetInBootstrap = eng.OffsetInBootstrap += blob.Size;
 		}
 		wrT << block.m_pimpl->OffsetInBootstrap;
 		block.m_pimpl->WriteDbSuffix(wrT);
@@ -538,6 +546,7 @@ vector<uint32_t> DbliteBlockChainDb::InsertBlock(const Block& block, const Const
 		int32_t h = htole(int32_t(height));
 		m_tableProperties.Put(dbt, MAX_HEIGHT_KEY, ConstBuf(&h, sizeof h));
 	}
+
 	dbt.CommitIfLocal();
 	return txOffsets;
 }
@@ -708,21 +717,23 @@ void DbliteBlockChainDb::DeleteBlock(int height, const vector<int64_t>& txids) {
 	DbTxRef dbt(m_db);
 	DbCursor c(dbt, m_tableBlocks);
 	if (c.Get(BlockKey(height))) {
-		Blob blobHash;
+		HashValue hashBlock;
 		switch (Eng().Mode) {
 		case EngMode::Bootstrap:
 			{
 				uint64_t off = letoh(*(uint64_t UNALIGNED *)c.get_Data().P);
 				Block block;
 				block.Read(BinaryReader(PositionOwningFileStream(m_fileBootstrap, off)));
-				blobHash = Hash(block);
+				hashBlock = Hash(block);
 			}
 			break;
 		default:
+			Blob blobHash;
 			BinaryReader(CMemReadStream(c.Data)) >> blobHash;
+			hashBlock = BlockHashValue(blobHash);
 		}
 		c.Delete();
-		m_tableHashToBlock.Delete(dbt, blobHash);
+		m_tableHashToBlock.Delete(dbt, ReducedBlockHash(hashBlock));
 	}
 	if (m_db.UserVersion >= VER_BLOCKS_TABLE_IS_HASHTABLE) {
 		int32_t h = htole(height-1);

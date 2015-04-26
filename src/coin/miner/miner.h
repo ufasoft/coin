@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include EXT_HEADER_CONDITION_VARIABLE
@@ -317,8 +322,10 @@ class StratumClient : public AsyncTextClient, public ConnectionClient {
 public:
 	int State;
 	Ext::Inet::JsonRpc JsonRpc;
-	HashValue HashTarget;
 	Blob ExtraNonce1, ExtraNonce2;
+
+	HashValue HashTarget;					// these values have the same meaning
+	double CurrentDifficulty;				//
 
 	StratumClient(Coin::BitcoinMiner& miner);
 	void Call(RCString method, const vector<VarValue>& params, ptr<StratumTask> task = nullptr);

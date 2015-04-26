@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2012-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -67,8 +65,8 @@ HashValue Hash(const Tx& tx) {
 	}
 	ASSERT(tx.m_pimpl->m_nBytesOfHash != 32 || tx.m_pimpl->m_hash == Hash(EXT_BIN(tx)));
 #endif
-	if (tx.m_pimpl->m_nBytesOfHash != 32)
-		tx.SetHash(Hash(EXT_BIN(tx)));
+	if (tx.m_pimpl->m_nBytesOfHash != 32)		
+		tx.SetHash(Eng().HashFromTx(tx));
 	return tx.m_pimpl->m_hash;
 }
 
@@ -243,9 +241,10 @@ ChainCaches::ChainCaches()
 	:	m_bestBlock(nullptr)
 	,	HashToBlockCache(64)
 	,	HeightToHashCache(1024)
-	,	HashToTxCache(1024)			// Number of Txes in the block usually >256
+	,	HashToTxCache(1024)					// Number of Txes in the block usually >256
 	,	m_cachePkIdToPubKey(4096)			// should be more than usual value (Txes per Block)
 	,	PubkeyCacheEnabled(true)
+	,	OrphanBlocks(1024)					// some bootstrap.dat files are not sorted
 {
 }
 

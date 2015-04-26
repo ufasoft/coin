@@ -106,6 +106,15 @@
     <ClCompile Include="bitcoin-miner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy-client.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-groestl.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Comp">
