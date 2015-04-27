@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "block-template.h"
@@ -74,7 +79,7 @@ uint32_t PrimeMinerShare::GetDifficulty() const {
 	base::WriteHeader(BinaryWriter(ms).Ref());
 	HashValue h = Hash(ms);
 	if (h[31] < 0x80)
-		Throw(E_COIN_MINER_REJECTED);
+		Throw(CoinErr::MINER_REJECTED);
 	BigInteger origin = HashValueToBigInteger(h) * PrimeChainMultiplier;
 	PrimeTester tester;				//!!!TODO move to some long-time scope
 	return uint32_t(tester.ProbablePrimeChainTest(Bn(origin)).BestTypeLength().second * 0x1000000);

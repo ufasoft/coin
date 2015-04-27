@@ -678,6 +678,7 @@
     <ClCompile Include="..\..\el\num\num.cpp" />
     <ClCompile Include="base58.cpp" />
     <ClCompile Include="block-template.cpp" />
+    <ClCompile Include="coin-err.cpp" />
     <ClCompile Include="metis-imp.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">sph-config.h</ForcedIncludeFiles>
@@ -722,6 +723,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="block-template.h" />
+    <ClInclude Include="coin-err.h" />
     <ClInclude Include="file_config.h" />
     <ClInclude Include="..\miner\miner-share.h" />
     <ClInclude Include="prime-util.h" />
@@ -737,35 +739,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">true</ExcludedFromBuild>
     </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Msg_Compiler Include="coin-msg.mc">
-      <FileType>Document</FileType>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\inc</HeaderPath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\inc</ResourcePath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">$(OutDir)\inc</HeaderPath>
-      <HeaderPath Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">$(OutDir)\inc</HeaderPath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">$(OutDir)\inc</ResourcePath>
-      <ResourcePath Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">$(OutDir)\inc</ResourcePath>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </Msg_Compiler>
   </ItemGroup>
   <ItemGroup>
     <None Include="coinutil-64.def">

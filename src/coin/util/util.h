@@ -8,8 +8,6 @@
 #include <el/crypto/hash.h>
 using namespace Ext::Crypto;
 
-#include "coin-msg.h"
-
 #ifndef UCFG_COIN_PUBKEYID_36BITS
 #	define UCFG_COIN_PUBKEYID_36BITS 0
 #endif
@@ -18,7 +16,7 @@ using namespace Ext::Crypto;
 #	define UCFG_COIN_LIB_DECLS UCFG_LIB_DECLS
 #endif
 
-#if UCFG_LIB_DECLS
+#if UCFG_LIB_DECLS && defined(_AFXDLL)
 #	ifdef UCFG_EXPORT_COIN_UTIL
 #		define COIN_UTIL_CLASS AFX_CLASS_EXPORT
 #		define COIN_UTIL_EXPORT AFX_CLASS_EXPORT
@@ -35,7 +33,7 @@ using namespace Ext::Crypto;
 #	define COIN_UTIL_API
 #endif
 
-#if UCFG_COIN_LIB_DECLS
+#if UCFG_COIN_LIB_DECLS && defined(_AFXDLL)
 #	ifdef UCFG_EXPORT_COIN
 #		define COIN_CLASS // AFX_CLASS_EXPORT
 #		define COIN_EXPORT DECLSPEC_DLLEXPORT
@@ -50,6 +48,8 @@ using namespace Ext::Crypto;
 #	define COIN_CLASS
 #	define COIN_EXPORT
 #endif
+
+#include "coin-err.h"
 
 
 namespace Coin {
@@ -318,8 +318,6 @@ public:
 	~CHasherEngThreadKeeper();
 };
 
-const error_category& coin_category();
-int SubmitRejectionCode(RCString rej);
 
 } // Coin::
 
