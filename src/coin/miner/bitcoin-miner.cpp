@@ -12,8 +12,10 @@
 #include "miner.h"
 
 #if defined(_MSC_VER) && !defined(_AFXDLL)
-#	pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
-#	pragma comment(lib, "el-std")
+#	if !UCFG_STDSTL
+#		pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
+#		pragma comment(lib, "el-std")
+#	endif
 #	pragma comment(lib, "libext")
 #	pragma comment(lib, "cryp")
 #	pragma comment(lib, "coinutil")
