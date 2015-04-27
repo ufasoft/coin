@@ -14,8 +14,6 @@
 
 #define _WIN32_WINNT 0x0600
 
-#define UCFG_COMPLEX_WINAPP 0
-
 #define UCFG_USE_BOOST 0
 #define UCFG_STLSOFT 0
 #define UCFG_USE_RTTI 1
@@ -97,5 +95,4 @@
 
 #define UCFG_USE_RESOURCES 0
 #define UCFG_BITCOIN_USE_CRASHDUMP 0
-
 
