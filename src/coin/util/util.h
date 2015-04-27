@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include <el/crypto/hash.h>
@@ -57,10 +62,12 @@ ENUM_CLASS(HashAlgo) {
 	Momentum,
 	Solid,
 	Metis,
-	NeoSCrypt
+	NeoSCrypt,
+	Groestl
 } END_ENUM_CLASS(HashAlgo);
 
 HashAlgo StringToAlgo(RCString s);
+String AlgoToString(HashAlgo algo);
 
 class HashValue : public std::array<byte, 32>, totally_ordered<HashValue> {
 public:
@@ -199,6 +206,7 @@ COIN_UTIL_EXPORT  HashValue ScryptHash(const ConstBuf& mb);
 COIN_UTIL_EXPORT  HashValue NeoSCryptHash(const ConstBuf& mb, int profile);
 HashValue SolidcoinHash(const ConstBuf& cbuf);
 HashValue MetisHash(const ConstBuf& cbuf);
+COIN_UTIL_EXPORT HashValue GroestlHash(const ConstBuf& mb);
 
 bool MomentumVerify(const HashValue& hash, uint32_t a, uint32_t b);
 
@@ -228,14 +236,14 @@ public:
 	template <class T>
 	static void Write(BinaryWriter& wr, const vector<T>& ar) {
 		WriteVarInt(wr, ar.size());
-		for (int i=0; i<ar.size(); ++i)
+		for (size_t i=0; i<ar.size(); ++i)
 			wr << ar[i];
 	}
 
 	template <class T>
 	static void Read(const BinaryReader& rd, vector<T>& ar) {
 		ar.resize((size_t)ReadVarInt(rd));
-		for (int i=0; i<ar.size(); ++i)
+		for (size_t i=0; i<ar.size(); ++i)
 			ar[i].Read(rd);
 	}
 };
@@ -296,6 +304,7 @@ const char DEFAULT_PASSWORD_ENCRYPT_METHOD = 'B';
 class HasherEng : public Object {
 public:
 	virtual HashValue HashBuf(const ConstBuf& cbuf);
+	virtual HashValue HashForAddress(const ConstBuf& cbuf);
 	static HasherEng *GetCurrent();
 protected:
 	static void SetCurrent(HasherEng *heng);

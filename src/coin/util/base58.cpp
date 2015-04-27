@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -22,7 +19,7 @@ static const char* s_pszBase58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmn
 String ConvertToBase58ShaSquare(const ConstBuf& cbuf) {
 	SHA256 sha;
 	HashValue hash = HashValue(sha.ComputeHash(sha.ComputeHash(cbuf)));
-	Blob v = cbuf+Blob(hash.data(), 4);
+	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
 	vector<byte> tmp(v.Size+1, 0);
@@ -39,8 +36,8 @@ String ConvertToBase58ShaSquare(const ConstBuf& cbuf) {
 }
 
 String ConvertToBase58(const ConstBuf& cbuf) {
-	HashValue hash = Hash(cbuf);
-	Blob v = cbuf+Blob(hash.data(), 4);
+	HashValue hash = HasherEng::GetCurrent()->HashForAddress(cbuf);
+	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
 	vector<byte> tmp(v.Size+1, 0);
@@ -88,7 +85,7 @@ Blob ConvertFromBase58(RCString s, bool bCheckHash) {
 		if (const char *q = strchr(s_pszBase58, *p)) {
 			bi = bi*58 + BigInteger(q-s_pszBase58);
 		} else
-			Throw(E_INVALIDARG);
+			Throw(errc::invalid_argument);
 	}
 	vector<byte> v((bi.Length+7)/8);
 	bi.ToBytes(&v[0], v.size());
@@ -102,7 +99,7 @@ Blob ConvertFromBase58(RCString s, bool bCheckHash) {
 	if (r.size() < 4)
 		Throw(E_FAIL);
 	if (bCheckHash) {
-		HashValue hash = Hash(ConstBuf(&r[0], r.size()-4));
+		HashValue hash = HasherEng::GetCurrent()->HashForAddress(ConstBuf(&r[0], r.size()-4));
 		if (memcmp(hash.data(), &r.end()[-4], 4))
 			Throw(HRESULT_FROM_WIN32(ERROR_CRC));
 	}

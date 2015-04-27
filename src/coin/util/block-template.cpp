@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "block-template.h"
@@ -123,8 +128,13 @@ HashValue MinerBlock::MerkleRoot(bool bSave) const {
 		Txes[0].Data = Coinb1 + ExtraNonce1 + ExtraNonce2 + Coinb2;
 		SHA256 sha;
 		hashval hv = sha.ComputeHash(Txes[0].Data);
-		if (Algo != HashAlgo::Sha3)
+		switch (Algo) {
+		case HashAlgo::Sha3:
+		case HashAlgo::Groestl:
+			break;
+		default:
 			hv = sha.ComputeHash(hv);
+		}
 		m_merkleRoot = MerkleBranch.Apply(HashValue(hv));
 #ifdef X_DEBUG//!!!D
 		cout << "\nTx0:" << Txes[0].Data << "\n";

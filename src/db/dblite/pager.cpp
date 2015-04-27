@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "dblite.h"
@@ -876,6 +881,13 @@ DbTransaction::~DbTransaction() {
 	//Tables.clear();			// explicit to be in scope of t_pKVStorage 
 }
 
+void DbTransaction::FreePage(uint32_t pgno) {
+	if (AllocatedPages.erase(pgno)) {
+		EXT_LOCKED(Storage.MtxFreePages, Storage.FreePage(pgno));
+	} else
+		ReleasedPages.insert(pgno);
+}
+
 Page DbTransaction::Allocate(PageAlloc pa, Page *pCopyFrom) {
 	Page r = Storage.Allocate();
 	r.ClearEntries(); //!!!?
@@ -913,13 +925,6 @@ Page DbTransaction::OpenPage(uint32_t pgno) {
 			MemoryMappedView::Protect(r.m_pimpl->GetAddress(), Storage.PageSize, MemoryMappedFileAccess::ReadWrite);
 	}
 	return r;	
-}
-
-void DbTransaction::FreePage(uint32_t pgno) {
-	if (AllocatedPages.erase(pgno)) {
-		EXT_LOCKED(Storage.MtxFreePages, Storage.FreePage(pgno));
-	} else
-		ReleasedPages.insert(pgno);
 }
 
 vector<uint32_t> DbTransaction::AllocatePages(int n) {
