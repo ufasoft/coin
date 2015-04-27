@@ -41,7 +41,6 @@
     <VCTargetsPath Condition="'$(VCTargetsPath11)' != '' and '$(VSVersion)' == '' and $(VisualStudioVersion) == ''">$(VCTargetsPath11)</VCTargetsPath>
   </PropertyGroup>
   <Import Project="..\..\cfg\vs\vs-ver.props" />
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>Dynamic</UseOfMfc>
@@ -178,9 +177,10 @@
       <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalOptions>/IGNORE:4254  /verbose:lib %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>
       </AdditionalDependencies>
       <ModuleDefinitionFile>cryp-86.def</ModuleDefinitionFile>
@@ -211,7 +211,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>.;$(OutDir)\inc;../..;../../..;../../../foreign;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -222,8 +222,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
-      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
@@ -262,9 +263,10 @@
       </ForcedIncludeFiles>
       <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalOptions>/IGNORE:4254  /verbose:lib %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>
       </AdditionalDependencies>
       <ModuleDefinitionFile>cryp-86.def</ModuleDefinitionFile>
@@ -304,8 +306,7 @@
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
       <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
-      <PreprocessorDefinitions>
-      </PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -346,8 +347,7 @@
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
       <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
-      <PreprocessorDefinitions>
-      </PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -388,6 +388,7 @@
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
@@ -425,8 +426,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
-      <PreprocessorDefinitions>
-      </PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -465,8 +465,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
-      <PreprocessorDefinitions>
-      </PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);UCFG_USE_OPENSSL=0</PreprocessorDefinitions>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -506,11 +505,69 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\FOREIGN\groestl\groestl-config.h" />
+    <ClInclude Include="..\..\..\FOREIGN\groestl\sph_groestl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\groestl\sph_types.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecdsa.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecdsa_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\eckey.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\eckey_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_gen.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_gen_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_10x26.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_10x26_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52_int128_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_gmp.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_gmp_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\group.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\group_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\hash.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\hash_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\libsecp256k1-config.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_gmp.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_gmp_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_openssl_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_4x64.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_8x32.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_8x32_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_impl.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\secp256k1.h" />
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\util.h" />
+    <ClInclude Include="..\..\el\crypto\cipher.h" />
+    <ClInclude Include="..\..\el\crypto\hash.h" />
+    <ClInclude Include="..\..\el\crypto\util.h" />
     <ClInclude Include="cryp-config.h" />
     <ClInclude Include="file_config.h" />
     <ClInclude Include="secp256k1.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\FOREIGN\groestl\groestl.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">groestl-config.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">groestl-config.h</ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="..\..\..\FOREIGN\secp256k1\secp256k1.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -555,12 +612,18 @@
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">el/ext.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="..\..\el\crypto\aes.cpp" />
     <ClCompile Include="..\..\el\crypto\blake.cpp" />
+    <ClCompile Include="..\..\el\crypto\groestl-hash.cpp" />
     <ClCompile Include="..\..\el\crypto\neoscrypt.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\el\crypto\salsa20.cpp" />
     <ClCompile Include="..\..\el\crypto\scrypt.cpp" />
+    <ClCompile Include="..\..\el\crypto\sha-1.cpp" />
     <ClCompile Include="..\..\el\crypto\sha256.cpp" />
     <ClCompile Include="..\..\el\crypto\sha512.cpp" />
     <ClCompile Include="secp256k1-envelop.cpp">
@@ -583,7 +646,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <MASM Include="..\..\el\crypto\x86x64\blake_x86x64.asm" />
+    <MASM Include="..\..\el\crypto\x86x64\blake_x86x64.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </MASM>
     <MASM Include="..\..\el\crypto\x86x64\scrypt_x86x64.asm" />
     <MASM Include="..\..\el\crypto\x86x64\sha256_x86x64.asm" />
     <None Include="cryp-64.def">
