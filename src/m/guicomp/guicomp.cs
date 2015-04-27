@@ -1,21 +1,26 @@
-/*######     Copyright (c) 1997-2012 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #####
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published #
-# by the Free Software Foundation; either version 3, or (at your option) any later version. This program is distributed in the hope that #
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. #
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this #
-# program; If not, see <http://www.gnu.org/licenses/>                                                                                    #
-########################################################################################################################################*/
-
 using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Windows.Interop;
 using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Documents;
 using System.Windows.Controls;
+using System.Windows.Markup;
+
+
+using Win32;
+
+//provides simplified declaration in XAML
+[assembly: XmlnsPrefix("http://www.hardcodet.net/taskbar", "tb")]
+[assembly: XmlnsDefinition("http://www.hardcodet.net/taskbar", "Hardcodet.Wpf.TaskbarNotification")]
 
 namespace GuiComp {
 
@@ -102,4 +107,41 @@ namespace GuiComp {
 				new SortDescription(field, newDir));
 		}
 	}
+
+    public static class WindowPlacement {
+        private static IFormatter serializer = new BinaryFormatter();
+
+        public static void SetPlacement(IntPtr windowHandle, string placementXml) {
+            if (!string.IsNullOrEmpty(placementXml)) {
+                try {
+                    Win32.WINDOWPLACEMENT placement = (Win32.WINDOWPLACEMENT)serializer.Deserialize(new MemoryStream(Convert.FromBase64String(placementXml)));
+                    placement.length = Marshal.SizeOf(typeof(Win32.WINDOWPLACEMENT));
+                    placement.flags = 0;
+                    placement.showCmd = (placement.showCmd == (int)SW.SW_SHOWMINIMIZED ? (int)SW.SW_SHOWNORMAL : placement.showCmd);
+                    Api.SetWindowPlacement(windowHandle, ref placement);
+                } catch (Exception) {
+                }
+            }
+        }
+
+        public static string GetPlacement(IntPtr windowHandle) {
+            Win32.WINDOWPLACEMENT placement = new Win32.WINDOWPLACEMENT();
+            Api.GetWindowPlacement(windowHandle, out placement);
+
+            using (MemoryStream memoryStream = new MemoryStream()) {
+                serializer.Serialize(memoryStream, placement);
+                return Convert.ToBase64String(memoryStream.ToArray());
+            }
+        }
+
+        public static void SetPlacement(this Window window, string placementXml) {
+            WindowPlacement.SetPlacement(new WindowInteropHelper(window).Handle, placementXml);
+        }
+
+        public static string GetPlacement(this Window window) {
+            return WindowPlacement.GetPlacement(new WindowInteropHelper(window).Handle);
+        }
+    }
+
 }
+
