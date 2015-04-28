@@ -183,7 +183,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 		}
 	}
     dbenv.txn_checkpoint(0, 0, 0);
-    dbenv.lsn_reset(name.native(), 0);
+    dbenv.lsn_reset(name.string().c_str(), 0);
 }
 
 
