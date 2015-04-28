@@ -1,30 +1,37 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
+#include "param.h"
 #include "../util/util.h"
 
+#if UCFG_COIN_USE_OPENSSL
+#	include <el/crypto/ecdsa.h>
+#endif
+
+#include "buggy-aes.h"
+
 namespace Coin {
+
+class CoinEng;
 
 const unsigned int WALLET_CRYPTO_KEY_SIZE = 32;
 const unsigned int WALLET_CRYPTO_SALT_SIZE = 8;
 
 class CMasterKey : public CPersistent {
 public:
-    std::vector<unsigned char> vchCryptedKey;
-    std::vector<unsigned char> vchSalt;
+    vector<unsigned char> vchCryptedKey;
+    vector<unsigned char> vchSalt;
     // 0 = EVP_sha512()
     // 1 = scrypt()
     uint32_t nDerivationMethod;
     uint32_t nDeriveIterations;
     // Use this for more parameters to key derivation,
     // such as the various parameters to scrypt
-    std::vector<unsigned char> vchOtherDerivationParameters;
+    vector<unsigned char> vchOtherDerivationParameters;
 
 	CMasterKey() {
         // 25000 rounds is just under 0.1 seconds on a 1.86 GHz Pentium M
@@ -53,6 +60,78 @@ public:
 };
 
 
+class COIN_CLASS Address : public HashValue160, public CPrintable {
+public:
+	CoinEng& Eng;
+	String Comment;
+	byte Ver;
+
+	Address(CoinEng& eng);
+	explicit Address(CoinEng& eng, const HashValue160& hash, RCString comment = "");
+	explicit Address(CoinEng& eng, const HashValue160& hash, byte ver);
+	explicit Address(CoinEng& eng, RCString s);
+
+	Address& operator=(const Address& a) {
+		if (&Eng != &a.Eng)
+			Throw(E_INVALIDARG);
+		HashValue160::operator=(a);
+		Comment = a.Comment;
+		Ver = a.Ver;
+		return *this;
+	}
+
+	void CheckVer(CoinEng& eng) const;
+	String ToString() const override;
+
+	bool operator<(const Address& a) const {
+		return Ver < a.Ver ||
+			(Ver == a.Ver && memcmp(data(), a.data(), 20) < 0);
+	}
+};
+
+class PrivateKey : public CPrintable {
+public:
+	PrivateKey() {}
+	PrivateKey(const ConstBuf& cbuf, bool bCompressed);
+	explicit PrivateKey(RCString s);
+	pair<Blob, bool> GetPrivdataCompressed() const;
+	String ToString() const override;
+private:
+	Blob m_blob;
+};
+
+class MyKeyInfo {
+	typedef MyKeyInfo class_type;
+public:
+	int64_t KeyRowid;
+	Blob PubKey;
+
+	CngKey Key;
+	DateTime Timestamp;
+	String Comment;
+
+	~MyKeyInfo();
+	Address ToAddress() const;
+	Blob PlainPrivKey() const;
+	Blob EncryptedPrivKey(BuggyAes& aes) const;
+
+	Blob get_PrivKey() const { return m_privKey; }
+	//	void put_PrivKey(const Blob& v);
+	DEFPROP_GET(Blob, PrivKey);
+
+	HashValue160 get_Hash160() const {
+		return Coin::Hash160(PubKey);
+	}
+	DEFPROP_GET(HashValue160, Hash160);
+
+	void SetPrivData(const ConstBuf& cbuf, bool bCompressed);
+	void SetPrivData(const PrivateKey& privKey);
+
+	bool IsCompressed() const { return PubKey.Size == 33; }
+private:
+	Blob m_privKey;
+};
+
 class CCrypter {
 private:
     unsigned char chKey[WALLET_CRYPTO_KEY_SIZE];
@@ -78,6 +157,9 @@ public:
     ~CCrypter() {
         CleanKey();
     }
+
+	static MyKeyInfo GenRandomKey();
+	static Blob PublicKeyBlobToCompressedBlob(const ConstBuf& cbuf);
 };
 
 bool EncryptSecret(CKeyingMaterial& vMasterKey, const Blob& vchPlaintext, const HashValue& nIV, std::vector<unsigned char> &vchCiphertext);

@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -13,6 +10,8 @@
 
 #include "crypter.h"
 
+#include <el/crypto/cipher.h>
+using namespace Ext::Crypto;
 
 namespace Coin {
 
@@ -32,14 +31,17 @@ void CWalletKey::Read(const BinaryReader& rd) {
 	rd >> vchPrivKey >> nTimeCreated >> nTimeExpires >> strComment;
 }
 
-bool CCrypter::SetKeyFromPassphrase(const std::string& strKeyData, const std::vector<unsigned char>& chSalt, const unsigned int nRounds, const unsigned int nDerivationMethod) {
+bool CCrypter::SetKeyFromPassphrase(const string& strKeyData, const std::vector<unsigned char>& chSalt, const unsigned int nRounds, const unsigned int nDerivationMethod) {
     if (nRounds < 1 || chSalt.size() != WALLET_CRYPTO_SALT_SIZE)
         return false;
 
     int i = 0;
-    if (nDerivationMethod == 0)
-        i = EVP_BytesToKey(EVP_aes_256_cbc(), EVP_sha512(), &chSalt[0],
-                          (unsigned char *)&strKeyData[0], strKeyData.size(), nRounds, chKey, chIV);
+    if (nDerivationMethod == 0) {
+		pair<Blob, Blob> pp = Aes::GetKeyAndIVFromPassword(strKeyData, &chSalt[0], nRounds);
+		memcpy(chKey, pp.first.constData(), 32);
+		memcpy(chIV, pp.second.constData(), 16);
+		i = WALLET_CRYPTO_KEY_SIZE;
+	}
 
     if (i != WALLET_CRYPTO_KEY_SIZE) {
         memset(&chKey, 0, sizeof chKey);
@@ -129,6 +131,29 @@ bool DecryptSecret(const CKeyingMaterial& vMasterKey, const ConstBuf& vchCiphert
     return cKeyCrypter.Decrypt(vchCiphertext, vchPlaintext);
 }
 
+MyKeyInfo CCrypter::GenRandomKey() {
+#if UCFG_COIN_USE_OPENSSL
+	ECDsa dsa(256);
+	MyKeyInfo ki;
+	ki.Comment = nullptr;
+	ki.Key = dsa.Key;
+	Blob privData = ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);
+	ki.SetPrivData(privData, true);
+	ki.PubKey = ki.Key.Export(CngKeyBlobFormat::OSslEccPublicCompressedBlob);
+	return ki;
+#else
+	!!!TODO
+#endif
+}
+
+Blob CCrypter::PublicKeyBlobToCompressedBlob(const ConstBuf& cbuf) {
+#if UCFG_COIN_USE_OPENSSL
+	CngKey key = CngKey::Import(cbuf, CngKeyBlobFormat::OSslEccPublicBlob);
+	return key.Export(CngKeyBlobFormat::OSslEccPublicCompressedBlob);
+#else
+	!!!TODO
+#endif
+}
 
 } // Coin::
 
