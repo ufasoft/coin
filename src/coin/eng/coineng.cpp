@@ -1097,7 +1097,7 @@ void CoinEng::TryUpgradeDb() {
 path CoinEng::GetBootstrapPath() {
 	if (Mode != EngMode::Bootstrap)
 		Throw(errc::invalid_argument);
-	return AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol / (ChainParams.Symbol + ".bootstrap.dat");
+	return AfxGetCApp()->get_AppDataDir() / path(ChainParams.Symbol) / path(ChainParams.Symbol + ".bootstrap.dat");
 }
 
 path CoinEng::VGetDbFilePath() {
