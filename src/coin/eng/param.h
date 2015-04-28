@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -15,6 +13,8 @@ const uint64_t SEND_FEE_THOUSANDTH = 4;		// 0.4%
 
 const int MAX_BLOCK_SIZE = 1000000;
 const int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
+const int MAX_STANDARD_TX_SIZE = 100000;
+const int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
 const uint32_t MAX_PAYLOAD = 32*1024*1024;
 const int MAX_FUTURE_SECONDS = 7200;
 const size_t MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
@@ -59,5 +59,9 @@ const size_t MAX_INV_SZ = 50000;
 
 #ifndef UCFG_COIN_COMPACT_AUX
 #	define UCFG_COIN_COMPACT_AUX 0					// incompatible space optimization
+#endif
+
+#ifndef UCFG_COIN_USE_OPENSSL
+#	define UCFG_COIN_USE_OPENSSL 1
 #endif
 

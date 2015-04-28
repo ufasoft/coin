@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include <db/dblite/dblite.h>
@@ -77,6 +82,7 @@ private:
 
 
 class DbliteBlockChainDb : public IBlockChainDb {
+	typedef IBlockChainDb base;
 public:
 	mutex MtxDb;
 	DbStorage m_db;
@@ -107,6 +113,7 @@ public:
 
 	Block FindBlock(const HashValue& hash) override;
 	Block FindBlock(int height) override;
+	Block FindBlockPrefixSuffix(int height) override;
 	int GetMaxHeight() override;
 	TxHashesOutNums GetTxHashesOutNums(int height) override;
 	vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) override;
@@ -133,9 +140,9 @@ public:
 	ConstBuf TxKey(const HashValue& txHash) { return ConstBuf(txHash.data(), TXID_SIZE); }
 	ConstBuf TxKey(const ConstBuf& txid8) { return ConstBuf(txid8.P, TXID_SIZE); }
 
-	bool FindTxDatas(const ConstBuf& txid8, TxDatas& txDatas);
+	bool FindTxDatas(DbCursor& c, const ConstBuf& txid8, TxDatas& txDatas);
 	TxDatas GetTxDatas(const ConstBuf& txid8);
-	void PutTxDatas(const ConstBuf& txKey, const TxDatas& txDatas);
+	void PutTxDatas(DbCursor& c, const ConstBuf& txKey, const TxDatas& txDatas, bool bUpdate = false);
 	void DeleteBlock(int height, const vector<int64_t>& txids) override;
 	void ReadTx(uint64_t off, Tx& tx);
 	bool FindTxById(const ConstBuf& txid8, Tx *ptx) override;
@@ -151,8 +158,11 @@ public:
 	vector<int64_t> GetTxesByPubKey(const HashValue160& pubkey) override;
 
 	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) override;
+	void InsertSpentTxOffsets(const unordered_map<HashValue, pair<uint32_t, uint32_t>>& spentTxOffsets) override;
+	
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override;
 	void SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) override;
+	void UpdateCoins(const OutPoint& op, bool bSpend) override;
 
 	void BeginEngTransaction() override {
 		Throw(E_NOTIMPL);
@@ -185,6 +195,9 @@ public:
 	void Vacuum() override {
 		m_db.Vacuum();	
 	}
+
+	uint64_t GetBoostrapOffset() override;
+	void SetBoostrapOffset(uint64_t v) override;
 protected:
 	virtual void OnOpenTables(DbTransaction& dbt, bool bCreate) {}
 private:
@@ -195,10 +208,11 @@ private:
 	MemoryMappedView m_viewBootstrap;
 	uint64_t MappedSize;
 
-	Block LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf);
+	Block LoadBlock(DbReadTransaction& dbt, int height, const ConstBuf& cbuf, bool bFullRead = true);
 	bool TryToConvert(const path& p);
 	uint64_t GetBlockOffset(int height);
 	void OpenBootstrapFile(const path& dir);
+	void BeforeDbOpenCreate();
 
 	friend class BootstrapDbThread;
 };
