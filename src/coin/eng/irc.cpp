@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -63,13 +61,14 @@ IrcThread::IrcThread(Coin::IrcManager& ircManager)
 {
 //	StackSize = UCFG_THREAD_STACK_SIZE;
 	m_owner = ircManager.m_pTr;
+	Tcp.ProxyString = ircManager.CoinDb.ProxyString;
 }
 
 void IrcThread::Execute() {
 	Name = "IrcThread";
 
-	DBG_LOCAL_IGNORE_WIN32(WSAETIMEDOUT); //!!!
-	DBG_LOCAL_IGNORE_WIN32(WSAENOTSOCK);
+	DBG_LOCAL_IGNORE_CONDITION(errc::timed_out); //!!!
+	DBG_LOCAL_IGNORE_CONDITION(errc::not_a_socket);
 
 	try {
 		struct ThreadPointerCleaner {
@@ -100,7 +99,7 @@ void IrcThread::Execute() {
 		}
 
 		SocketKeeper sockKeeper(_self, Tcp.Client);
-		DBG_LOCAL_IGNORE_WIN32(WSAENETUNREACH);
+		DBG_LOCAL_IGNORE_CONDITION(errc::network_unreachable);
 		Connect();
 		base::Execute();
 	} catch (RCExc) {
@@ -136,7 +135,7 @@ void IrcThread::JoinChannel(ChannelClient *channelClient) {
 //!!!R			Send("WHO #"+channelClient->Channel);
 		}
 	}
-	channelClient->IrcThread = this;
+	channelClient->IrcThread.reset(this);
 	if (bStart)
 		Start();
 }
