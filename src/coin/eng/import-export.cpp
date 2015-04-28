@@ -56,7 +56,7 @@ static pair<String, Blob> SplitKey(const ConstBuf& cbuf) {
 	return r;
 }
 
-void CoinDb::ImportXml(RCString filepath) {
+void CoinDb::ImportXml(const path& filepath) {
 	vector<MyKeyInfo> vKey;
 
 #if UCFG_WIN32
@@ -103,7 +103,7 @@ void CoinDb::ImportXml(RCString filepath) {
 	}
 }
 
-void CoinDb::ImportDat(RCString filepath, RCString password) {
+void CoinDb::ImportDat(const path& filepath, RCString password) {
 	set<Blob> setPrivKeys;
 	vector<MyKeyInfo> myKeys;
 	unordered_map<HashValue160, Address> pubkeyToAddress;

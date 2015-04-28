@@ -338,8 +338,8 @@ public:
 	MyKeyInfo GetMyKeyInfo(const HashValue160& hash160);
 
 	bool SetPrivkeyComment(const HashValue160& hash160, RCString comment);
-	void ImportXml(RCString filepath);
-	void ImportDat(RCString filepath, RCString password);
+	void ImportXml(const path& filepath);
+	void ImportDat(const path& filepath, RCString password);
 	void ImportWallet(const path& filepath, RCString password);
 	void ExportWalletToXml(const path& filepath);
 
