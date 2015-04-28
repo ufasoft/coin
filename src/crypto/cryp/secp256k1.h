@@ -6,6 +6,16 @@
 #define USE_FIELD_GMP
 #define USE_FIELD_INV_BUILTIN
 
+#if UCFG_64 && !UCFG_PLATFORM_X64
+#	define HAVE___INT128 1
+#	define USE_SCALAR_4X64 1
+#	define USE_FIELD_5X52 1
+#else
+#	define USE_SCALAR_8X32 1
+#	define USE_FIELD_10X26 1
+#endif
+
+
 #include <secp256k1/group.h>
 #include <secp256k1/ecdsa.h>
 
