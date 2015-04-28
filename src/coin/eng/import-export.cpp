@@ -61,7 +61,7 @@ void CoinDb::ImportXml(const path& filepath) {
 
 #if UCFG_WIN32
 	XmlDocument doc = new XmlDocument;
-	doc.Load(filepath);
+	doc.Load(filepath.native());
 	XmlNodeReader rd(doc);
 #else
 	ifstream ifs(filepath.c_str());
