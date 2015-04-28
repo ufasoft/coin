@@ -12,7 +12,6 @@
 #include "../coin-protocol.h"
 #include "../script.h"
 #include "../eng.h"
-#include "coin-msg.h"
 #include "namecoin.h"
 
 #if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
@@ -68,7 +67,7 @@ protected:
 		const char *pDomain = domain;
 		ConstBuf cbufName(pDomain, strlen(pDomain));
 		if (!bInsert && GetNameHeight(cbufName, -1) < 0)
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(CoinErr::InconsistentDatabase);
 		DomainData dd;
 		dd.Height = height;
 		dd.AddressData = addressData;
@@ -203,7 +202,7 @@ const int MIN_FIRSTUPDATE_DEPTH = 12;
 
 String ToStringName(const ConstBuf& cbuf) {
 	try {
-		DBG_LOCAL_IGNORE(E_EXT_InvalidUTF8String);
+		DBG_LOCAL_IGNORE_CONDITION(ExtErr::InvalidUTF8String);
 
 		return Encoding::UTF8.GetChars(cbuf);
 	} catch (RCExc) {
@@ -262,22 +261,22 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 	bool bFound = false;
 	for (int i=0; i<tx.TxOuts().size(); ++i) {
 		try {
-			DBG_LOCAL_IGNORE(E_COIN_InvalidScript);
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::InvalidScript);
 
 			pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_PkScript());
 			if (pp.first) {
 				if (exchange(bFound, true))
-					Throw(E_COIN_NAME_InvalidTx);
+					Throw(CoinErr::NAME_InvalidTx);
 				r = pp.second;
 				r.NOut = i;
 			}
 		} catch (Exception& ex) {
-			if (ToHResult(ex) != E_COIN_InvalidScript)
+			if (ex.code() != CoinErr::InvalidScript)
 				throw;
 		}
 	}
 	if (!bFound)
-		Throw(E_COIN_NAME_InvalidTx);
+		Throw(CoinErr::NAME_InvalidTx);
 	return r;
 }
 
@@ -286,7 +285,7 @@ void NamecoinEng::OnCheck(const Tx& tx) {
 		return;
 	DecodedTx dt = DecodeNameTx(tx);
 	if (dt.Args[0].Size > MAX_NAME_LENGTH)
-		Throw(E_COIN_NAME_ToolLongName);
+		Throw(CoinErr::NAME_ToolLongName);
 	switch (dt.Op) {
 	case OP_NAME_NEW:
 		if (dt.Args[0].Size == 20)
@@ -300,7 +299,7 @@ void NamecoinEng::OnCheck(const Tx& tx) {
 			return;
 		break;
 	}
-	Throw(E_COIN_NAME_InvalidTx);
+	Throw(CoinErr::NAME_InvalidTx);
 }
 
 static int GetExpirationDepth(int height) {
@@ -334,7 +333,7 @@ int64_t NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decre
 
 void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool bBlock, bool bMiner)  {
 	try {
-		DBG_LOCAL_IGNORE(E_COIN_NAME_ExpirationError); //!!!?
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::NAME_ExpirationError); //!!!?
 
 		bool bFound = false;
 		DecodedTx dtPrev;
@@ -352,7 +351,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 		}
 		if (tx.m_pimpl->Ver != NAMECOIN_TX_VERSION) {
 			if (bFound)
-				Throw(E_COIN_NAME_NameCoinTransactionWithInvalidVersion);
+				Throw(CoinErr::NAME_NameCoinTransactionWithInvalidVersion);
 			return;
 		}
 		DecodedTx dt = DecodeNameTx(tx);
@@ -360,27 +359,27 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 		switch (dt.Op) {
 		case OP_NAME_NEW:
 			if (bFound)
-				Throw(E_COIN_NAME_NewPointsPrevious);
+				Throw(CoinErr::NAME_NewPointsPrevious);
 			break;
 		case OP_NAME_FIRSTUPDATE:
 			if (dt.Args[0].Size==0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
 				if (GetNameNetFee(tx) < GetNetworkFee(tx.Height))
-					Throw(E_COIN_TxFeeIsLow);
+					Throw(CoinErr::TxFeeIsLow);
 				if (Mode != EngMode::Lite && Mode != EngMode::BlockParser) {
 					if (!bFound || dtPrev.Op != OP_NAME_NEW)
-						Throw(E_COIN_NAME_InvalidTx);
+						Throw(CoinErr::NAME_InvalidTx);
 				}
 
 				int heightExpired = tx.Height - GetExpirationDepth(tx.Height);
 				int hPrev = NamecoinDb().GetNameHeight(dt.Args[0], heightExpired);
 				if (hPrev>=0 && hPrev > heightExpired)
-					Throw(E_COIN_NAME_ExpirationError);
+					Throw(CoinErr::NAME_ExpirationError);
 				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], MIN_FIRSTUPDATE_DEPTH);
 					if (depth >= 0 && depth < MIN_FIRSTUPDATE_DEPTH)
-						Throw(E_COIN_NAME_ExpirationError);
+						Throw(CoinErr::NAME_ExpirationError);
 				}
 
 				if (bBlock)
@@ -394,10 +393,10 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			{
 				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {
 					if (!bFound || (dtPrev.Op != OP_NAME_FIRSTUPDATE && dtPrev.Op != OP_NAME_UPDATE))
-						Throw(E_COIN_NAME_InvalidTx);
+						Throw(CoinErr::NAME_InvalidTx);
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], GetExpirationDepth(tx.Height));
 					if (depth < 0)
-						Throw(E_COIN_NAME_ExpirationError);
+						Throw(CoinErr::NAME_ExpirationError);
 				}
 
 				if (bBlock)
@@ -406,12 +405,10 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			break;
 		}
 	} catch (Exception& ex) {
-		switch (ToHResult(ex)) {
-		case E_COIN_NAME_ExpirationError:			//!!!?
-			break;
-		default:
-			;
-//!!!			throw;
+		if (ex.code() == CoinErr::NAME_ExpirationError) {
+					//!!!?
+		} else {
+			//!!!			throw;
 		}
 	}
 }
