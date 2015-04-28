@@ -1,5 +1,11 @@
 #include <el/ext.h>
 
+#ifndef UCFG_COIN_DOGECOIN
+#	define UCFG_COIN_DOGECOIN 1
+#endif
+
+#if UCFG_COIN_DOGECOIN
+
 #define UUID_AA15E74A856F11E08B8D93F24824019B	//!!!T
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
@@ -60,4 +66,4 @@ static CurrencyFactory<DogeCoinEng> s_dogecoin("DogeCoin");
 
 } // Coin::
 
-
+#endif // UCFG_COIN_DOGECOIN
