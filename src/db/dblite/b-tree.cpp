@@ -543,7 +543,7 @@ void BTreeCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 	} else {
 		bExists = SeekToKey(k);
 		if (bExists && bInsert)
-			throw DbException(E_EXT_DB_DupKey, nullptr);
+			throw DbException(ExtErr::DB_DupKey, nullptr);
 		ASSERT(!bExists || Top().Pos < NumKeys(Top().Page));
 		Touch();
 		if (bExists) {

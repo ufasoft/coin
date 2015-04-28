@@ -283,6 +283,14 @@ void HtCursor::Update(const ConstBuf& d) {
 	}
 }
 
+void HtCursor::Delete() {
+	if (SubCursor) {
+		SubCursor->Delete();
+		UpdateFromSubCursor();
+	} else
+		base::Delete();
+}
+
 void HtCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 	if (Ht->PageMap.Length == 0) {
 		Ht->PageMap.PutUInt32(0, dynamic_cast<DbTransaction&>(Ht->Tx).Allocate(PageAlloc::Leaf).N);
@@ -295,21 +303,13 @@ void HtCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 		UpdateFromSubCursor();
 	} else {
 		if (bExists && bInsert)
-			throw DbException(E_EXT_DB_DupKey, nullptr);
+			throw DbException(ExtErr::DB_DupKey, nullptr);
 		Touch();
 		if (bExists)
 			Delete();
 		while (!UpdateImpl(k, d, bInsert))
 			SeekToKeyHash(k, hash);
 	}
-}
-
-void HtCursor::Delete() {
-	if (SubCursor) {
-		SubCursor->Delete();
-		UpdateFromSubCursor();
-	} else
-		base::Delete();
 }
 
 void HtCursor::Drop() {
