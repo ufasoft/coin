@@ -1047,7 +1047,7 @@ CoinEngApp::CoinEngApp() {
 	m_internalName = "Coin";
 
 #if !UCFG_WCE
-	m_appDataDir = (const String::value_type*)Environment::GetEnvironmentVariable("COIN_APPDATA");
+	m_appDataDir = wstring(explicit_cast<wstring>(Environment::GetEnvironmentVariable("COIN_APPDATA")));
 #endif
 
 #if UCFG_TRC //!!!D
@@ -1103,7 +1103,7 @@ path CoinEng::GetBootstrapPath() {
 path CoinEng::VGetDbFilePath() {
 	path r = AfxGetCApp()->get_AppDataDir() / path(ChainParams.Name.c_str());
 	if (!m_cdb.FilenameSuffix.empty())
-		r += m_cdb.FilenameSuffix;
+		r += m_cdb.FilenameSuffix.c_str();
 	else  {
 		switch (Mode) {
 		case EngMode::Lite:
