@@ -77,7 +77,7 @@ protected:
 		BigInteger origin = bnHash * PrimeChainMultiplier;
 
 		if (hashPow[31]<0x80 || origin>GetPrimeMax())
-			Throw(E_COIN_ProofOfWorkFailed);
+			Throw(CoinErr::ProofOfWorkFailed);
 
 		double targ = GetTargetLength();
 		PrimeTester tester;
@@ -86,14 +86,14 @@ protected:
 #ifdef X_DEBUG//!!!D
 			tester.ProbablePrimeChainTest(Bn(origin));
 #endif
-			Throw(E_COIN_ProofOfWorkFailed);
+			Throw(CoinErr::ProofOfWorkFailed);
 		}
 		pair<PrimeChainType, double> tl = cl.BestTypeLength();
 		if (!PrimeChainMultiplier.TestBit(0) && !origin.TestBit(1) && tester.ProbablePrimeChainTest(Bn(origin/2)).BestTypeLength().second > tl.second) {
 #ifdef X_DEBUG//!!!D
 			double le = ProbablePrimeChainTest(origin/2, targ).BestTypeLength().second;
 #endif
-			Throw(E_COIN_ProofOfWorkFailed);
+			Throw(CoinErr::ProofOfWorkFailed);
 		}
 	}
 };

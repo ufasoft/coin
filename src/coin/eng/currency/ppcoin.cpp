@@ -38,7 +38,7 @@ public:
 		if (!IsV02Protocol(dtTx))
 			base::CheckCoinStakeTimestamp();
 		else if (dtTx > Timestamp || Timestamp > dtTx + seconds(MAX_FUTURE_SECONDS)) 
-			Throw(E_COIN_TimestampViolation);
+			Throw(CoinErr::TimestampViolation);
 	}
 
 	void WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockPrev) const override {

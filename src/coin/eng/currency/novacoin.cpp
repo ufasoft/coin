@@ -54,7 +54,7 @@ protected:
 				if (VerifySignatureByTxOut(txOut))
 					return;
 			}
-			Throw(E_COIN_BadBlockSignature);
+			Throw(CoinErr::BadBlockSignature);
 		}
 	}
 };
@@ -69,7 +69,7 @@ protected:
 		Tx tx((TxObj*)this);
 		int64_t posReward = eng.GetProofOfStakeReward(GetCoinAge(), target, Timestamp);
 		if (reward > posReward - tx.GetMinFee(1, eng.AllowFreeTxes, MinFeeMode::Block, 0) + eng.ChainParams.MinTxFee)
-			Throw(E_COIN_StakeRewardExceeded);
+			Throw(CoinErr::StakeRewardExceeded);
 	}
 };
 
