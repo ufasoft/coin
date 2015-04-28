@@ -1047,7 +1047,7 @@ CoinEngApp::CoinEngApp() {
 	m_internalName = "Coin";
 
 #if !UCFG_WCE
-	m_appDataDir = Environment::GetEnvironmentVariable("COIN_APPDATA");
+	m_appDataDir = explicit_cast<wstring>(Environment::GetEnvironmentVariable("COIN_APPDATA"));
 #endif
 
 #if UCFG_TRC //!!!D
