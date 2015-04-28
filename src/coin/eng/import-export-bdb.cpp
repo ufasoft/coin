@@ -150,7 +150,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 					S_IRUSR | S_IWUSR);
 
 	EXT_LOCK (Eng.m_cdb.MtxDb) {
-		BdbWallet w(dbenv, name);
+		BdbWallet w(dbenv, name.native());
 		{
 			SqliteCommand cmd("SELECT pubkey, reserved FROM privkeys ORDER BY id", Eng.m_cdb.m_dbWallet);
 			int64_t nPool = 0;
