@@ -3,6 +3,7 @@
 #define UCFG_USE_RTTI 1
 
 #define UCFG_TRC 1
+#define UCFG_USE_LIBXML 0
 
 #ifdef _AFXDLL
 #	define UCFG_USE_TOR UCFG_WIN32_FULL
