@@ -7,7 +7,6 @@
 
 #include "coin-protocol.h"
 #include "eng.h"
-#include "coin-msg.h"
 #include "wallet.h"
 #include "script.h"
 

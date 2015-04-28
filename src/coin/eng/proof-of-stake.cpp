@@ -40,7 +40,7 @@ int64_t PosTxObj::GetCoinAge() const {
 				Tx txPrev = Tx::FromDb(txIn.PrevOutPoint.TxHash);
 				DateTime dtPrev = ((PosTxObj*)txPrev.m_pimpl.get())->Timestamp;
 				if (Timestamp < dtPrev)
-					Throw(E_COIN_TimestampViolation);
+					Throw(CoinErr::TimestampViolation);
 				if (eng.GetBlockByHeight(txPrev.Height).get_Timestamp()+TimeSpan::FromDays(30) <= Timestamp)
 					centSecond += BigInteger(txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value) * duration_cast<seconds>(Timestamp-dtPrev).count() / (eng.ChainParams.CoinValue/100);
 			}
@@ -60,7 +60,7 @@ void PosTxObj::CheckCoinStakeReward(int64_t reward, const Target& target) const 
 	Tx tx((TxObj*)this);
 	int64_t posReward = eng.GetProofOfStakeReward(GetCoinAge(), target, Timestamp);
 	if (reward > posReward - tx.GetMinFee(1, eng.AllowFreeTxes) + eng.ChainParams.MinTxFee)
-		Throw(E_COIN_StakeRewardExceeded);
+		Throw(CoinErr::StakeRewardExceeded);
 }
 
 HashValue PosBlockObj::Hash() const {
@@ -120,7 +120,7 @@ void PosBlockObj::WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockP
 	Block b = blockPrev;
 	for (DateTime dt=b.Timestamp, dtTarget=dt+STAKE_MODIFIER_SELECTION_INTERVAL; dt<dtTarget;) {
 		if (b == eng.BestBlock())
-			Throw(E_COIN_CoinstakeCheckTargetFailed);
+			Throw(CoinErr::CoinstakeCheckTargetFailed);
 		if (!!PosBlockObj::Of(b = eng.Db->FindBlockPrefixSuffix(b.Height+1)).StakeModifier)			// don't use cache here because high probability of missing
 			dt = b.Timestamp;
 	}
@@ -131,7 +131,7 @@ void PosBlockObj::WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockP
 HashValue PosBlockObj::HashProofOfStake() const {
 	if (!m_hashProofOfStake) {
 		CoinEng& eng = Eng();
-		DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
 
 		const Tx& tx = get_Txes()[1];
 		const TxIn& txIn = tx.TxIns()[0];
@@ -139,17 +139,17 @@ HashValue PosBlockObj::HashProofOfStake() const {
 		DateTime dtTx = ((PosTxObj*)tx.m_pimpl.get())->Timestamp,
 			   dtPrev = ((PosTxObj*)txPrev.m_pimpl.get())->Timestamp;
 		if (dtTx < dtPrev)
-			Throw(E_COIN_TimestampViolation);
+			Throw(CoinErr::TimestampViolation);
 		VerifySignature(txPrev, tx, 0);
 
 		Block blockPrev = eng.GetBlockByHeight(txPrev.Height);
 		if (blockPrev.get_Timestamp()+TimeSpan::FromDays(30) > dtTx)
-			Throw(E_COIN_CoinsAreTooRecent);
+			Throw(CoinErr::CoinsAreTooRecent);
 	
 		int64_t val = txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value;
 		BigInteger cdays = BigInteger(val) * duration_cast<seconds>(std::min(dtTx-dtPrev, TimeSpan::FromDays(90))).count() / (24 * 60 * 60 * eng.ChainParams.CoinValue);
 
-		DBG_LOCAL_IGNORE(E_COIN_CoinstakeCheckTargetFailed);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::CoinstakeCheckTargetFailed);
 
 		MemoryStream ms;
 		BinaryWriter wr(ms);
@@ -179,7 +179,7 @@ HashValue PosBlockObj::HashProofOfStake() const {
 			TRC(2, hex << BigInteger(ar, sizeof ar));
 			TRC(2, hex << BigInteger(get_DifficultyTarget())*cdays);
 	#endif
-			Throw(E_COIN_CoinstakeCheckTargetFailed);
+			Throw(CoinErr::CoinstakeCheckTargetFailed);
 		}
 		m_hashProofOfStake = h;
 	}
@@ -225,7 +225,7 @@ void PosBlockObj::CheckSignature() {
 			return;
 	} else if (VerifySignatureByTxOut(ProofType()==ProofOf::Stake ? txes[1].TxOuts()[1] : txes[0].TxOuts()[0]))
 		return;
-	Throw(E_COIN_BadBlockSignature);
+	Throw(CoinErr::BadBlockSignature);
 }
 
 void PosBlockObj::Check(bool bCheckMerkleRoot) {
@@ -236,10 +236,10 @@ void PosBlockObj::Check(bool bCheckMerkleRoot) {
 
 	for (int i=2; i<txes.size(); ++i)
 		if (txes[i].IsCoinStake())
-			Throw(E_COIN_CoinstakeInWrongPos);
+			Throw(CoinErr::CoinstakeInWrongPos);
 
 	if (Timestamp > GetTxObj(0).Timestamp + seconds(MAX_FUTURE_SECONDS))
-		Throw(E_COIN_CoinbaseTimestampIsTooEarly);
+		Throw(CoinErr::CoinbaseTimestampIsTooEarly);
 	if (ProofType() == ProofOf::Stake) {
 		CheckCoinStakeTimestamp();
 		CheckProofOfStake();
@@ -401,7 +401,7 @@ void CheckPointMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 	ECDsa dsa(CngKey::Import(eng.ChainParams.CheckpointMasterPubKey, CngKeyBlobFormat::OSslEccPublicBlob));
 	if (!dsa.VerifyHash(Coin::Hash(Msg), Sig))
-		Throw(E_COIN_CheckpointVerifySignatureFailed);
+		Throw(CoinErr::CheckpointVerifySignatureFailed);
 	//!!! TODO
 
 }

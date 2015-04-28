@@ -234,7 +234,9 @@ public:
 	virtual Block CreateNewBlock();
 	void RegisterForMining(WalletBase* wallet);			// only single wallet for each Eng allowed
 	void UnregisterForMining(WalletBase* wallet);
-#endif
+#else
+	virtual Block CreateNewBlock() { Throw(E_NOTIMPL); }
+#endif // UCFG_COIN_GENERATE
 };
 
 class CoinFilter : public BloomFilter, public Object, public CPersistent {
@@ -631,7 +633,7 @@ public:
 
 	int64_t CheckMoneyRange(int64_t v) {
 		if (v < 0 || v > ChainParams.MaxMoney)
-			Throw(E_COIN_MoneyOutOfRange);
+			Throw(CoinErr::MoneyOutOfRange);
 		return v;
 	}
 
@@ -821,7 +823,7 @@ public:
 	HashValue HashTx;
 
 	TxNotFoundException(const HashValue& hashTx)
-		:	base(E_COIN_TxNotFound)
+		:	base(CoinErr::TxNotFound)
 		,	HashTx(hashTx)
 	{
 	}
@@ -837,7 +839,7 @@ public:
 	int HowMuch;
 
 	PeerMisbehavingException(int howMuch = 1)
-		:	base(E_COIN_Misbehaving)
+		:	base(CoinErr::Misbehaving)
 		,	HowMuch(howMuch)
 	{}
 };
@@ -849,7 +851,7 @@ public:
 	Ext::Version Version;
 
 	VersionException(const Ext::Version& ver = Ext::Version())
-		:	base(E_EXT_DB_Version)
+		:	base(ExtErr::DB_Version)
 		,	Version(ver)
 	{
 	}

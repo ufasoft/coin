@@ -113,7 +113,7 @@ Blob BuggyAes::Decrypt(const ConstBuf& cbuf) {
 			byte nPad = block.constData()[cbBlock-1];
 			for (int i=0; i<nPad; ++i)
 				if (block.constData()[cbBlock-1-i] != nPad)
-					Throw(E_EXT_Crypto);									//!!!TODO Must be EXT_Crypto_DecryptFailed
+					Throw(ExtErr::Crypto);									//!!!TODO Must be EXT_Crypto_DecryptFailed
 			ms.WriteBuffer(block.constData(), cbBlock-nPad);		
 		} else
 			ms.WriteBuf(block);

@@ -12,8 +12,6 @@
 
 #include "backend-dblite.h"
 
-#include "coin-msg.h"
-
 namespace Ext {
 
 template<> EXT_THREAD_PTR(Ext::DB::KV::DbReadTransaction)  CThreadTxRef<Ext::DB::KV::DbReadTransaction>::t_pTx;
@@ -250,7 +248,7 @@ uint64_t DbliteBlockChainDb::GetBlockOffset(int height) {
 	DbReadTxRef dbt(m_db);
 	DbCursor c(dbt, m_tableBlocks);
 	if (!c.Get(BlockKey(height)))
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	return letoh(*(uint64_t UNALIGNED *)c.get_Data().P);
 }
 
@@ -444,7 +442,7 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, const Co
 		if (r.Height > 0) {
 			DbCursor c(dbt, m_tableBlocks);
 			if (!c.Get(BlockKey(height-1)))
-				Throw(E_COIN_InconsistentDatabase);
+				Throw(CoinErr::InconsistentDatabase);
 			CMemReadStream msPrev(c.Data);
 			BinaryReader(msPrev) >> blob;
 			r.m_pimpl->PrevBlockHash = BlockHashValue(blob);
@@ -463,7 +461,7 @@ Block DbliteBlockChainDb::FindBlock(const HashValue& hash) {
 		int height = (uint32_t)BlockKey(c.Data);
 		DbCursor c1(dbt, m_tableBlocks);
 		if (!c1.Get(c.Data)) {
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(CoinErr::InconsistentDatabase);
 		}
 		r = LoadBlock(dbt, height, c1.Data);
 	}
@@ -475,7 +473,7 @@ Block DbliteBlockChainDb::FindBlock(int height) {
 
 	DbCursor c(dbt, m_tableBlocks);
 	if (!c.Get(BlockKey(height)))
-		Throw(E_COIN_BlockNotFound);
+		Throw(CoinErr::BlockNotFound);
 	return LoadBlock(dbt, height, c.Data);
 }
 
@@ -484,7 +482,7 @@ Block DbliteBlockChainDb::FindBlockPrefixSuffix(int height) {
 
 	DbCursor c(dbt, m_tableBlocks);
 	if (!c.Get(BlockKey(height)))
-		Throw(E_COIN_BlockNotFound);
+		Throw(CoinErr::BlockNotFound);
 	return LoadBlock(dbt, height, c.Data, false);
 }
 
@@ -492,7 +490,7 @@ TxHashesOutNums DbliteBlockChainDb::GetTxHashesOutNums(int height) {
 	DbReadTxRef dbt(m_db);
 	DbCursor c(dbt, m_tableBlocks);
 	if (!c.Get(BlockKey(height)))
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	CMemReadStream stm(c.Data);
 	Blob blob;
 	BinaryReader(stm) >> blob >> blob >> blob;
@@ -622,7 +620,7 @@ DbliteBlockChainDb::TxDatas DbliteBlockChainDb::GetTxDatas(const ConstBuf& txid8
 
 	TxDatas txDatas;
 	if (!FindTxDatas(c, txid8, txDatas))
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	return txDatas;
 }
 
@@ -657,14 +655,14 @@ pair<int, int> DbliteBlockChainDb::FindPrevTxCoords(DbWriter& wr, int height, co
 
 	DbCursor c1(dbt, m_tableBlocks);
 	if (!c1.Get(BlockKey(heightOut))) {
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	}
 	CMemReadStream ms(c1.Data);
 	Blob blob;
 	BinaryReader(ms) >> blob >> blob >> blob;
 	pair<int, int> pp = TxHashesOutNums(blob).StartingTxOutIdx(hash);
 	if (pp.second < 0)
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	return pp;
 }
 
@@ -842,7 +840,7 @@ void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend) {
 
 	TxDatas txDatas;
 	if (!FindTxDatas(cTxes, txid8, txDatas))
-		Throw(E_COIN_InconsistentDatabase);
+		Throw(CoinErr::InconsistentDatabase);
 	TxData& txData = txDatas.Items[txDatas.Index];
 	int pos = op.Index >> 3;
 	byte mask = 1 << (op.Index & 7);
@@ -850,7 +848,7 @@ void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend) {
 	if (bSpend) {
 		p = txData.Coins.data();
 		if (pos >= txData.Coins.Size || !(p[pos] & mask))
-			Throw(E_COIN_InputsAlreadySpent);
+			Throw(CoinErr::InputsAlreadySpent);
 		p[pos] &= ~mask;
 	} else {
 		if (pos >= txData.Coins.Size)
@@ -898,7 +896,7 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 
 	DbTxRef dbt(m_db);
 	try {
-		DBG_LOCAL_IGNORE(E_EXT_DB_DupKey);
+		DBG_LOCAL_IGNORE_CONDITION(ExtErr::DB_DupKey);
 
 		m_tableTxes.Put(dbt, TxKey(txHash), msT, true);
 	} catch (DbException& ex) {
@@ -924,7 +922,7 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, const TxHashesOutNums& hashesOut
 			TRC(1, "Duplicated Transaction: " << txHash);
 
 			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
-				Throw(E_COIN_DupNonSpentTx);
+				Throw(CoinErr::DupNonSpentTx);
 			PutTxDatas(cTxes, TxKey(txHash), txDatas);
 			goto LAB_END;
 		}
@@ -939,7 +937,7 @@ LAB_OTHER_TX:
 					goto LAB_FOUND;
 				}
 			}
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(CoinErr::InconsistentDatabase);
 		}
 LAB_FOUND:
 		{

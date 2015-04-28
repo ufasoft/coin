@@ -225,6 +225,9 @@
     <ClCompile Include="currency\groestlcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\el\elwin\dllmodul.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -323,5 +326,8 @@
     <Midl Include="coin-com.idl">
       <Filter>Resource Files</Filter>
     </Midl>
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="coin-chains.xml" />
   </ItemGroup>
 </Project>

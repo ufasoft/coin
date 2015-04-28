@@ -32,13 +32,13 @@ using P2P::Peer;
 
 
 #ifndef UCFG_COIN_GENERATE
-#	define UCFG_COIN_GENERATE (!UCFG_WCE && UCFG_WIN32)
+//#	define UCFG_COIN_GENERATE (!UCFG_WCE && UCFG_WIN32)
+#	define UCFG_COIN_GENERATE 0
 #endif
 
 #include "param.h"
 
 #include "../util/util.h"
-#include "coin-msg.h"
 
 namespace Coin {
 

@@ -145,7 +145,7 @@ void VerifySignature(const Tx& txFrom, const Tx& txTo, uint32_t nIn, int32_t nHa
 //		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nIn, nHashType);
 //		bb = bb;
 #endif
-		Throw(E_COIN_VerifySignatureFailed);
+		Throw(CoinErr::VerifySignatureFailed);
 	}
 }
 
@@ -547,7 +547,7 @@ void Wallet::Rescan() {
 	if (m_eng->Mode==EngMode::Lite) {
 		m_eng->PurgeDatabase();
 	} else if (m_eng->IsInitialBlockDownload())
-		Throw(E_COIN_RescanDisabledDuringInitialDownload);
+		Throw(CoinErr::RescanDisabledDuringInitialDownload);
 
 	EXT_LOCK (Mtx) {
 		EXT_LOCK (m_eng->m_cdb.MtxDb) {
@@ -613,7 +613,7 @@ void Wallet::ReacceptWalletTxes() {
 		WalletTx wtx;
 		wtx.LoadFromDb(dr);
 
-		DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
 		try {
 			if (!wtx.IsCoinBase()) {
 				EXT_FOR (const Tx& txPrev, wtx.PrevTxes) {
@@ -719,7 +719,7 @@ void Wallet::AddRecipient(const Address& a) {
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		SqliteCommand cmdSel(EXT_STR("SELECT netid FROM pubkeys WHERE netid=" << m_dbNetId << " AND hash160=?"), m_eng->m_cdb.m_dbWallet);
 		if (cmdSel.Bind(1, HashValue160(a)).ExecuteReader().Read())
-			Throw(E_COIN_RecipientAlreadyPresents);
+			Throw(CoinErr::RecipientAlreadyPresents);
 
 		SqliteCommand cmd(EXT_STR("INSERT INTO pubkeys (netid, hash160, comment) VALUES(" << m_dbNetId << ", ?, ?)"), m_eng->m_cdb.m_dbWallet);
 		cmd.Bind(1, HashValue160(a))
@@ -727,7 +727,7 @@ void Wallet::AddRecipient(const Address& a) {
 		try {
 			cmd.ExecuteNonQuery();
 		} catch (SqliteException&) {
-			Throw(E_COIN_RecipientAlreadyPresents);
+			Throw(CoinErr::RecipientAlreadyPresents);
 		}
 	}
 }
@@ -877,7 +877,7 @@ pair<unordered_set<Penny>, uint64_t> Wallet::SelectCoins(uint64_t amount, uint64
 		SelectCoins(amount, fee, 1, 1, r) ||
 		SelectCoins(amount, fee, 0, 1, r))
 		return r;
-	Throw(E_COIN_InsufficientAmount);
+	Throw(CoinErr::InsufficientAmount);
 }
 
 pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vector<pair<Blob, int64_t>>& vSend) {
@@ -935,7 +935,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 
 			uint32_t size = tx.GetSerializeSize();
 			if (size >= MAX_STANDARD_TX_SIZE)
-				Throw(E_COIN_TxTooLong);
+				Throw(CoinErr::TxTooLong);
 			priority /= size;
 
 //!!!?			int64_t minFee = tx.GetMinFee(1, Tx::AllowFree(priority));
@@ -949,7 +949,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(ECDsa *randomDsa, const vect
 			fee = minFee;
 		}
 	}
-	Throw(E_EXT_CodeNotReachable);
+	Throw(ExtErr::CodeNotReachable);
 }
 
 void Wallet::Relay(const WalletTx& wtx) {
@@ -1032,10 +1032,10 @@ void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment
 	TRC(0, decAmount << " " << m_eng->ChainParams.Symbol << " to " << saddr << " " << comment);
 
 	if (decAmount > Balance)
-		Throw(E_COIN_InsufficientAmount);
+		Throw(CoinErr::InsufficientAmount);
 	int64_t amount = decimal_to_long_long(decAmount * m_eng->ChainParams.CoinValue);
 	if (0 == amount)
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 
 	Address addr(*m_eng, saddr);
 	vector<pair<Blob, int64_t>> vSend;
@@ -1048,12 +1048,12 @@ void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment
 }
 
 decimal64 Wallet::CalcFee(const decimal64& amount) {
-	DBG_LOCAL_IGNORE(E_COIN_InsufficientAmount);
+	DBG_LOCAL_IGNORE_CONDITION(CoinErr::InsufficientAmount);
 
 	if (0 == amount)
 		return make_decimal64((long long)m_eng->ChainParams.MinTxFee, - m_eng->ChainParams.Log10CoinValue());
 	if (amount > Balance)
-		Throw(E_COIN_InsufficientAmount);
+		Throw(CoinErr::InsufficientAmount);
 	Address addr(*m_eng, GetReservedPublicKey().second);
 	vector<pair<Blob, int64_t>> vSend;
 	vSend.push_back(make_pair(Script::BlobFromAddress(addr), decimal_to_long_long(amount*m_eng->ChainParams.CoinValue)));
@@ -1067,7 +1067,7 @@ WalletEng::WalletEng() {
 	TRC(1, pathXml);
 
 	if (!exists(pathXml))
-		Throw(E_COIN_XmlFileNotFound);
+		Throw(CoinErr::XmlFileNotFound);
 #if UCFG_WIN32
 	XmlDocument doc = new XmlDocument;
 	doc.Load(pathXml);

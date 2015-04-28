@@ -41,7 +41,6 @@
     <VCTargetsPath Condition="'$(VCTargetsPath11)' != '' and '$(VSVersion)' == '' and $(VisualStudioVersion) == ''">$(VCTargetsPath11)</VCTargetsPath>
   </PropertyGroup>
   <Import Project="..\..\cfg\vs\vs-ver.props" />
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -191,7 +190,8 @@
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
       <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
     </Link>
@@ -203,7 +203,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -232,13 +232,15 @@
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
-      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
-      <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -248,7 +250,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -279,7 +281,8 @@
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
       <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
     </Link>
@@ -291,7 +294,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x64 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -318,13 +321,15 @@
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
-      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
-      <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -334,7 +339,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x64 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -371,7 +376,8 @@
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
       <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
     </Link>
@@ -383,7 +389,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -416,13 +422,15 @@
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
-      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
-      <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -432,7 +440,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x86 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -469,7 +477,8 @@
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
       <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
     </Link>
@@ -481,7 +490,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x64 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -514,13 +523,15 @@
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
-      <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>miner.lib</AdditionalDependencies>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
       <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
-      <DelayLoadDLLs>bdb.dll;miner.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -530,7 +541,7 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);../util</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;$(OutDir)inc;$(IntDir);%(AdditionalIncludeDirectories);currency;../util</AdditionalIncludeDirectories>
     </ResourceCompile>
     <PostBuildEvent>
       <Command>"$(TargetFrameworkSDKToolsDirectory)\tlbimp.exe"  /machine:x64 /out:$(OutDir)inc/Interop.$(ProjectName).dll $(OutDir)/inc/$(TargetName).tlb</Command>
@@ -552,6 +563,12 @@
     <ClCompile Include="..\..\el\crypto\merkle-tree.cpp" />
     <ClCompile Include="..\..\el\db\bdb.cpp" />
     <ClCompile Include="..\..\el\db\ext-sqlite.cpp" />
+    <ClCompile Include="..\..\el\elwin\dllmodul.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\el\inet\irc-client.cpp" />
     <ClCompile Include="..\..\el\comp\stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -715,6 +732,9 @@
       <OutputDirectory Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\inc</OutputDirectory>
       <OutputDirectory Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">$(OutDir)\inc</OutputDirectory>
     </Midl>
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="coin-chains.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

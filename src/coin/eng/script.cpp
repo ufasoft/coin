@@ -52,7 +52,7 @@ Script::Script(const ConstBuf& mb) {
 		while (!vm.m_stm->Eof())
 			push_back(vm.GetOp());
 	} catch (const EndOfStreamException&) {
-		Throw(E_COIN_InvalidScript);
+		Throw(CoinErr::InvalidScript);
 	}
 }
 
@@ -154,7 +154,7 @@ Instr Vm::GetOp() {
 	default:
 		if (instr.Opcode < OP_PUSHDATA1) {
 			if (instr.Opcode > m_rd->BaseStream.Length-m_rd->BaseStream.Position)
-				Throw(E_COIN_InvalidScript);											//!!!T to avoid nested EH
+				Throw(CoinErr::InvalidScript);											//!!!T to avoid nested EH
 			instr.Value = m_rd->ReadBytes(instr.Opcode);
 			instr.Opcode = OP_PUSHDATA1;
 		} else if (instr.Opcode > OP_NOP10) {
@@ -307,7 +307,7 @@ HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int
 bool CheckSig(ConstBuf sig, const ConstBuf& pubKey, const ConstBuf& script, const Tx& txTo, int nIn, int32_t nHashType) {
 	if (IsCanonicalSignature(sig)) {
 		try {
-			DBG_LOCAL_IGNORE(E_EXT_Crypto);
+			DBG_LOCAL_IGNORE_CONDITION(ExtErr::Crypto);
 #define EC_R_INVALID_ENCODING				 102	// OpenSSL
 			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
 

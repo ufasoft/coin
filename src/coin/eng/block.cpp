@@ -16,7 +16,6 @@
 #include "coin-protocol.h"
 #include "script.h"
 #include "eng.h"
-#include "coin-msg.h"
 
 namespace Coin {
 
@@ -49,7 +48,7 @@ pair<int, OutPoint> CTxes::OutPointByIdx(int idx) const {
 			return make_pair(i, OutPoint(tx.m_pimpl->m_hash, idx));
 		idx -= tx.TxOuts().size();
 	}
-	Throw(E_COIN_InconsistentDatabase);
+	Throw(CoinErr::InconsistentDatabase);
 }
 
 pair<int, int> TxHashesOutNums::StartingTxOutIdx(const HashValue& hashTx) const {
@@ -70,7 +69,7 @@ pair<int, OutPoint> TxHashesOutNums::OutPointByIdx(int idx) const {
 			return make_pair(i, OutPoint(hom.HashTx, idx));
 		idx -= hom.NOuts;
 	}
-	Throw(E_COIN_InconsistentDatabase);
+	Throw(CoinErr::InconsistentDatabase);
 }
 
 
@@ -256,7 +255,7 @@ Block::Block() {
 Block Block::GetPrevBlock() const {
 	if (Block r = Eng().LookupBlock(PrevBlockHash))
 		return r;
-	Throw(E_COIN_OrphanedChain);
+	Throw(CoinErr::OrphanedChain);
 }
 
 void BlockObj::WriteHeader(BinaryWriter& wr) const {
@@ -275,12 +274,12 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue 
 	if (!eng.ChainParams.IsTestNet && !bParent) {
 		uint16_t ver = (Ver & 0xFF);
 		if (ver > 112)															//!!!?
-			Throw(E_EXT_Protocol_Violation);
+			Throw(ExtErr::Protocol_Violation);
 		else if (ver < 1 || ver > eng.MaxBlockVersion)
-			Throw(E_EXT_New_Protocol_Version);
+			Throw(ExtErr::New_Protocol_Version);
 
 //!!! can be checked only the Height known		if (!bParent && ChainId != eng.ChainParams.ChainId)
-//			Throw(E_COIN_BlockDoesNotHaveOurChainId);
+//			Throw(CoinErr::BlockDoesNotHaveOurChainId);
 	}
 
 	rd >> PrevBlockHash;
@@ -374,7 +373,7 @@ void BlockObj::CheckPow(const Target& target) {
 		memcpy(ar, hashPow.data(), 32);
 		ar[32] = 0;
 		if (BigInteger(ar, sizeof ar) >= BigInteger(target))
-			Throw(E_COIN_ProofOfWorkFailed);
+			Throw(CoinErr::ProofOfWorkFailed);
 	}
 }
 
@@ -475,18 +474,18 @@ static const TimeSpan s_spanFuture = seconds(MAX_FUTURE_SECONDS);
 void BlockObj::Check(bool bCheckMerkleRoot) {
 	CoinEng& eng = Eng();
 	if (eng.Mode!=EngMode::Lite && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
-		Throw(E_COIN_SizeLimits);
+		Throw(CoinErr::SizeLimits);
 
 	if (Height != -1) {
 		if (Height >= eng.ChainParams.AuxPowStartBlock) {
 			if ((Ver >> 16) != eng.ChainParams.ChainId)
-				Throw(E_COIN_BlockDoesNotHaveOurChainId);
+				Throw(CoinErr::BlockDoesNotHaveOurChainId);
 			if (AuxPow) {
 				AuxPow->Check(Block(this));
 				AuxPow->ParentBlock.CheckPow(DifficultyTarget);
 			}
 		} else if (AuxPow)
-			Throw(E_COIN_AUXPOW_NotAllowed);
+			Throw(CoinErr::AUXPOW_NotAllowed);
 	}
 	if (!AuxPow && ProofType()==ProofOf::Work) {
 		if (eng.ChainParams.HashAlgo == HashAlgo::Sha256 || eng.ChainParams.HashAlgo == HashAlgo::Prime)
@@ -498,25 +497,25 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 			ar[32] = 0;
 			if (BigInteger(ar, sizeof ar) >= BigInteger(get_DifficultyTarget())) {
 				TRC(2, "E_COIN_ProofOfWorkFailed in block " << GetHash());
-				Throw(E_COIN_ProofOfWorkFailed);
+				Throw(CoinErr::ProofOfWorkFailed);
 			}
 		}
 	}
 
 	if (Timestamp > DateTime::UtcNow() + s_spanFuture)
-		Throw(E_COIN_BlockTimestampInTheFuture);
+		Throw(CoinErr::BlockTimestampInTheFuture);
 
 	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		if (!m_txes[0].IsCoinBase())
-			Throw(E_COIN_FirstTxIsNotCoinbase);
+			Throw(CoinErr::FirstTxIsNotCoinbase);
 		for (int i=1; i<m_txes.size(); ++i)
 			if (m_txes[i].IsCoinBase())
-				Throw(E_COIN_FirstTxIsNotTheOnlyCoinbase);	
+				Throw(CoinErr::FirstTxIsNotTheOnlyCoinbase);	
 		EXT_FOR (const Tx& tx, m_txes) {
 			tx.Check();
 		}
 		if (bCheckMerkleRoot && MerkleRoot(false) != m_merkleRoot.get())
-			Throw(E_COIN_MerkleRootMismatch);
+			Throw(CoinErr::MerkleRootMismatch);
 	}
 	CheckSignature();
 }
@@ -534,7 +533,7 @@ void BlockObj::CheckCoinbaseTx(int64_t nFees) {
 		int64_t valueOut = m_txes[0].ValueOut;
 		int64_t subsidy = eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget), true);
 		if (valueOut > subsidy+nFees) {
-			Throw(E_COIN_SubsidyIsVeryBig);
+			Throw(CoinErr::SubsidyIsVeryBig);
 		}
 	}
 }
@@ -591,7 +590,7 @@ int64_t RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 			int64_t nValueIn = 0;
 			const Tx& tx = ptx;
 			if (job.aSigOps+=tx.SigOpCount > MAX_BLOCK_SIGOPS)
-				Throw(E_COIN_TxTooManySigOps);
+				Throw(CoinErr::TxTooManySigOps);
 			for (int nIn=0; nIn<tx.TxIns().size(); ++nIn) {
 				if (job.Failed)
 					return fee;
@@ -603,7 +602,7 @@ int64_t RunConnectTask(const CConnectJob *pjob, const ConnectTask *ptask) {
 				const TxOut& txOut = txPrev.TxOuts()[op.Index];
 				if (t_bPayToScriptHash &&  IsPayToScriptHash(txOut.PkScript)) {
 					if (job.aSigOps+=CalcSigOpCount(txOut.PkScript, txIn.Script()) > MAX_BLOCK_SIGOPS)
-						Throw(E_COIN_TxTooManySigOps);
+						Throw(CoinErr::TxTooManySigOps);
 				}
 
 				if (txPrev.IsCoinBase())
@@ -852,7 +851,7 @@ void Block::Connect() const {
 
 		job.AsynchCheckAll(Txes);
 		if (job.Failed)
-			Throw(E_COIN_ProofOfWorkFailed);
+			Throw(CoinErr::ProofOfWorkFailed);
 		nFees = job.Fee;
 
 		if (eng.Mode != EngMode::Bootstrap)
@@ -926,7 +925,7 @@ void Block::Connect() const {
 		default:
 			for (size_t i=0; i<m_pimpl->m_txes.size(); ++i) {
 				if (!eng.Runned)
-					Throw(E_EXT_ThreadInterrupted);
+					Throw(ExtErr::ThreadInterrupted);
 				const Tx& tx = m_pimpl->m_txes[i];
 				if (eng.ShouldBeSaved(tx)) {
 					Coin::HashValue txHash = Coin::Hash(tx);
@@ -1027,11 +1026,11 @@ void Block::Accept() {
 #ifdef _DEBUG//!!!D
  			eng.GetNextTarget(blockPrev, _self);
 #endif
-			Throw(E_COIN_IncorrectProofOfWork);
+			Throw(CoinErr::IncorrectProofOfWork);
 		}
 
 		if (Timestamp <= blockPrev.GetMedianTimePast())
-			Throw(E_COIN_TooEarlyTimestamp);
+			Throw(CoinErr::TooEarlyTimestamp);
 
 		m_pimpl->Height = blockPrev.Height+1;
 	}
@@ -1039,7 +1038,7 @@ void Block::Accept() {
 	EXT_FOR (Tx& tx, m_pimpl->m_txes) {
 		tx.Height = Height;
 		if (!tx.IsFinal(Height, Timestamp))
-			Throw(E_COIN_ContainsNonFinalTx);
+			Throw(CoinErr::ContainsNonFinalTx);
 	}
 
 	HashValue hash = Hash(_self);
@@ -1048,15 +1047,15 @@ void Block::Accept() {
 	ChainParams::CCheckpoints::iterator itCheckPoint = eng.ChainParams.Checkpoints.find(Height);
 	if (itCheckPoint != eng.ChainParams.Checkpoints.end() && itCheckPoint->second != hash) {
 		TRC(3, "Checkpoint failed for block: " << hash << "  H: " << Height);
-		Throw(E_COIN_RejectedByCheckpoint);
+		Throw(CoinErr::RejectedByCheckpoint);
 	}
 
 //!!!T	if (Ver >= 2 && IsSuperMajority(2, 750, 1000) && Height != m_pimpl->GetBlockHeightFromCoinbase())				// very expensive check
-//		Throw(E_COIN_BlockHeightMismatchInCoinbase);
+//		Throw(CoinErr::BlockHeightMismatchInCoinbase);
 
 	EXT_LOCK (eng.Mtx) {
 		if (!eng.Runned)
-			Throw(E_EXT_ThreadInterrupted);
+			Throw(ExtErr::ThreadInterrupted);
 		if (Height <= eng.BestBlockHeight() && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
 		if (!HasBestChainWork()) {
@@ -1115,15 +1114,13 @@ void Block::Process(P2P::Link *link) {
 		return;
 
 	try {
-		DBG_LOCAL_IGNORE(E_COIN_BlockNotFound);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::BlockNotFound);
 
 		Check(true);
 	} catch (Exception& ex) {
-		switch (ToHResult(ex)) {
-		case E_COIN_BlockNotFound:
-		case E_COIN_TxNotFound:					// possible in PoS blocks
+		if (ex.code() == CoinErr::BlockNotFound
+			|| ex.code() == CoinErr::TxNotFound)					// possible in PoS blocks
 			return;
-		}
 		throw;
 	}
 	if (hash==eng.ChainParams.Genesis || eng.HaveBlockInMainTree(PrevBlockHash)) {
@@ -1135,7 +1132,7 @@ void Block::Process(P2P::Link *link) {
 			HashValue h = vec[i];
 LAB_AGAIN:
 			if (!eng.Runned)
-				Throw(E_EXT_ThreadInterrupted);
+				Throw(ExtErr::ThreadInterrupted);
 			Block blk(nullptr);
 			EXT_LOCK (eng.Caches.Mtx) {
 				for (ChainCaches::COrphanMap::iterator it=eng.Caches.OrphanBlocks.begin(); it!=eng.Caches.OrphanBlocks.end(); ++it) {

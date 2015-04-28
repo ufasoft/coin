@@ -77,7 +77,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	{
 		CoinEng& eng = Eng();
 
-		DBG_LOCAL_IGNORE(E_EXT_EndOfStream);
+		DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
 
 		char cmd[12];
 		rd.Read(cmd, sizeof cmd);
@@ -85,7 +85,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 		uint32_t len = rd.ReadUInt32();
 		checksum = rd.ReadUInt32();
 		if (0 != cmd[sizeof(cmd)-1] || len > MAX_PAYLOAD)
-			Throw(E_EXT_Protocol_Violation);
+			Throw(ExtErr::Protocol_Violation);
 
 		MFN_CreateMessage mfn;
 		if (Lookup(MessageClassFactoryBase::s_map, cmd, mfn))
@@ -101,12 +101,12 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	CMemReadStream ms(payload);
 	HashValue h = Eng().HashMessage(payload);
 	if (*(uint32_t*)h.data() != checksum)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	ms.Position = 0;
 	r->Link = &link;
 
 	try {
-		DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
 		r->Read(BinaryReader(ms));
 	} catch (RCExc ex) {
 		link.Send(new RejectMessage(RejectReason::Malformed, r->Command, "error parsing message"));
@@ -335,7 +335,7 @@ void AlertMessage::Process(P2P::Link& link) {
 		if (dsa.VerifyHash(hv, Signature))
 			goto LAB_VERIFIED;
 	}
-	Throw(E_COIN_AlertVerifySignatureFailed);
+	Throw(CoinErr::AlertVerifySignatureFailed);
 LAB_VERIFIED:
 
 	CMemReadStream stm(Payload);

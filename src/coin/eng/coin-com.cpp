@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 #include <el/xml.h>
@@ -186,13 +184,13 @@ public:
 	typedef unordered_map<String, CComPtr<IAddress>> CStr2Addr;
 	CStr2Addr m_str2addr;
 
-	int32_t StateChanged;
+	atomic<int> aStateChanged;
 
 	WalletCom(Wallet& wallet)
 		:	m_wallet(wallet)
-		,	StateChanged(1)
+		,	aStateChanged(1)
 	{
-		m_wallet.m_iiWalletEvents = this;
+		m_wallet.m_iiWalletEvents.reset(this);
 	}
 
 	~WalletCom() {
@@ -308,12 +306,10 @@ public:
 
     HRESULT __stdcall GetAndResetStateChangedFlag(VARIANT_BOOL *r)
 	METHOD_BEGIN {
-		*r = bool(Interlocked::CompareExchange(StateChanged, 0, 1));
-		if (*r) {
-			EXT_LOCK (Mtx) {
-				m_saTxes.Clear();
-			}
-		}
+		int prev = 1;
+		if (aStateChanged.compare_exchange_strong(prev, 0))
+			EXT_LOCKED (Mtx, m_saTxes.Clear());
+		*r = bool(prev);
 	} METHOD_END
 
 	HRESULT __stdcall CalcFee(DECIMAL amount, DECIMAL *r)
@@ -354,13 +350,13 @@ public:
 	HRESULT __stdcall get_MiningAllowed(VARIANT_BOOL *r)
 	METHOD_BEGIN {
 		*r = m_wallet.Eng.MiningAllowed();
-		StateChanged = 1;
+		aStateChanged = 1;
 	} METHOD_END
 
 	HRESULT __stdcall get_MiningEnabled(VARIANT_BOOL *r)
 	METHOD_BEGIN {
 		*r = m_wallet.MiningEnabled;
-		StateChanged = 1;
+		aStateChanged = 1;
 	} METHOD_END
 
 	HRESULT __stdcall put_MiningEnabled(VARIANT_BOOL r)
@@ -384,23 +380,34 @@ public:
 			}
 		} else {
 			do {
+				EXT_LOCK (m_wallet.Eng.m_mtxStates) {
+					EXT_FOR(const String& s, m_wallet.Eng.m_setStates) {
+						os << s << "; ";
+					}
+				}
+
 				if (m_wallet.Eng.UpgradingDatabaseHeight) {
-					os << "Upgrading Database of " << m_wallet.Eng.UpgradingDatabaseHeight << " blocks";
+					switch (m_wallet.Eng.UpgradingDatabaseHeight) {
+					case CoinEng::HEIGHT_BOOTSTRAPING:
+						break;
+					default:
+						os << "Upgrading Database of " << m_wallet.Eng.UpgradingDatabaseHeight << " blocks";
+					}
 					break;
 				}
 				if (ptr<CompactThread> t = m_wallet.CompactThread) {
-					os << "Compacting Database  " << int64_t(t->m_i)*100/t->m_count << "%";
+					os << "Compacting Database  " << int64_t(t->m_ai)*100/t->m_count << "%";
 					break;
 				}
 
 				if (Block bestBlock = m_wallet.Eng.BestBlock()) {
 					TimeSpan span = DateTime::UtcNow()-bestBlock.Timestamp;
-					if (span.TotalMinutes > 60) {
+					if (span > hours(1)) {
 						int n;
-						if (span.TotalHours < 24)
-							os << (n = int(span.TotalHours)) << " hour";
+						if (span < hours(24))
+							os << (n = duration_cast<hours>(span).count()) << " hour";
 						else
-							os << (n = span.Days) << " day";
+							os << (n = duration_cast<hours>(span).count() / 24) << " day";
 						if (n > 1)
 							os << "s";
 						os << " ago";
@@ -471,9 +478,37 @@ public:
 		m_wallet.m_eng->m_cdb.ImportWallet(filepath, password);
 	} METHOD_END
 
+	HRESULT __stdcall ImportFromBootstrapDat(BSTR filepath)
+	METHOD_BEGIN {
+		(new BootstrapDbThread(m_wallet.Eng, filepath))->Start();
+	} METHOD_END		
+
+	HRESULT __stdcall ExportToBootstrapDat(BSTR filepath)
+	METHOD_BEGIN {
+		ptr<BootstrapDbThread> t = new BootstrapDbThread(m_wallet.Eng, filepath);
+		t->Exporting = true;
+		t->Start();
+	} METHOD_END		
+
 	HRESULT __stdcall CancelPendingTxes()
 	METHOD_BEGIN {
 		m_wallet.CancelPendingTxes();
+	} METHOD_END
+
+	HRESULT __stdcall put_Mode(EEngMode mode)
+	METHOD_BEGIN {
+		if (mode != EEngMode::Lite || m_wallet.Eng.ChainParams.AllowLiteMode)
+			m_wallet.Eng.Mode = (EngMode)mode;
+	} METHOD_END
+
+	HRESULT __stdcall get_Mode(EEngMode *pmode)
+	METHOD_BEGIN {
+		*pmode = (EEngMode)m_wallet.Eng.Mode;
+	} METHOD_END
+
+	HRESULT __stdcall get_LiteModeAllowed(VARIANT_BOOL *r)
+	METHOD_BEGIN {
+		*r = m_wallet.Eng.ChainParams.AllowLiteMode;
 	} METHOD_END
 protected:
 	CComClass *GetComClass() {
@@ -501,7 +536,7 @@ protected:
 /*!!!R		EXT_LOCK (Mtx) {
 			m_saTxes.Clear();
 		} */
-		StateChanged = 1;
+		aStateChanged = 1;
 	}
 
 private:
@@ -593,7 +628,7 @@ public:
 			{
 				path pathXml = System.GetExeDir() / "coin-chains.xml";
 				if (!exists(pathXml))
-					Throw(E_COIN_XmlFileNotFound);
+					Throw(CoinErr::XmlFileNotFound);
 #if UCFG_WIN32
 				XmlDocument doc = new XmlDocument;
 				doc.Load(pathXml);
@@ -630,19 +665,14 @@ public:
 		*r = m_cdb.NeedPassword;
 	} METHOD_END
 
+	HRESULT __stdcall get_SupportsTOR(VARIANT_BOOL *r)
+	METHOD_BEGIN {
+		*r = UCFG_USE_TOR;
+	} METHOD_END
+
 	HRESULT __stdcall SetPassword(BSTR password)
 	METHOD_BEGIN {
 		m_cdb.Password = password;
-	} METHOD_END
-
-	HRESULT __stdcall put_LiteMode(VARIANT_BOOL b)
-	METHOD_BEGIN {
-		for (int i=0; i<m_vWalletEng.size(); ++i) {
-			CoinEng& eng = *m_vWalletEng[i]->m_peng;
-			if (eng.ChainParams.AllowLiteMode) {
-				eng.Mode = b ? EngMode::Lite : EngMode::Normal;
-			}
-		}
 	} METHOD_END
 
 	HRESULT __stdcall ChangePassword(BSTR oldPassword, BSTR newPassword)
@@ -655,6 +685,11 @@ public:
 		m_cdb.ExportWalletToXml(filepath);
 	} METHOD_END
 
+	HRESULT __stdcall get_AppDataDirectory(BSTR *r)
+	METHOD_BEGIN {
+		*r = String(m_cdb.DbWalletFilePath.parent_path()).AllocSysString();
+	} METHOD_END
+
 	HRESULT __stdcall get_LocalPort(int *r)
 	METHOD_BEGIN {
 		*r = m_cdb.ListeningPort;
@@ -665,9 +700,16 @@ public:
 		m_cdb.ListeningPort = (uint16_t)v;
 	} METHOD_END
 
-	HRESULT __stdcall get_AppDataDirectory(BSTR *r)
+	HRESULT __stdcall get_ProxyString(BSTR *r)
 	METHOD_BEGIN {
-		*r = String(m_cdb.DbWalletFilePath.parent_path()).AllocSysString();
+		*r = m_cdb.ProxyString.AllocSysString();
+	} METHOD_END
+
+	HRESULT __stdcall put_ProxyString(BSTR s)
+	METHOD_BEGIN {
+		m_cdb.ProxyString = s;
+		if (m_cdb.ProxyString.ToUpper() == "TOR")
+			m_cdb.ListeningPort = uint16_t(-1);
 	} METHOD_END
 };
 
@@ -688,8 +730,8 @@ METHOD_BEGIN {
 
 HRESULT __stdcall TransactionCom::get_Fee(DECIMAL *r)
 METHOD_BEGIN {
-	DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
-	DBG_LOCAL_IGNORE(E_EXT_DB_NoRecord);
+	DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
+	DBG_LOCAL_IGNORE_CONDITION(ExtErr::DB_NoRecord);
 	
 	CCoinEngThreadKeeper engKeeper(&m_wallet.m_wallet.Eng);
 	*r = ToDecimal(m_wallet.m_wallet.GetDecimalFee(m_wtx));

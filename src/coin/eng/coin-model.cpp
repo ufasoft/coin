@@ -13,7 +13,6 @@ using namespace Ext::Crypto;
 
 #include "coin-model.h"
 #include "eng.h"
-#include "coin-msg.h"
 #include "coin-protocol.h"
 #include "script.h"
 
@@ -122,35 +121,35 @@ const byte s_mergedMiningHeader[4] = { 0xFA, 0xBE, 'm', 'm' } ;
 
 void AuxPow::Check(const Block& blockAux) {
 	if (blockAux.ChainId == ParentBlock.ChainId)
-		Throw(E_COIN_AUXPOW_ParentHashOurChainId);
+		Throw(CoinErr::AUXPOW_ParentHashOurChainId);
 	if (ChainMerkleBranch.Vec.size() > 30)
-		Throw(E_COIN_AUXPOW_ChainMerkleBranchTooLong);
+		Throw(CoinErr::AUXPOW_ChainMerkleBranchTooLong);
 
 	HashValue rootHash = ChainMerkleBranch.Apply(Hash(blockAux));
 	std::reverse(rootHash.begin(), rootHash.end());						// correct endian
 
 	if (MerkleBranch.Apply(Hash(Tx(_self))) != ParentBlock.get_MerkleRoot())
-		Throw(E_COIN_AUXPOW_MerkleRootIncorrect);
+		Throw(CoinErr::AUXPOW_MerkleRootIncorrect);
 
 	Blob script = TxIns().at(0).Script();
 	const byte *pcHead = Search(ConstBuf(script), ConstBuf(s_mergedMiningHeader, sizeof s_mergedMiningHeader)),
 		       *pc = Search(ConstBuf(script), ConstBuf(rootHash));
 	if (pc == script.end())
-		Throw(E_COIN_AUXPOW_MissingMerkleRootInParentCoinbase);
+		Throw(CoinErr::AUXPOW_MissingMerkleRootInParentCoinbase);
 	if (pcHead != script.end()) {
 		if (script.end() != std::search(pcHead+1, script.end(), begin(s_mergedMiningHeader), end(s_mergedMiningHeader)))
-			Throw(E_COIN_AUXPOW_MutipleMergedMiningHeades);
+			Throw(CoinErr::AUXPOW_MutipleMergedMiningHeades);
 		if (pc != pcHead + sizeof(s_mergedMiningHeader))
-			Throw(E_COIN_AUXPOW_MergedMinignHeaderiNotJustBeforeMerkleRoot);		
+			Throw(CoinErr::AUXPOW_MergedMinignHeaderiNotJustBeforeMerkleRoot);		
 	} else if (pc-script.begin() > 20)
-		Throw(E_COIN_AUXPOW_MerkleRootMustStartInFirstFewBytes);
+		Throw(CoinErr::AUXPOW_MerkleRootMustStartInFirstFewBytes);
 	CMemReadStream stm(ConstBuf(pc + rootHash.size(), script.end()-pc-rootHash.size()));
 	int32_t size, nonce;
 	BinaryReader(stm) >> size >> nonce;
 	if (size != (1 << ChainMerkleBranch.Vec.size()))
-		Throw(E_COIN_AUXPOW_MerkleBranchSizeIncorrect);
+		Throw(CoinErr::AUXPOW_MerkleBranchSizeIncorrect);
 	if (ChainMerkleBranch.Index != CalcMerkleIndex(size, blockAux.ChainId, nonce))
-		Throw(E_COIN_AUXPOW_WrongIndex);
+		Throw(CoinErr::AUXPOW_WrongIndex);
 }
 
 Address::Address(CoinEng& eng)
@@ -181,18 +180,18 @@ Address::Address(CoinEng& eng, RCString s)
 	try {
 		Blob blob = ConvertFromBase58(s.Trim());
 		if (blob.Size < 21)
-			Throw(E_COIN_InvalidAddress);
+			Throw(CoinErr::InvalidAddress);
 		Ver = blob.constData()[0];
 		memcpy(data(), blob.constData()+1, 20);
 	} catch (RCExc) {
-		Throw(E_COIN_InvalidAddress);
+		Throw(CoinErr::InvalidAddress);
 	}
 	CheckVer(eng);
 }
 
 void Address::CheckVer(CoinEng& eng) const {
 	if (&Eng != &eng || Ver != eng.ChainParams.AddressVersion && Ver != eng.ChainParams.ScriptAddressVersion)
-		Throw(E_COIN_InvalidAddress);
+		Throw(CoinErr::InvalidAddress);
 }
 
 String Address::ToString() const {
@@ -208,14 +207,14 @@ PrivateKey::PrivateKey(RCString s) {
 	try {
 		Blob blob = ConvertFromBase58(s.Trim());
 		if (blob.Size < 10)
-			Throw(E_COIN_InvalidAddress);
+			Throw(CoinErr::InvalidAddress);
 		byte ver = blob.constData()[0];
 //!!! common ver for all Nets		if (ver != Eng().ChainParams.AddressVersion+128)
 		if (!(ver & 128))
-			Throw(E_COIN_InvalidAddress);
+			Throw(CoinErr::InvalidAddress);
 		m_blob = Blob(blob.constData()+1, blob.Size-1);
 	} catch (RCExc) {
-		Throw(E_COIN_InvalidAddress);
+		Throw(CoinErr::InvalidAddress);
 	}
 }
 

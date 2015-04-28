@@ -32,19 +32,19 @@ void CoinEng::RemoveFromMemory(const Tx& tx) {
 bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	tx.Check();
 	if (tx.IsCoinBase())
-		Throw(E_COIN_Misbehaving);
+		Throw(CoinErr::Misbehaving);
 	uint32_t serSize = tx.GetSerializeSize();
 /*!!!?
 	int sigOpCount = tx.SigOpCount;
 	if (sigOpCount > serSize/34 || serSize < 100)
-		Throw(E_COIN_Misbehaving);		*/
+		Throw(CoinErr::Misbehaving);		*/
 	HashValue hash = Hash(tx);
 
 	if (HaveTxInDb(hash))
 		return false;
 
 	if (!tx.IsFinal(BestBlockHeight()+1))
-		Throw(E_COIN_ContainsNonFinalTx);
+		Throw(CoinErr::ContainsNonFinalTx);
 
 	Tx ptxOld(nullptr);
 	EXT_LOCK (TxPool.Mtx) {
@@ -74,12 +74,12 @@ bool CoinEng::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	tx.ConnectInputs(view, BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, AllowFreeTxes, MinFeeMode::Relay), ChainParams.MaxTarget);	//!!!? MaxTarget
 
 	if (nFees < tx.GetMinFee(1000, AllowFreeTxes, MinFeeMode::Relay))
-		Throw(E_COIN_TxFeeIsLow);
+		Throw(CoinErr::TxFeeIsLow);
 	if (nFees < GetMinRelayTxFee()) {
 		DateTime now = DateTime::UtcNow();
 		m_freeCount = pow(1.0 - 1.0/600, duration_cast<seconds>(now - exchange(m_dtLastFreeTx, now)).count());
 		if (m_freeCount > 15*10000 && !IsFromMe(tx))
-			Throw(E_COIN_TxRejectedByRateLimiter);
+			Throw(CoinErr::TxRejectedByRateLimiter);
 		m_freeCount += serSize;
 	}
 
@@ -148,9 +148,10 @@ void TxMessage::Process(P2P::Link& link) {
 
 	EXT_LOCK (eng.TxPool.Mtx) {
 		try {
-			DBG_LOCAL_IGNORE(E_COIN_TxNotFound);
-			DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
-			DBG_LOCAL_IGNORE(E_COIN_TxFeeIsLow);				//!!!T
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxFeeIsLow);				//!!!T
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::InputsAlreadySpent);
 
 			if (!eng.AddToPool(Tx, vQueue))
 				return;
@@ -158,7 +159,7 @@ void TxMessage::Process(P2P::Link& link) {
 			eng.AddOrphan(Tx);
 			return;
 		}
-		DBG_LOCAL_IGNORE(E_COIN_TxNotFound);	//!!!T
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);	//!!!T
 		for (int i=0; i<vQueue.size(); ++i) {
 			HashValue hash = vQueue[i];
 			pair<CoinEng::CTxPool::CHashToHash::iterator, CoinEng::CTxPool::CHashToHash::iterator> range = eng.TxPool.m_prevHashToOrphanHash.equal_range(hash);

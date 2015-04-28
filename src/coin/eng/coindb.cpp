@@ -11,7 +11,6 @@
 #include "coin-protocol.h"
 #include "script.h"
 #include "eng.h"
-#include "coin-msg.h"
 #include "crypter.h"
 
 
@@ -353,14 +352,14 @@ void CoinDb::LoadKeys(RCString password) {
 						}						
 						Blob ptext = pAes->Decrypt(ConstBuf(buf.P+1, buf.Size-1));
 						if (ptext.Size < 5)
-							Throw(E_COIN_InconsistentDatabase);
+							Throw(CoinErr::InconsistentDatabase);
 						ki.SetPrivData(Blob(ptext.constData(), ptext.Size-4), ki.PubKey.Size == 33);
 						if (Crc32().ComputeHash(ki.get_PrivKey()) != Blob(ptext.constData()+ptext.Size-4, 4))
 							Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
 					} catch (OpenSslException&) {
 						Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
 					} catch (Exception& ex) {
-						if (ex.code().value() == E_EXT_Crypto)
+						if (ex.code() == ExtErr::Crypto)
 							Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
 						throw;
 					}
@@ -373,7 +372,7 @@ void CoinDb::LoadKeys(RCString password) {
 				}
 				break;
 			default:
-				Throw(E_EXT_UnsupportedEncryptionAlgorithm);
+				Throw(ExtErr::UnsupportedEncryptionAlgorithm);
 			}
 			//!!!R ki.Key = CngKey::Import(ki.PrivKey, ki.PrivKey.Size <= 33 ? CngKeyBlobFormat::OSslEccPrivateBignum : CngKeyBlobFormat::OSslEccPrivateBlob);
 

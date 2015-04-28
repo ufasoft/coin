@@ -20,6 +20,17 @@
 #	include "backend-sqlite.h"
 #endif
 
+#if defined(_MSC_VER) && !defined(_AFXDLL)
+#	pragma comment(lib, "libext.lib")
+#	if !UCFG_STDSTL
+#		pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
+#		pragma comment(lib, "el-std")
+#	endif
+#	pragma comment(lib, "coinutil")
+#	pragma comment(lib, "openssl")
+#endif // defined(_MSC_VER) && !defined(_AFXDLL)
+
+
 using Ext::DB::DbException;
 
 template<> Coin::CurrencyFactoryBase * StaticList<Coin::CurrencyFactoryBase>::Root = 0;
@@ -510,19 +521,27 @@ void ChainParams::AddSeedEndpoint(RCString seed) {
 
 
 ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
+	String xml;
 	path pathXml = System.GetExeDir() / "coin-chains.xml";
+	if (exists(path(pathXml)))
+		xml = File::ReadAllText(pathXml);
+#if UCFG_WIN32
+	else if (AfxHasResource("coin_chains.xml", RT_RCDATA))
+	    xml = Encoding::UTF8.GetChars(Resource("coin_chains.xml", RT_RCDATA));
+#endif
+	else
+		Throw(CoinErr::XmlFileNotFound);
+
 	Coin::ChainParams params;
-	if (!exists(path(pathXml)))
-		Throw(E_COIN_XmlFileNotFound);
 	try {
 #if UCFG_WIN32		
 		CUsingCOM usingCOM;
 		XmlDocument doc = new XmlDocument;
-		doc.LoadXml(File::ReadAllText(pathXml));		// LoadXml() instead of Load() to eliminate loading shell32.dll
+		doc.LoadXml(xml);		// LoadXml() instead of Load() to eliminate loading shell32.dll
 		XmlNodeReader rd(doc);
 #else
-		ifstream ifs(pathXml.c_str());
-		XmlTextReader rd(ifs);
+		istringstream is(xml.c_str());
+		XmlTextReader rd(is);
 #endif
  		for (bool b=rd.ReadToDescendant("Chain"); b; b=rd.ReadToNextSibling("Chain")) {
 			if (name == rd.GetAttribute("Name")) {
@@ -555,7 +574,7 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 		}
 	} catch (RCExc) {
 	}
-	Throw(E_COIN_XmlFileNotFound);
+	Throw(CoinErr::XmlFileNotFound);
 LAB_RET:
 	ptr<CoinEng> peng;
 	for (CurrencyFactoryBase *p=CurrencyFactoryBase::Root; p; p=p->Next)
@@ -773,11 +792,11 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		return;
 	CCoinEngThreadKeeper engKeeper(this);
 	try {
-		DBG_LOCAL_IGNORE(E_COIN_RecentCoinbase);
-		DBG_LOCAL_IGNORE(E_COIN_IncorrectProofOfWork);
-		DBG_LOCAL_IGNORE(E_COIN_RejectedByCheckpoint);
-		DBG_LOCAL_IGNORE(E_COIN_AlertVerifySignatureFailed);
-		DBG_LOCAL_IGNORE(E_COIN_ProofOfWorkFailed);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecentCoinbase);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::IncorrectProofOfWork);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RejectedByCheckpoint);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::AlertVerifySignatureFailed);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::ProofOfWorkFailed);
 
 		m->Process(*m->Link);
 	} catch (const DbException&) {
@@ -796,66 +815,71 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		TRC(2, "Misbehaving " << ex.what());
 		Misbehaving(m, ex.HowMuch);
 	} catch (Exception& ex) {
-		switch (ToHResult(ex)) {
-		case E_COIN_SizeLimits:		
-		case E_COIN_DupTxInputs:
-			Misbehaving(m, 100);
-			break;
-		case E_COIN_RejectedByCheckpoint:
-			m->Link->Send(new RejectMessage(RejectReason::CheckPoint, "block", "checkpoint mismatch"));
-			Misbehaving(m, 100);
-			break;
-		case E_COIN_MoneyOutOfRange:
-			Misbehaving(m, 100, "block", "bad-txns-txouttotal-toolarge");
-			break;
-		case E_COIN_BadTxnsVoutNegative:
-			Misbehaving(m, 100, "block", "bad-txns-vout-negative");
-			break;
-		case E_COIN_BlockHeightMismatchInCoinbase:
-			Misbehaving(m, 100, "block", "bad-cb-height");
-			break;
-		case E_COIN_FirstTxIsNotCoinbase:
-			Misbehaving(m, 100, "block", "bad-cb-missing");
-			break;
-		case E_COIN_FirstTxIsNotTheOnlyCoinbase:
-			Misbehaving(m, 100, "block", "bad-cb-multiple");
-			break;
-		case E_COIN_BadCbLength:
-			Misbehaving(m, 100, "block", "bad-cb-length");
-			break;
-		case E_COIN_ProofOfWorkFailed:
-			Misbehaving(m, 50, "block", "high-hash");
-			break;			
-		case E_COIN_BadTxnsVinEmpty:
-			Misbehaving(m, 10, "block", "bad-txns-vin-empty");
-			break;
-		case E_COIN_BadTxnsVoutEmpty:
-			Misbehaving(m, 10, "block", "bad-txns-vout-empty");
-			break;
-		case E_COIN_BadTxnsPrevoutNull:
-			Misbehaving(m, 10, "block", "bad-txns-prevout-null");
-			break;
-		case E_COIN_ContainsNonFinalTx:
-			if (dynamic_cast<TxMessage*>(m))
-				m->Link->Send(new RejectMessage(RejectReason::NonStandard, "tx", "non-final"));
-			else
-				Misbehaving(m, 10, "block", "bad-txns-nonfinal");
-			break;
-		case E_COIN_TxNotFound:
-		case E_COIN_AllowedErrorDuringInitialDownload:
-			break;
-		case E_COIN_RecentCoinbase:			//!!!? not misbehavig
-		case E_COIN_AlertVerifySignatureFailed:
-			break;
-		case E_COIN_IncorrectProofOfWork:
-			goto LAB_MIS;
-		case E_COIN_DupVersionMessage:
-			m->Link->Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
-		case E_COIN_VeryBigPayload:
-		default:
+		if (ex.code().category() != coin_category()) {
 			TRC(2, ex.what());
-LAB_MIS:
 			Misbehaving(m, 1);
+		} else {
+			switch ((CoinErr)ex.code().value()) {
+			case CoinErr::SizeLimits:		
+			case CoinErr::DupTxInputs:
+				Misbehaving(m, 100);
+				break;
+			case CoinErr::RejectedByCheckpoint:
+				m->Link->Send(new RejectMessage(RejectReason::CheckPoint, "block", "checkpoint mismatch"));
+				Misbehaving(m, 100);
+				break;
+			case CoinErr::MoneyOutOfRange:
+				Misbehaving(m, 100, "block", "bad-txns-txouttotal-toolarge");
+				break;
+			case CoinErr::BadTxnsVoutNegative:
+				Misbehaving(m, 100, "block", "bad-txns-vout-negative");
+				break;
+			case CoinErr::BlockHeightMismatchInCoinbase:
+				Misbehaving(m, 100, "block", "bad-cb-height");
+				break;
+			case CoinErr::FirstTxIsNotCoinbase:
+				Misbehaving(m, 100, "block", "bad-cb-missing");
+				break;
+			case CoinErr::FirstTxIsNotTheOnlyCoinbase:
+				Misbehaving(m, 100, "block", "bad-cb-multiple");
+				break;
+			case CoinErr::BadCbLength:
+				Misbehaving(m, 100, "block", "bad-cb-length");
+				break;
+			case CoinErr::ProofOfWorkFailed:
+				Misbehaving(m, 50, "block", "high-hash");
+				break;			
+			case CoinErr::BadTxnsVinEmpty:
+				Misbehaving(m, 10, "block", "bad-txns-vin-empty");
+				break;
+			case CoinErr::BadTxnsVoutEmpty:
+				Misbehaving(m, 10, "block", "bad-txns-vout-empty");
+				break;
+			case CoinErr::BadTxnsPrevoutNull:
+				Misbehaving(m, 10, "block", "bad-txns-prevout-null");
+				break;
+			case CoinErr::ContainsNonFinalTx:
+				if (dynamic_cast<TxMessage*>(m))
+					m->Link->Send(new RejectMessage(RejectReason::NonStandard, "tx", "non-final"));
+				else
+					Misbehaving(m, 10, "block", "bad-txns-nonfinal");
+				break;
+			case CoinErr::TxNotFound:
+			case CoinErr::AllowedErrorDuringInitialDownload:
+				break;
+			case CoinErr::RecentCoinbase:			//!!!? not misbehavig
+			case CoinErr::AlertVerifySignatureFailed:
+				break;
+			case CoinErr::IncorrectProofOfWork:
+				goto LAB_MIS;
+			case CoinErr::DupVersionMessage:
+				m->Link->Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
+			case CoinErr::VeryBigPayload:
+			default:
+				TRC(2, ex.what());
+	LAB_MIS:
+				Misbehaving(m, 1);
+			}
 		}
 	}
 }
@@ -870,11 +894,11 @@ size_t CoinEng::GetMessageHeaderSize() {
 }
 
 size_t CoinEng::GetMessagePayloadSize(const ConstBuf& buf) {
-	DBG_LOCAL_IGNORE(E_EXT_Protocol_Violation);
+	DBG_LOCAL_IGNORE_CONDITION(ExtErr::Protocol_Violation);
 
 	const SCoinMessageHeader& hdr = *(SCoinMessageHeader*)buf.P;
 	if (le32toh(hdr.Magic) != ChainParams.ProtocolMagic)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	return le32toh(hdr.PayloadSize) + sizeof(uint32_t);
 //!!!R?	if (strcmp(hdr.Command, "version") && strcmp(hdr.Command, "verack"))
 }
@@ -884,9 +908,9 @@ ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 
 	uint32_t magic = rd.ReadUInt32();
 	if (magic != ChainParams.ProtocolMagic)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 
-	DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
+	DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
 	ptr<CoinMessage> m = CoinMessage::ReadFromStream(link, rd);
 		
 	TRC(6, ChainParams.Symbol << " " << link.Peer->get_EndPoint() << " " << *m);
@@ -1207,7 +1231,7 @@ void VersionMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 	CoinLink& clink = static_cast<CoinLink&>(link);
 	if (clink.PeerVersion)
-		Throw(E_COIN_DupVersionMessage);
+		Throw(CoinErr::DupVersionMessage);
 
 	if (eng.CheckSelfVerNonce(Nonce)) {
 		clink.PeerVersion = ProtocolVer;
@@ -1449,7 +1473,7 @@ void CoinPartialMerkleTree::Init(const vector<HashValue>& vHash, const dynamic_b
 
 pair<HashValue, vector<HashValue>> CoinPartialMerkleTree::ExtractMatches() const {
 	if (NItems==0 || NItems>MAX_BLOCK_SIZE/60 || Items.size()>NItems)
-		Throw(E_COIN_Misbehaving);
+		Throw(CoinErr::Misbehaving);
 	size_t nBitsUsed = 0;
 	int nHashUsed = 0;
 	pair<HashValue, vector<HashValue>> r;
@@ -1513,7 +1537,7 @@ void MerkleBlockMessage::Process(P2P::Link& link) {
 
 		pair<HashValue, vector<HashValue>> pp = PartialMT.ExtractMatches();
 		if (pp.first != Block.get_MerkleRoot())
-			Throw(E_COIN_MerkleRootMismatch);
+			Throw(CoinErr::MerkleRootMismatch);
 		if (pp.second.empty())
 			Block.Process(&link);
 		else {
@@ -1552,7 +1576,7 @@ double CoinEng::ToDifficulty(const Target& target) {
 
 void CoinEng::CheckCoinbasedTxPrev(int height, const Tx& txPrev) {
 	if (height-txPrev.Height < ChainParams.CoinbaseMaturity)
-		Throw(E_COIN_RecentCoinbase);
+		Throw(CoinErr::RecentCoinbase);
 }
 
 void IBlockChainDb::Recreate() {
@@ -1567,7 +1591,7 @@ void IBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend) {
 	if (!bSpend)
 		vSpend.resize(std::max(vSpend.size(), size_t(op.Index+1)));
 	else if (op.Index >= vSpend.size() || !vSpend[op.Index])
-		Throw(E_COIN_InputsAlreadySpent);
+		Throw(CoinErr::InputsAlreadySpent);
 	vSpend[op.Index] = !bSpend;
 	SaveCoinsByTxHash(op.TxHash, vSpend);
 }

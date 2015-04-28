@@ -21,7 +21,6 @@ using namespace Ext::Num;
 #include "script.h"
 #include "crypter.h"
 #include "eng.h"
-#include "coin-msg.h"
 #include "coin-model.h"
 
 namespace Coin {
@@ -70,7 +69,7 @@ bool CoinsView::HasInput(const OutPoint& op) const {
 		return bHas;
 	CoinEng& eng = Eng();
 	if (!eng.Db->FindTx(op.TxHash, 0))											//!!! Double find. Should be optimized. But we need this check during Reorganize()
-		Throw(E_COIN_TxNotFound);
+		Throw(CoinErr::TxNotFound);
 	vector<bool> vSpend = eng.Db->GetCoinsByTxHash(op.TxHash);
 	return m_outPoints[op] = op.Index < vSpend.size() && vSpend[op.Index];
 }
@@ -293,7 +292,7 @@ void TxObj::Write(BinaryWriter& wr) const {
 
 void TxObj::Read(const BinaryReader& rd) {
 	ASSERT(!m_bLoadedIns);
-	DBG_LOCAL_IGNORE(E_COIN_Misbehaving);
+	DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
 
 	Ver = rd.ReadUInt32();
 	ReadPrefix(rd);
@@ -485,7 +484,7 @@ HashValue160 CoinEng::GetHash160ById(int64_t id) {
 		}
 		return pkh.Hash160;
 	} else
-		Throw(E_EXT_DB_NoRecord);
+		Throw(ExtErr::DB_NoRecord);
 }
 
 Blob CoinEng::GetPkById(int64_t id) {
@@ -497,7 +496,7 @@ Blob CoinEng::GetPkById(int64_t id) {
 	Blob pk = Db->FindPubkey(id);
 	if (!!pk) {
 		if (pk.Size == 20)
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(CoinErr::InconsistentDatabase);
 		PubKeyHash160 pkh = PubKeyHash160(ToUncompressedKey(pk));
 		EXT_LOCK (Caches.Mtx) {
 			if (Caches.PubkeyCacheEnabled)
@@ -505,7 +504,7 @@ Blob CoinEng::GetPkById(int64_t id) {
 		}
 		return pkh.PubKey;
 	} else
-		Throw(E_EXT_DB_NoRecord);
+		Throw(ExtErr::DB_NoRecord);
 }
 
 bool CoinEng::GetPkId(const HashValue160& hash160, CIdPk& id) {
@@ -522,7 +521,7 @@ bool CoinEng::GetPkId(const HashValue160& hash160, CIdPk& id) {
 		if ((pkh = DbPubKeyToHashValue160(pk)).Hash160 != hash160)
 			return false;
 	} else {
-		Throw(E_EXT_CodeNotReachable); //!!!
+		Throw(ExtErr::CodeNotReachable); //!!!
 		Db->InsertPubkey((int64_t)id, hash160);
 		pkh = PubKeyHash160(nullptr, hash160);
 	}
@@ -558,21 +557,21 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 		}
 		if (hash160 != HashValue160(mb))
 			return false;
-		Throw(E_EXT_CodeNotReachable); //!!!
+		Throw(ExtErr::CodeNotReachable); //!!!
 		Db->UpdatePubkey((int64_t)id, compressed);
 		EXT_LOCK (Caches.Mtx) {
 			Caches.m_cachePkIdToPubKey[id] = PubKeyHash160(cbuf, hash160);
 		}
 		return true;
 	}
-	Throw(E_EXT_CodeNotReachable); //!!!
+	Throw(ExtErr::CodeNotReachable); //!!!
 	Db->InsertPubkey((int64_t)id, compressed);
 	return true;
 }
 
 void TxOut::CheckForDust() const {
 	if (Value < 3*(Eng().ChainParams.MinTxFee * (EXT_BIN(_self).Size + 148) / 1000))
-		Throw(E_COIN_TxAmountTooSmall);
+		Throw(CoinErr::TxAmountTooSmall);
 }
 
 const Blob& TxOut::get_PkScript() const {
@@ -603,7 +602,7 @@ const Blob& TxOut::get_PkScript() const {
 			}
 			break;
 		default:
-			Throw(E_EXT_CodeNotReachable);
+			Throw(ExtErr::CodeNotReachable);
 		}
 	}
 	return m_pkScript;
@@ -706,7 +705,7 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 
 	uint64_t v;
 //!!!?	if (tx.Ver != 1)
-//		Throw(E_EXT_New_Protocol_Version);
+//		Throw(ExtErr::New_Protocol_Version);
 
 	tx.EnsureCreate();
 
@@ -766,30 +765,30 @@ void Tx::Check() const {
 	CoinEng& eng = Eng();
 
 	if (TxIns().empty())
-		Throw(E_COIN_BadTxnsVinEmpty);
+		Throw(CoinErr::BadTxnsVinEmpty);
 	if (TxOuts().empty())
-		Throw(E_COIN_BadTxnsVoutEmpty);
+		Throw(CoinErr::BadTxnsVoutEmpty);
 
 	bool bIsCoinBase = IsCoinBase();
 	int64_t nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
         if (!txOut.IsEmpty()) {
 			if (txOut.Value < 0)
-				Throw(E_COIN_BadTxnsVoutNegative);
+				Throw(CoinErr::BadTxnsVoutNegative);
 			if (!bIsCoinBase && txOut.Value < eng.ChainParams.MinTxOutAmount)
-				Throw(E_COIN_TxOutBelowMinimum);
+				Throw(CoinErr::TxOutBelowMinimum);
 		}
 		eng.CheckMoneyRange(nOut += eng.CheckMoneyRange(txOut.Value));
 	}
 	unordered_set<OutPoint> outPoints;
 	EXT_FOR(const TxIn& txIn, TxIns()) {									// Check for duplicate inputs
 		if (!outPoints.insert(txIn.PrevOutPoint).second)
-			Throw(E_COIN_DupTxInputs);
+			Throw(CoinErr::DupTxInputs);
 		if (!bIsCoinBase && txIn.PrevOutPoint.IsNull())
-			Throw(E_COIN_BadTxnsPrevoutNull);
+			Throw(CoinErr::BadTxnsPrevoutNull);
 	}
 	if (bIsCoinBase && !between(int(TxIns()[0].Script().Size), 2, 100))
-		Throw(E_COIN_BadCbLength);
+		Throw(CoinErr::BadCbLength);
 
 	eng.OnCheck(_self);
 }
@@ -887,10 +886,10 @@ void Tx::CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const
 		m_pimpl->CheckCoinStakeReward(valOut - nValueIn, target);
 	else {
 		if (nValueIn < valOut)
-			Throw(E_COIN_ValueInLessThanValueOut);
+			Throw(CoinErr::ValueInLessThanValueOut);
 		int64_t nTxFee = nValueIn-valOut;
 		if (nTxFee < minFee)
-			Throw(E_COIN_TxFeeIsLow);
+			Throw(CoinErr::TxFeeIsLow);
 		nFees = Eng().CheckMoneyRange(nFees + nTxFee);
 	}
 }
@@ -928,14 +927,14 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 				const TxOut& txOut = txPrev.TxOuts()[op.Index];
 				if (t_bPayToScriptHash) {
 					if ((nSigOp += CalcSigOpCount(txOut.PkScript, txIn.Script())) > MAX_BLOCK_SIGOPS)
-						Throw(E_COIN_TxTooManySigOps);
+						Throw(CoinErr::TxTooManySigOps);
 				}
 
 				if (txPrev.IsCoinBase())
 					eng.CheckCoinbasedTxPrev(height, txPrev);
 
 				if (!view.HasInput(op))
-					Throw(E_COIN_InputsAlreadySpent);
+					Throw(CoinErr::InputsAlreadySpent);
 				view.SpendInput(op);
 
 				if (!bBlock || eng.BestBlockHeight() > eng.ChainParams.LastCheckpointHeight-INITIAL_BLOCK_THRESHOLD)	// Skip ECDSA signature verification when connecting blocks (fBlock=true) during initial download
@@ -953,7 +952,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 			CheckInOutValue(nValueIn, nFees, minFee, target);
 	}
 	if (nSigOp > MAX_BLOCK_SIGOPS)
-		Throw(E_COIN_TxTooManySigOps);
+		Throw(CoinErr::TxTooManySigOps);
 	nBlockSigOps = nSigOp;
 	view.TxMap[hashTx] = _self;
 }
@@ -966,7 +965,7 @@ int Tx::get_SigOpCount() const {
 	}
 	EXT_FOR (const TxOut& txOut, TxOuts()) {
 		try {																		//!!! should be more careful checking
-			DBG_LOCAL_IGNORE(E_EXT_EndOfStream);
+			DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
 			
 			r += CalcSigOpCount1(txOut.get_PkScript());
 		} catch (RCExc) {			

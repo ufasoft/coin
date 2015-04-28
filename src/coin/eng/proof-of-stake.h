@@ -86,10 +86,10 @@ public:
 	const PosTxObj& GetTxObj(int idx) const { return *(const PosTxObj*)(get_Txes()[idx].m_pimpl.get()); }
 
 	virtual void CheckCoinStakeTimestamp() {
-		DBG_LOCAL_IGNORE(E_COIN_TimestampViolation);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TimestampViolation);
 
 		if (GetTxObj(1).Timestamp != Timestamp)
-			Throw(E_COIN_TimestampViolation);
+			Throw(CoinErr::TimestampViolation);
 	}
 
 	virtual void WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockPrev) const;
