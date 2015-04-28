@@ -4,9 +4,11 @@
 
 #define UCFG_TRC 1
 
-#define UCFG_USE_TOR 0
-
-#define UCFG_USE_TOR UCFG_WIN32_FULL
+#ifdef _AFXDLL
+#	define UCFG_USE_TOR UCFG_WIN32_FULL
+#else
+#	define UCFG_USE_TOR 0
+#endif
 
 #define UCFG_EXPORT_COIN
 
