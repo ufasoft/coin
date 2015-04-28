@@ -1113,10 +1113,10 @@ path CoinEng::VGetDbFilePath() {
    			r += ".blocks";
    			break;
    		case EngMode::BlockExplorer:
-   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol / (ChainParams.Symbol + ".explorer");
+   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol.c_str() / (ChainParams.Symbol + ".explorer").c_str();
    			break;
    		case EngMode::Bootstrap:
-   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol / (ChainParams.Symbol + ".bootstrap-index");
+   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol.c_str() / (ChainParams.Symbol + ".bootstrap-index").c_str();
    			break;
    		}
    	}
