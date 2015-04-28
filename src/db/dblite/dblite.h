@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 
@@ -427,6 +432,7 @@ public:
 	virtual bool SeekToPrev();
 	virtual void Delete();
 	virtual void Put(ConstBuf k, const ConstBuf& d, bool bInsert) =0;
+	virtual void Update(const ConstBuf& d) { Put(get_Key(), d, false); }
 	virtual void PushFront(ConstBuf k, const ConstBuf& d) { Throw(E_NOTIMPL); }
 	virtual void Drop() =0;
 	virtual void Balance() {}
@@ -434,7 +440,7 @@ protected:
 	Blob m_bigKey, m_bigData;
 	ConstBuf m_key, m_data;
 	uint32_t NPage;										// used in get_Key()
-	CBool Initialized, Deleted, Eof, IsDbDirty;
+	CBool Initialized, Deleted, Eof, IsDbDirty, Positioned;
 
 	bool ClearKeyData() {
 		m_bigKey, m_bigData = Blob();
@@ -471,12 +477,19 @@ public:
 	bool SeekToFirst() { return m_pimpl->SeekToFirst(); }
 	bool SeekToLast() { return m_pimpl->SeekToLast(); }
 	bool Seek(CursorPos cPos, const ConstBuf& k = ConstBuf());
-	bool SeekToKey(const ConstBuf& k) { return m_pimpl->SeekToKey(k); }
+	
+	bool SeekToKey(const ConstBuf& k) {
+		bool r = m_pimpl->SeekToKey(k);
+		m_pimpl->Positioned = r;
+		return r;
+	}
+	
 	bool SeekToNext() { return m_pimpl->SeekToNext(); }
 	bool SeekToPrev() { return m_pimpl->SeekToPrev(); }
 	bool Get(const ConstBuf& k) { return SeekToKey(k); }
 	void Delete();
 	void Put(ConstBuf k, const ConstBuf& d, bool bInsert = false);
+	void Update(const ConstBuf& d);								// requires to call Seek() before. Optiomization: key k ignored if possible
 	void PushFront(ConstBuf k, const ConstBuf& d) { m_pimpl->PushFront(k, d); }
 	void Drop() { m_pimpl->Drop(); }
 private:
