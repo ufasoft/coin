@@ -259,7 +259,7 @@ public:
 		String sdata = EXT_STR(data);
 		if (HasSubmitBlockMethod) {
 			try {
-				DBG_LOCAL_IGNORE(E_EXT_JSON_RPC_MethodNotFound);
+				DBG_LOCAL_IGNORE_CONDITION(ExtErr::JSON_RPC_MethodNotFound);
 				VarValue par;
 				if (!workid.empty())
 					par.Set("workid", workid);
@@ -301,7 +301,7 @@ protected:
 
 		String sjson;
 		try {
-			DBG_LOCAL_IGNORE_CONDITION(error_condition(500, http_category()));
+			DBG_LOCAL_IGNORE_CONDITION_OBJ(error_condition(500, http_category()));
 
 			sjson = wc.UploadString(RpcUrl.ToString(), JsonRpc.Request(method, params));
 		} catch (WebException& ex) {

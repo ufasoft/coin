@@ -226,7 +226,7 @@ void CoinSerialized::WriteString(BinaryWriter& wr, RCString s) {
 Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
 	size_t size = (size_t)ReadVarInt(rd);
 	if (size > 100000000)	//!!!
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	return rd.ReadBytes(size);
 }
 
