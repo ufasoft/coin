@@ -11,7 +11,7 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 
 	Blob blob = Swab32(Blob::FromHexString(json[5].ToString()));
 	if (blob.Size != 4)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	r->Ver = letoh(*(uint32_t*)blob.constData());
 		
 	r->PrevBlockHash = HashValue(Swab32(Blob::FromHexString(json[1].ToString())));
@@ -27,11 +27,11 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 		r->MerkleBranch.Vec[i] = HashValue(Blob::FromHexString(vMerk[i].ToString()));
 		
 	if ((blob = Swab32(Blob::FromHexString(json[6].ToString()))).Size != 4)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	r->DifficultyTargetBits = letoh(*(uint32_t*)blob.constData());
 
 	if ((blob = Swab32(Blob::FromHexString(json[7].ToString()))).Size != 4)
-		Throw(E_EXT_Protocol_Violation);
+		Throw(ExtErr::Protocol_Violation);
 	r->SetTimestamps(DateTime::from_time_t(letoh(*(uint32_t*)blob.constData())));
 
 	return r;
@@ -90,7 +90,7 @@ void StratumClient::OnLine(RCString line) {
 			SetDifficulty(req.Params[0].ToDouble());
 		} else {
 			if (State < 1)
-				Throw(E_EXT_Protocol_Violation);
+				Throw(ExtErr::Protocol_Violation);
 			if (req.Method == "mining.notify") {
 				EXT_LOCK (MtxData) {
 #ifdef X_DEBUG//!!!D
@@ -123,7 +123,7 @@ void StratumClient::OnLine(RCString line) {
 			ExtraNonce1 = Blob::FromHexString(resp.Result[1].ToString());
 			int cbExtraNonce2 = (int)resp.Result[2].ToInt64();
 			if (cbExtraNonce2 == 0)
-				Throw(E_EXT_Protocol_Violation);
+				Throw(ExtErr::Protocol_Violation);
 			ExtraNonce2 = Blob(0, cbExtraNonce2);
 			++State;
 			vector<VarValue> params;

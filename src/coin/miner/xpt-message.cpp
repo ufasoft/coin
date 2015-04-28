@@ -1,18 +1,15 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
-#include "xpt.h"
+#include "miner-share.h"
 
 namespace Coin {
 
-EXT_THREAD_PTR(XptPeer, t_pXptPeer);
+EXT_THREAD_PTR(XptPeer) t_pXptPeer;
 
 XptPeer& Xpt() {
 	return *t_pXptPeer;
@@ -67,7 +64,7 @@ void XptMessage::WriteString8(BinaryWriter& wr, RCString s) {
 
 void XptMessage::WriteString16(BinaryWriter& wr, RCString s) {
 	Blob blob = Encoding::UTF8.GetBytes(s);
-	UInt16 len = (UInt16)blob.Size;
+	uint16_t len = (uint16_t)blob.Size;
 	(wr << len).BaseStream.WriteBuffer(blob.constData(), len);
 }
 
@@ -77,7 +74,7 @@ String XptMessage::ReadString8(const BinaryReader& rd) {
 }
 
 String XptMessage::ReadString16(const BinaryReader& rd) {
-	UInt16 len = rd.ReadUInt16();
+	uint16_t len = rd.ReadUInt16();
 	return Encoding::UTF8.GetChars(rd.ReadBytes(len));
 }
 
@@ -86,7 +83,7 @@ Blob XptMessage::ReadBlob16(const BinaryReader& rd) {
 }
 
 void XptMessage::WriteBlob16(BinaryWriter& wr, const ConstBuf& cbuf) {
-	UInt16 len = (UInt16)cbuf.Size;
+	uint16_t len = (uint16_t)cbuf.Size;
 	(wr << len).BaseStream.WriteBuffer(cbuf.P, len);
 }
 
@@ -149,8 +146,8 @@ void AuthAckXptMessage::Read(const BinaryReader& rd) {
 }
 
 void Workdata1XptMessage::ShareBundle::Write(BinaryWriter& wr) const {
-	wr << Version << Height << Bits << BitsForShare << (UInt32)to_time_t(Timestamp) << BundleFlags << PrevBlockHash << FixedPrimorialMultiplier << FixedHashFactor
-		<< SieveSizeMin << SieveSizeMax << PrimesToSieveMin << PrimesToSieveMax << SieveChainLength << NonceMin << NonceMax << (UInt32)PayloadMerkles.size();
+	wr << Version << Height << Bits << BitsForShare << (uint32_t)to_time_t(Timestamp) << BundleFlags << PrevBlockHash << FixedPrimorialMultiplier << FixedHashFactor
+		<< SieveSizeMin << SieveSizeMax << PrimesToSieveMin << PrimesToSieveMax << SieveChainLength << NonceMin << NonceMax << (uint32_t)PayloadMerkles.size();
 	for (size_t i=0; i<PayloadMerkles.size(); ++i)
 		wr << PayloadMerkles[i];
 }
@@ -173,22 +170,22 @@ void Workdata1XptMessage::Write(BinaryWriter& wr) const {
 			wr << MinerBlock->HashTarget.ToDifficultyBits() << HashTargetShare.ToDifficultyBits();
 		else
 			wr << MinerBlock->HashTarget << HashTargetShare;
-		wr << (UInt32)to_time_t(Timestamp) << MinerBlock->PrevBlockHash << MinerBlock->MerkleRoot();
+		wr << (uint32_t)to_time_t(Timestamp) << MinerBlock->PrevBlockHash << MinerBlock->MerkleRoot();
 #ifdef X_DEBUG//!!!D
-		TRC(1, "time_t: " << (UInt32)to_time_t(Timestamp) << "   0x" << hex << (UInt32)to_time_t(Timestamp));
+		TRC(1, "time_t: " << (uint32_t)to_time_t(Timestamp) << "   0x" << hex << (uint32_t)to_time_t(Timestamp));
 #endif
 		WriteBlob16(wr, MinerBlock->Coinb1 + ExtraNonce1);
 		WriteBlob16(wr, MinerBlock->Coinb2);
-		wr << UInt16(MinerBlock->Txes.size()-1);
+		wr << uint16_t(MinerBlock->Txes.size()-1);
 		for (size_t i=1; i<MinerBlock->Txes.size(); ++i)
 			wr << MinerBlock->Txes[i].Hash;
 	} else if (xpt.ProtocolVersion == 4) {
-		wr << EarnedShareValue << (UInt32)Bundles.size();
+		wr << EarnedShareValue << (uint32_t)Bundles.size();
 		for (size_t i=0; i<Bundles.size(); ++i)
 			Bundles[i].Write(wr);
 	} else {
-		wr << MinerBlock->Ver << MinerBlock->Height << MinerBlock->DifficultyTargetBits << BitsForShare << (UInt32)to_time_t(Timestamp) << MinerBlock->PrevBlockHash
-			<< (UInt32)Merkles.size();
+		wr << MinerBlock->Ver << MinerBlock->Height << MinerBlock->DifficultyTargetBits << BitsForShare << (uint32_t)to_time_t(Timestamp) << MinerBlock->PrevBlockHash
+			<< (uint32_t)Merkles.size();
 		for (size_t i=0; i<Merkles.size(); ++i)
 			wr << Merkles[i];
 	}
@@ -238,7 +235,7 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 
 	ASSERT(xpt.Algo == MinerShare->Algo);
 
-	wr << MinerShare->m_merkleRoot.get() << MinerShare->PrevBlockHash << MinerShare->Ver << (UInt32)to_time_t(MinerShare->Timestamp) << MinerShare->Nonce << MinerShare->DifficultyTargetBits;
+	wr << MinerShare->m_merkleRoot.get() << MinerShare->PrevBlockHash << MinerShare->Ver << (uint32_t)to_time_t(MinerShare->Timestamp) << MinerShare->Nonce << MinerShare->DifficultyTargetBits;
 	switch (Xpt().Algo) {
 	case HashAlgo::Momentum:
 		wr << MinerShare->BirthdayA << MinerShare->BirthdayB;
@@ -276,7 +273,7 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 	rd >> merkleRoot;
 	MinerShare->m_merkleRoot = merkleRoot;
 	rd >> MinerShare->PrevBlockHash >> MinerShare->Ver;
-	UInt32 timeT = rd.ReadUInt32();
+	uint32_t timeT = rd.ReadUInt32();
 #ifdef X_DEBUG//!!!D
 		TRC(1, timeT);
 #endif
@@ -292,7 +289,7 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 		rd >> MinerShare->MerkleRootOriginal;
 		MinerShare->ExtraNonce.Size = rd.ReadByte();
 		if (MinerShare->ExtraNonce.Size > 16)
-			Throw(E_EXT_Protocol_Violation);
+			Throw(ExtErr::Protocol_Violation);
 		MinerShare->ExtraNonce = rd.ReadBytes(MinerShare->ExtraNonce.Size);
 		break;
 	case HashAlgo::Prime:
@@ -303,6 +300,10 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 	}
 	if (xpt.ProtocolVersion >= 5)
 		rd >> Cookie;
+}
+
+ptr<XptMessage> CreateSubmitShareXptMessage() {
+	return new SubmitShareXptMessage;
 }
 
 void ShareAckXptMessage::Write(BinaryWriter& wr) const {
@@ -327,7 +328,7 @@ void NonceRange::Read(const BinaryReader& rd) {
 }
 
 void Pow::Write(BinaryWriter& wr) const {
-	wr << (UInt16)(Ranges.size()-1) << PrevBlockHash << MerkleRoot << (UInt32)to_time_t(DtStart) << SieveSize << PrimesToSieve << Ranges.back().NonceEnd;
+	wr << (uint16_t)(Ranges.size()-1) << PrevBlockHash << MerkleRoot << (uint32_t)to_time_t(DtStart) << SieveSize << PrimesToSieve << Ranges.back().NonceEnd;
 	for (size_t i=0; i<Ranges.size(); ++i)
 		Ranges[i].Write(wr);
 }
@@ -342,7 +343,7 @@ void Pow::Read(const BinaryReader& rd) {
 }
 
 void SubmitPowXptMessage::Write(BinaryWriter& wr) const {
-	wr << (UInt16)Pows.size();
+	wr << (uint16_t)Pows.size();
 	for (size_t i=0; i<Pows.size(); ++i)
 		Pows[i].Write(wr);
 }
@@ -395,9 +396,9 @@ void XptPeer::Send(ptr<P2P::Message> m) {
 	CXptThreadKeeper xptKeeper(this);
 
 	MemoryStream ms;
-	BinaryWriter(ms).Ref() << (UInt32)static_cast<XptMessage*>(m.get())->Opcode << *m;
+	BinaryWriter(ms).Ref() << (uint32_t)static_cast<XptMessage*>(m.get())->Opcode << *m;
 	Blob blob = ms;
-	*(UInt32*)blob.data() |= htole(UInt32(blob.Size-4) << 8);
+	*(uint32_t*)blob.data() |= htole(uint32_t(blob.Size-4) << 8);
 	SendBuf(blob);
 }
 

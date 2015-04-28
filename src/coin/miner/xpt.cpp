@@ -1,14 +1,11 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
-#include "xpt.h"
+#include "miner-share.h"
 
 namespace Coin {
 
@@ -49,7 +46,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 					Throw(E_FAIL);
 				}
 			}
-			client.Miner.MaxHeight = max((UInt32)client.Miner.MaxHeight, MinerBlock->Height);
+			client.Miner.MaxHeight = max((uint32_t)client.Miner.MaxHeight, MinerBlock->Height);
 			if (Merkles.empty()) {
 				MinerBlock->SetTimestamps(Timestamp);
 				MinerBlock->HashTarget = HashTargetShare;
@@ -87,7 +84,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 					if (client.JobQueue.size() >= MAX_JOB_QUEUE_SIZE)
 						return;
 					ptr<XptWorkData> wd = new XptWorkData;
-					wd->Client = &client;
+					wd->Client.reset(&client);
 					wd->Data.Size = 128;
 					wd->Height = MinerBlock->Height;
 					wd->Version = MinerBlock->Ver;
@@ -103,7 +100,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 				
 					wd->SieveSizeMin = b.SieveSizeMin;
 					wd->SieveSizeMax = b.SieveSizeMax != 0 ? b.SieveSizeMax : DEFAULT_SIEVE_SIZE;
-					wd->SieveSize = max(wd->SieveSizeMin, min(wd->SieveSizeMax, (UInt32)MAX_SIEVE_SIZE));
+					wd->SieveSize = max(wd->SieveSizeMin, min(wd->SieveSizeMax, (uint32_t)MAX_SIEVE_SIZE));
 
 					if (client.Miner.HashAlgo == HashAlgo::Prime) {
 						wd->PrimesToSieveMin = b.PrimesToSieveMin;
@@ -126,13 +123,13 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 					Throw(E_FAIL);
 				}
 
-				client.Miner.MaxHeight = max((UInt32)client.Miner.MaxHeight, b.Height);
+				client.Miner.MaxHeight = max((uint32_t)client.Miner.MaxHeight, b.Height);
 				for (int j=0; j<b.PayloadMerkles.size(); ++j) {
 					if (client.JobQueue.size() >= MAX_JOB_QUEUE_SIZE)
 						return;
 
 					ptr<XptWorkData> wd = new XptWorkData;
-					wd->Client = &client;
+					wd->Client.reset(&client);
 					wd->Data.Size = 128;
 					wd->Height = b.Height;
 					wd->Version = b.Version;
@@ -148,7 +145,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 				
 					wd->SieveSizeMin = b.SieveSizeMin;
 					wd->SieveSizeMax = b.SieveSizeMax != 0 ? b.SieveSizeMax : DEFAULT_SIEVE_SIZE;
-					wd->SieveSize = max(wd->SieveSizeMin, min(wd->SieveSizeMax, (UInt32)MAX_SIEVE_SIZE));
+					wd->SieveSize = max(wd->SieveSizeMin, min(wd->SieveSizeMax, (uint32_t)MAX_SIEVE_SIZE));
 				
 					wd->PrimesToSieveMin = b.PrimesToSieveMin;
 					wd->PrimesToSieveMax = b.PrimesToSieveMax;
@@ -169,7 +166,7 @@ void ShareAckXptMessage::Process(P2P::Link& link) {
 
 	ptr<BitcoinWorkData> wd = EXT_LOCKED(client.MtxData, client.LastShare);
 	client.Miner.Print(*wd, !ErrorCode, Reason + (ErrorCode ? String() : EXT_STR("  " << "ShareValue: " << ShareValue)));
-	Interlocked::Increment(client.Miner.SubmittedCount);
+	++client.Miner.aSubmittedCount;
 }
 
 void MessageXptMessage::Process(P2P::Link& link) {
@@ -182,7 +179,7 @@ void PingXptMessage::Process(P2P::Link& link) {
 }
 
 XptClient::XptClient(Coin::BitcoinMiner& miner)
-	:	base(0)
+	:	base()
 	,	ConnectionClient(miner)
 	,	DtNextSendPow(DateTime::UtcNow() + TimeSpan::FromSeconds(70))
 {
@@ -195,11 +192,11 @@ XptClient::XptClient(Coin::BitcoinMiner& miner)
 		ProtocolVersion = 5;
 		break;			
 	}
-	std::fill(begin(LenStats), end(LenStats), 0);
+	std::fill(begin(aLenStats), end(aLenStats), 0);
 }
 
 ptr<XptMessage> XptClient::Recv() {
-   	UInt32 opSize = R.ReadUInt32();
+   	uint32_t opSize = R.ReadUInt32();
    	Blob blob(0, opSize >> 8);
    	R.BaseStream.ReadBuffer(blob.data(), blob.Size);
    	ptr<XptMessage> m;
@@ -213,7 +210,7 @@ ptr<XptMessage> XptClient::Recv() {
    	case XPT_OPC_S_MESSAGE:			m = new MessageXptMessage;		break;
 	case XPT_OPC_S_PING:			m = new PingXptMessage;			break;
    	default:
-   		Throw(E_EXT_Protocol_Violation);
+   		Throw(ExtErr::Protocol_Violation);
    	}
 	CXptThreadKeeper xptKeeper(this);
    	BinaryReader(CMemReadStream(blob)) >> *m;
@@ -225,9 +222,9 @@ void XptClient::PrintStats() {
 	case HashAlgo::Prime:
 		{
 			ostringstream os;
-			for (int len=5; len<LenStats.size(); ++len) {
-				os << (len>5 ? "   " : "") << len << "ch: " << LenStats[len];
-				if (len<LenStats.size()-1 &&  0==LenStats[len] && 0==LenStats[len+1])
+			for (int len=5; len<aLenStats.size(); ++len) {
+				os << (len>5 ? "   " : "") << len << "ch: " << aLenStats[len];
+				if (len<aLenStats.size()-1 &&  0==aLenStats[len] && 0==aLenStats[len+1])
 					break;
 			}
 			os << "                  \n";
@@ -276,7 +273,7 @@ void XptClient::Execute() {
 			Send(m);
 			ptr<AuthAckXptMessage> ack = dynamic_cast<AuthAckXptMessage*>(XptClient::Recv().get());
 			if (!ack)
-				Throw(E_EXT_Protocol_Violation);
+				Throw(ExtErr::Protocol_Violation);
 			if (ack->ErrorCode)
 				throw Exception(0x8FFF0000 | ack->ErrorCode, ack->Reason);
 			DateTime dtNextPing = DateTime::UtcNow() + XPT_PING_PERIOD;
@@ -335,9 +332,9 @@ ptr<BitcoinWorkData> XptClient::GetWork() {
 ptr<BitcoinWorkData> GetPrimeTestData() {
 	ptr<XptWorkData> r = new XptWorkData;
 
-
 	return r;
 }
 
 } // Coin::
+
 

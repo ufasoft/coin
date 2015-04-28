@@ -1,9 +1,7 @@
-/*######     Copyright (c) 1997-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #########################################################################################################
-#                                                                                                                                                                                                                                            #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  either version 3, or (at your option) any later version.          #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.   #
-# You should have received a copy of the GNU General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                                                      #
-############################################################################################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 // Support of device "BPCFPGA ModMiner QUAD
 
@@ -29,7 +27,7 @@ const int MAX_FPGA_FREQUENCY = 250; // MHz
 const int DEFAULT_FPGA_FREQUENCY = 220; // MHz
 
 static const String BITSTREAM_FILENAME = "fpgaminer_x6500-overclocker-0402.bit";
-static const String BITSTREAM_URL = String(MANUFACTURER_HTTP_URL) + "/files/bitstreams/" + BITSTREAM_FILENAME;
+static const String BITSTREAM_URL = String(UCFG_MANUFACTURER_HTTP_URL) + "/files/bitstreams/" + BITSTREAM_FILENAME;
 static const uint32_t BISTREAM_USER_ID = 0x42240402;
 static const Blob BITSTREAM_SHA256SUM = Blob::FromHexString("2f90ac200f33d89ac2d00f56123269a6f8265b86873e7c125380eee9cd0274a6");
 
@@ -42,7 +40,7 @@ public:
 	Ext::Temperature Temperature;
 	ptr<BitcoinWorkData> WorkData, PrevWorkData;
 	DateTime DtStartRound, DtNextWorkData;
-	CPointer<Coin::MmqThread> MmqThread;
+	observer_ptr<Coin::MmqThread> MmqThread;
 	byte Id;
 
 	MmqChip() {
@@ -148,7 +146,7 @@ public:
 				*Miner.m_pTraceStream << "Programming FPGA" << (devid==DEVID_ALL ? String("") : " "+Dev.Chips[devid]->Name) << ", please DONT'T EXIT until complete: " << i*100/bitstream.Size << "%                      \r" << flush;
 		}
 		if (m_bStop)
-			Throw(E_EXT_ThreadInterrupted);
+			Throw(ExtErr::ThreadInterrupted);
 			
 		StatusRead();
 
@@ -306,7 +304,7 @@ void MmqThread::CommunicateDevice() {
 	try {
 		Dev.Description = GetDevDescription();
 	} catch (RCExc) {
-		Throw(E_COIN_MINER_FPGA_PROTOCOL);
+		Throw(CoinErr::MINER_FPGA_PROTOCOL);
 	}
 	int n = GetFpgaCount();
 	if (!n)
@@ -315,7 +313,7 @@ void MmqThread::CommunicateDevice() {
 	for (byte devid=0; devid<n; ++devid) {
 		MmqChip *chip = new MmqChip;
 		(Dev.Chips[chip->Id = devid] = chip)->Name = Dev.Name + suffixes[devid];
-		chip->MmqThread = this;
+		chip->MmqThread.reset(this);
 	}
 #ifdef X_DEBUG//!!!D
 	Dev.Chips[0] = nullptr;
@@ -372,8 +370,8 @@ void MmqThread::CommunicateDevice() {
 						Miner.TestAndSubmit(chip.PrevWorkData, nonce);
 					else {
 						++nErr;
-						Interlocked::Increment(Dev.HwErrors);
-						*Miner.m_pTraceStream << chip.Name << " Hardware Error (" << Dev.HwErrors << ")" << endl;
+						++Dev.aHwErrors;
+						*Miner.m_pTraceStream << chip.Name << " Hardware Error (" << Dev.aHwErrors << ")" << endl;
 					}
 				}
 				if (nTotal)
@@ -407,7 +405,7 @@ void MmqThread::CommunicateDevice() {
 		}
 
 		if (dtPrev != DateTime())
-			Interlocked::Add(Miner.HashCount, int32_t(int64_t((now - dtPrev).TotalMilliseconds)  * hashrate * 1000 / UCFG_BITCOIN_NPAR));
+			Miner.aHashCount += int32_t(duration_cast<milliseconds>(now - dtPrev).count() * hashrate * 1000 / UCFG_BITCOIN_NPAR);
 		dtPrev = now;
 
 		Thread::Sleep(100);

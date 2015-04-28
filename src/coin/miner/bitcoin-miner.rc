@@ -28,11 +28,6 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #	include "amd-gpu-resources.rc"
 #endif
 
-#ifndef _AFXDLL
-1 MESSAGETABLE "miner\MSG_EN.bin"
-//1 MESSAGETABLE "coin-msg_MSG_EN.bin"
-//2 MESSAGETABLE "ext_messages_MSG_EN.bin"
-#endif
 
 #endif    // Neutral resources
 /////////////////////////////////////////////////////////////////////////////

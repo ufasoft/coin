@@ -14,7 +14,6 @@
 #include "resource.h"
 
 #include <el/libext/ext-http.h>
-#include "coin-msg.h"
 
 #include "../util/wallet-client.h"
 
