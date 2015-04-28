@@ -631,7 +631,7 @@ public:
 					Throw(CoinErr::XmlFileNotFound);
 #if UCFG_WIN32
 				XmlDocument doc = new XmlDocument;
-				doc.Load(pathXml);
+				doc.Load(pathXml.native());
 				XmlNodeReader rd(doc);
 #else
 				ifstream ifs(pathXml.c_str());
