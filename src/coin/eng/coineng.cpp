@@ -1126,7 +1126,7 @@ path CoinEng::VGetDbFilePath() {
 path CoinEng::GetDbFilePath() {
 	if (m_dbFilePath.empty()) {
 		m_dbFilePath = VGetDbFilePath();
-		m_dbFilePath += Db->DefaultFileExt;
+		m_dbFilePath += Db->DefaultFileExt.c_str();
 	}
 	return m_dbFilePath;
 }
