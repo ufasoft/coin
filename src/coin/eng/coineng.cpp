@@ -1101,7 +1101,7 @@ path CoinEng::GetBootstrapPath() {
 }
 
 path CoinEng::VGetDbFilePath() {
-	path r = AfxGetCApp()->get_AppDataDir() / ChainParams.Name;
+	path r = AfxGetCApp()->get_AppDataDir() / path(ChainParams.Name.c_str());
 	if (!m_cdb.FilenameSuffix.empty())
 		r += m_cdb.FilenameSuffix;
 	else  {
