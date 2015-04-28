@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 import "oaidl.idl";
 import "ocidl.idl";
 
@@ -31,6 +36,16 @@ library CointEng {
 	    [id(5), propget] HRESULT Comment([out,retval] BSTR *r);
 	}
 
+	[uuid(55534654-3F35-46d9-000E-54BAFC250401)]
+	enum EEngMode {
+		DbLess,
+		Lite,
+		BlockParser,
+		Normal,
+		BlockExplorer,
+		Bootstrap
+	};
+
 	[uuid(55534654-3F35-46d9-0001-54BAFC250402), dual, oleautomation]
 	interface IWallet : IDispatch {
 	    [id(1), propget] HRESULT CurrencyName([out,retval] BSTR *r);
@@ -61,6 +76,11 @@ library CointEng {
 		[id(24)] HRESULT ExportWalletToBdb([in] BSTR filepath);
 		[id(25)] HRESULT CancelPendingTxes();
 		[id(26)] HRESULT ImportWallet([in] BSTR filepath, [in] BSTR password);
+		[id(27), propput] HRESULT Mode([in] enum EEngMode mode);
+		[id(27), propget] HRESULT Mode([out,retval] enum EEngMode *pmode);
+		[id(28), propget] HRESULT LiteModeAllowed([out,retval] VARIANT_BOOL *r);
+		[id(29)] HRESULT ExportToBootstrapDat([in] BSTR filepath);
+		[id(30)] HRESULT ImportFromBootstrapDat([in] BSTR filepath);
 	};
 
 	[uuid(55534654-3F35-46d9-0004-54BAFC250402)]
@@ -88,8 +108,10 @@ library CointEng {
 		[id(9)] HRESULT ExportWalletToXml([in] BSTR filepath);
 		[id(10), propget] HRESULT LocalPort([out, retval] int *r);
 		[id(10), propput] HRESULT LocalPort([in] int port);
-		[id(11), propput] HRESULT LiteMode([in] VARIANT_BOOL b);
 		[id(12), propget] HRESULT AppDataDirectory([out, retval] BSTR *dir);
+		[id(13), propget] HRESULT ProxyString([out, retval] BSTR *r);
+		[id(13), propput] HRESULT ProxyString([in] BSTR s);
+		[id(14), propget] HRESULT SupportsTOR([out,retval] VARIANT_BOOL *r);
 	};
 
 	[uuid(55534654-3F35-46d9-0002-54BAFC250401)]
