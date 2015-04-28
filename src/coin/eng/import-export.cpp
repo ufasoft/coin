@@ -249,7 +249,7 @@ LAB_DECRYPTED:
 }
 
 void CoinDb::ImportWallet(const path& filepath, RCString password) {
-	if (ToLower(filepath.extension()) == ".xml")
+	if (ToLower(filepath.extension().native()) == ".xml")
 		ImportXml(filepath);
 	else
 		ImportDat(filepath, password);
