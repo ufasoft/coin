@@ -940,25 +940,25 @@
       <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">$(SRCDIR)el\comp</IncludePaths>
     </MASM>
     <MASM Include="bitcoin_sha256_x86x64.asm">
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">..\..\EL\COMP</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">..\..\el\comp</IncludePaths>
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">$(IntDir)%(FileName).obj</ObjectFileName>
     </MASM>
     <MASM Include="bitset-op.asm">
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\EL\COMP</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">..\..\EL\COMP</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\el\comp</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">..\..\el\comp</IncludePaths>
     </MASM>
   </ItemGroup>
   <ItemGroup>
