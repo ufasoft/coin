@@ -1,12 +1,21 @@
+/*######   Copyright (c) 2012-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include EXT_HEADER_DECIMAL
 using namespace std::decimal;
 
+#include <el/libext/ext-http.h>
+
 #include "util.h"
 #include "block-template.h"
 
-#define LOG(s) TRC(2, s)
+#ifndef LOG		//!!!?
+#	define LOG(s) TRC(2, s)
+#endif
 
 namespace Coin {
 
@@ -53,6 +62,7 @@ public:
 	String Name;
 	path PathDaemon;
 	path DataDir;
+	String Args;
 	observer_ptr<INewBlockNotify> OnNewBlockNotify;
 	
 	Uri RpcUrl;
@@ -73,8 +83,6 @@ public:
 		,	IsTestNet(false)
 		,	EnableNotifications(true)
 		,	WalletNotifications(false)
-		,	Login("u")
-		,	Password("p")
 	{}
 
 	virtual void Start() =0;
