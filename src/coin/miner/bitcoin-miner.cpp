@@ -19,7 +19,7 @@
 #	pragma comment(lib, "libext")
 #	pragma comment(lib, "cryp")
 #	pragma comment(lib, "coinutil")
-#	pragma comment(lib, "miner")
+//#	pragma comment(lib, "miner")
 #endif // defined(_MSC_VER) && !defined(_AFXDLL)
 
 
