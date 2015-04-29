@@ -302,7 +302,7 @@ BitcoinMiner::BitcoinMiner()
 	try {
 		DBG_LOCAL_IGNORE_WIN32(ERROR_RESOURCE_TYPE_NOT_FOUND);	
 
-		UserAgentString += " "+AfxGetCApp()->GetInternalName()+"/"+FileVersionInfo(System.ExeFilePath).ProductVersion;
+		UserAgentString += " "+AfxGetCApp()->GetInternalName()+"/"+FileVersionInfo(String(System.ExeFilePath.native())).ProductVersion;
 	} catch (RCExc) {
 	}
 #else
