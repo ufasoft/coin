@@ -3,6 +3,7 @@
     <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V140') ">v140</PlatformToolset>
     <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V120') ">v120</PlatformToolset>
     <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V110') ">v110</PlatformToolset>
+	<PATH>$(MSBuildThisFileDirectory)..\..\..\tools;$(PATH)</PATH>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
