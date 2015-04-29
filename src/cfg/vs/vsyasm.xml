@@ -93,11 +93,11 @@
       Switch="-u &quot;[value]&quot;" />
     
     <StringProperty
-      Name="ObjectDir"
+      Name="ObjectFile"
       Subcategory="Output"
       HelpContext="0"
-      DisplayName="Object Directory Name"
-      Description="Select the output directory name"
+      DisplayName="Object File Name"
+      Description="Select the output file name"
       Switch="-o &quot;[value]&quot;" />
     
     <StringProperty

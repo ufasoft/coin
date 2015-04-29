@@ -15,12 +15,12 @@
   <ItemDefinitionGroup>
     <YASM>
       <Debug>False</Debug>
-      <ObjectDir>$(IntDir)</ObjectDir>
+      <ObjectFile>$(IntDir)</ObjectFile>
       <PreProc>0</PreProc>
       <Parser>0</Parser>
-      <CommandLineTemplate>vsyasm.exe -Xvc -f $(Platform)  [AllOptions] [AdditionalOptions] [Inputs]</CommandLineTemplate>
-      <Outputs>%(ObjectDir)\%(Filename).obj</Outputs>
-      <ExecutionDescription>Assembling %(Filename)%(Extension)</ExecutionDescription> 
+      <CommandLineTemplate>"$(YasmPath)"vsyasm.exe -Xvc -f $(Platform) [AllOptions] [AdditionalOptions] [Inputs]</CommandLineTemplate>
+      <Outputs>%(ObjectFile)</Outputs>
+      <ExecutionDescription>Assembling %(Filename)%(Extension)</ExecutionDescription>
       <ShowOnlyRuleProperties>false</ShowOnlyRuleProperties>
     </YASM>
   </ItemDefinitionGroup>

@@ -20,7 +20,7 @@
     AfterTargets="$(YASMAfterTargets)"
     Condition="'@(YASM)' != ''"
     DependsOnTargets="$(YASMDependsOn);ComputeYASMOutput"
-    Outputs="@(YASM->'%(Outputs)')"
+    Outputs="@(YASM->'%(ObjectFile)')"
     Inputs="@(YASM);%(YASM.AdditionalDependencies);$(MSBuildProjectFile)">
     <ItemGroup
       Condition="'@(SelectedFiles)' != ''">
@@ -30,8 +30,8 @@
     </ItemGroup>
     <ItemGroup>
       <YASM_tlog
-        Include="%(YASM.ObjectDir)"
-        Condition="'%(YASM.ObjectDir)' != '' and '%(YASM.ExcludedFromBuild)' != 'true'">
+        Include="%(YASM.ObjectFile)"
+        Condition="'%(YASM.ObjectFile)' != '' and '%(YASM.ExcludedFromBuild)' != 'true'">
         <Source>@(YASM, '|')</Source>
       </YASM_tlog>
     </ItemGroup>
@@ -50,8 +50,7 @@
       IncludePaths="%(YASM.IncludePaths)"
       Defines="%(YASM.Defines)"
       UnDefines="%(YASM.UnDefines)"
-      ObjectDir="%(YASM.ObjectDir)"
-	  Outputs="%(YASM.Outputs)"
+      ObjectFile="%(YASM.ObjectFile)"
       ListFile="%(YASM.ListFile)"
       MapFile="%(YASM.MapFile)"
       ErrorFile="%(YASM.ErrorFile)"
@@ -77,8 +76,8 @@
     Condition="'@(YASM)' != ''">
     <ItemGroup>
       <YASMDirsToMake
-        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and !HasTrailingSlash('%(YASM.ObjectDir)')"
-        Include="%(YASM.ObjectDir)" />
+        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and !HasTrailingSlash('%(YASM.ObjectFile)')"
+        Include="%(YASM.ObjectFile)" />
       <Link
         Include="%(YASMDirsToMake.Identity)"
         Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
@@ -91,8 +90,8 @@
     </ItemGroup>
     <ItemGroup>
       <YASMDirsToMake
-        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and HasTrailingSlash('%(YASM.ObjectDir)')"
-        Include="@(YASM->'%(ObjectDir)%(Filename).obj')" />
+        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and HasTrailingSlash('%(YASM.ObjectFile)')"
+        Include="@(YASM->'%(ObjectFile)%(Filename).obj')" />
       <Link
         Include="%(YASMDirsToMake.Identity)"
         Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
