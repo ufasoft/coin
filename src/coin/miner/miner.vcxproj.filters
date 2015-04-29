@@ -4,12 +4,6 @@
     <ClCompile Include="..\..\el\comp\stdafx.cpp">
       <Filter>Comp</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\libext\http.cpp">
-      <Filter>Comp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\libext\internet.cpp">
-      <Filter>Comp</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\el\comp\gpu-cal.cpp">
       <Filter>Comp</Filter>
     </ClCompile>
