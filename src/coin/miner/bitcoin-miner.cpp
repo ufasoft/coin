@@ -176,7 +176,7 @@ public:
 
 	void Execute() override	{
 #if UCFG_COIN_MINER_CHECK_EXE_NAME
-		if (System.get_ExeFilePath().stem().native().find(VER_INTERNALNAME_STR) == String::npos) {
+		if (String(System.get_ExeFilePath().stem().native()).find(VER_INTERNALNAME_STR) == String::npos) {
 			cerr << "The EXE must not be renamed" << endl;
 			Throw(2);
 		}
