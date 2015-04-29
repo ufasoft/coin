@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -42,7 +39,7 @@ double PrimeTester::FermatProbablePrimalityTest(const Bn& n, bool bFastFail) {
 		return 0;
 	m_tmp_T = (n - m_tmp_R) << 24;	
 	mpz_tdiv_q(m_tmp_T.get_mpz_t(), m_tmp_T.get_mpz_t(), n.get_mpz_t());
-	Int64 len = m_tmp_T.get_ui();
+	int64_t len = m_tmp_T.get_ui();
 //	if (!(((n - r) << FRACTIONAL_BITS) / n).AsInt64(len) || len >= (1<<FRACTIONAL_BITS))
 //		Throw(E_FAIL);
 	return double(len) / (1 << FRACTIONAL_BITS);
@@ -71,7 +68,7 @@ double PrimeTester::EulerLagrangeLifchitzTest(const Bn& primePrev, bool bSophieG
 
 	m_tmp_T = (m_tmpNext - m_tmp_R) << 24;	
 	mpz_tdiv_q(m_tmp_T.get_mpz_t(), m_tmp_T.get_mpz_t(), m_tmpNext.get_mpz_t());
-	Int64 len = m_tmp_T.get_ui();
+	int64_t len = m_tmp_T.get_ui();
 //	if (!(((n - r) << FRACTIONAL_BITS) / n).AsInt64(len) || len >= (1<<FRACTIONAL_BITS))
 //		Throw(E_FAIL);
 	return double(len) / (1 << FRACTIONAL_BITS);
@@ -121,7 +118,6 @@ CunninghamLengths PrimeTester::ProbablePrimeChainTest(const Bn& origin, PrimeCha
 	}	
 	return r;
 }
-
 
 
 } // Coin::
