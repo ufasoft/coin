@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #pragma once
 
@@ -17,9 +14,9 @@ extern "C" {
 #endif */
 
 #if UCFG_BITCOIN_ASM
-		bool _cdecl CalcSha256(UInt32 *w, UInt32 midstate[8], UInt32 init[8], DWORD_PTR npar, UInt32& pnonce);
+		bool _cdecl CalcSha256(uint32_t *w, uint32_t midstate[8], uint32_t init[8], DWORD_PTR npar, uint32_t& pnonce);
 #	if defined(_WIN64) || defined(_M_IX86_FP) && _M_IX86_FP >= 2
-		bool _cdecl CalcSha256Sse(__m128i *w, __m128i midstate[8], UInt32 init[8], DWORD_PTR npar, UInt32& pnonce);
+		bool _cdecl CalcSha256Sse(__m128i *w, __m128i midstate[8], uint32_t init[8], DWORD_PTR npar, uint32_t& pnonce);
 #	endif
 #endif
 
@@ -45,7 +42,7 @@ namespace Coin {
 #endif
 
 
-template<> __forceinline __m128i Expand32<__m128i>(UInt32 a) {
+template<> __forceinline __m128i Expand32<__m128i>(uint32_t a) {
 	return _mm_set1_epi32(a);
 }
 
@@ -89,7 +86,7 @@ class SseBitcoinSha256 : public BitcoinSha256 {
 	typedef BitcoinSha256 base;
 public:
 	void PrepareData(const void *midstate, const void *data, const void *hash1);
-	bool FindNonce(UInt32& nonce);
+	bool FindNonce(uint32_t& nonce);
 protected:
 #	if defined(_WIN64) || defined(_M_IX86_FP) && _M_IX86_FP >= 2
 	__m128i m_4midstate[8];
