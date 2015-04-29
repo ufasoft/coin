@@ -19,10 +19,6 @@
 #include <secp256k1/group.h>
 #include <secp256k1/ecdsa.h>
 
-#ifndef UCFG_MODULE_CRYP
-#	pragma comment(lib, "cryp")
-#endif
-
 namespace Ext { namespace Crypto {
 
 class Sec256Signature {
