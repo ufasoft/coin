@@ -32,7 +32,7 @@ void InstallMinerService() {
 		}
 	}
 	CSCManager sm;
-	sm.CreateService(MINER_SERVICE_NAME, MINER_SERVICE_NAME, MAXIMUM_ALLOWED, SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, "\""+System.ExeFilePath+"\" " + String::Join(" ", ss));
+	sm.CreateService(MINER_SERVICE_NAME, MINER_SERVICE_NAME, MAXIMUM_ALLOWED, SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, "\"" + String(System.ExeFilePath.native()) + "\" " + String::Join(" ", ss));
 	cerr << "Service " << MINER_SERVICE_NAME << " installed" << endl;
 }
 
