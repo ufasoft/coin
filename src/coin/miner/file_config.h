@@ -47,8 +47,6 @@
 
 #define VER_PRODUCTNAME_STR "xCoin Miner"
 
-#define VER_LEGALCOPYRIGHT_YEARS "2011-2013"
-
 #define UCFG_CRASHDUMP_COMPRESS 0
 
 #if defined(_AFXDLL) || !defined(_WIN32)
