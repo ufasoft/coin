@@ -1,10 +1,7 @@
-/*######     Copyright (c) 1997-2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #######################################
-#                                                                                                                                                                          #
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation;  #
-# either version 3, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the      #
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU #
-# General Public License along with this program; If not, see <http://www.gnu.org/licenses/>                                                                               #
-##########################################################################################################################################################################*/
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
 
 #include <el/ext.h>
 
@@ -37,7 +34,7 @@ void SseBitcoinSha256::PrepareData(const void *midstate, const void *data, const
 
 #if UCFG_BITCOIN_ASM
 
-bool SseBitcoinSha256::FindNonce(UInt32& nonce) {
+bool SseBitcoinSha256::FindNonce(uint32_t& nonce) {
 
 #if UCFG_BITCOIN_ASM
 	return CalcSha256Sse(m_4w, m_4midstate, m_midstate_after_3, UCFG_BITCOIN_NPAR, nonce);
@@ -71,7 +68,7 @@ bool SseBitcoinSha256::FindNonce(UInt32& nonce) {
 		__m128i e = CalcRounds(m_4w1, v, v, 16, 0, 61);				// We enough this
 #endif
 		__m128i p = _mm_cmpeq_epi32(e + _mm_set1_epi32(g_sha256_hinit[7]), _mm_setzero_si128());
-		UInt64 *p64 = (UInt64*)&p;
+		uint64_t *p64 = (uint64_t*)&p;
 		if (p64[0] | p64[1]) {
 			if (_mm_extract_epi16(p, 0) != 0)
 				return true;
