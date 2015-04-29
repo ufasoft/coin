@@ -19,6 +19,12 @@
     <Filter Include="Source Files\asm">
       <UniqueIdentifier>{5a003bed-17de-4c3b-ba65-fce7a84d823f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\secp256k1">
+      <UniqueIdentifier>{57d96ba9-0ef0-46d6-95fa-7084863be751}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shplib">
+      <UniqueIdentifier>{3b2a2cad-79cc-48d4-a9f5-a95916232ff3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_config.h">
@@ -29,6 +35,126 @@
     </ClInclude>
     <ClInclude Include="secp256k1.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\cipher.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\el\crypto\hash.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecdsa.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecdsa_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\eckey.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\eckey_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_gen.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_gen_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\ecmult_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_5x52_int128_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_10x26.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_10x26_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_gmp.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_gmp_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\field_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\group.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\group_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\hash.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\hash_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\libsecp256k1-config.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_gmp.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_gmp_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\num_openssl_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_4x64.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_8x32.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_8x32_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\scalar_impl.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\secp256k1.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\secp256k1\util.h">
+      <Filter>Header Files\secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\groestl\groestl-config.h">
+      <Filter>shplib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\groestl\sph_types.h">
+      <Filter>shplib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_groestl.h">
+      <Filter>shplib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -58,6 +184,21 @@
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\neoscrypt.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha-1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\aes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\groestl-hash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\FOREIGN\sphlib\groestl.c">
+      <Filter>shplib</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
