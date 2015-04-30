@@ -86,7 +86,7 @@ public:
 	}
 
 	void Flush() override {
-		if (!exchange(Flushed, true) && aAddress && !Storage.ReadOnly)
+		if (!exchange(Flushed, true) && aAddress.load() && !Storage.ReadOnly)
 			Storage.DbFile.Write(aAddress, Storage.ViewSize, uint64_t(N)*Storage.ViewSize);			//!!!TODO race condition
 	}
 
