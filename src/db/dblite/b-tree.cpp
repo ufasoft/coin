@@ -60,7 +60,7 @@ LiteEntry *Page::Entries(byte keySize) const {
 	}
 #endif
 
-	if (!m_pimpl->aEntries) {
+	if (!m_pimpl->aEntries.load()) {
 		PageHeader& h = Header();
 		LiteEntry *p = BuildLiteEntryIndex(h, Malloc(sizeof(LiteEntry) * (h.Num+1)), h.Num, m_pimpl->View->Storage.PageSize, keySize);
 		for (LiteEntry *prev=0; !m_pimpl->aEntries.compare_exchange_weak(prev, p);)
@@ -295,7 +295,7 @@ LAB_FOUND:
 	for (int i=0; i<newPages.size(); ++i) {
 		for (vector<Page>::iterator it=oldPages.begin(); it!=oldPages.end(); ++it) {
 			if (it->Dirty) {
-				ASSERT(!it->m_pimpl->aEntries);
+				ASSERT(!it->m_pimpl->aEntries.load());
 
 				newPages[i].Page = *it;
 				oldPages.erase(it);
