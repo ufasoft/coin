@@ -40,8 +40,9 @@
 	#define _WIN32_WINNT 0x500
 #endif
 
-
-#define WIN32
+#ifndef WIN32
+#	define WIN32
+#endif
 
 //typedef unsigned int u_int;
 //typedef	unsigned short	u_short;
