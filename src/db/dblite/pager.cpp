@@ -913,7 +913,7 @@ Page DbTransaction::Allocate(PageAlloc pa, Page *pCopyFrom) {
 		memset(r.get_Address(), 0, Storage.PageSize);				//!!!TODO: optimize
 		break;
 	}
-	ASSERT(!r.m_pimpl->aEntries && !r.m_pimpl->Overflows);
+	ASSERT(!r.m_pimpl->aEntries.load() && !r.m_pimpl->Overflows);
 	return r;
 }
 
