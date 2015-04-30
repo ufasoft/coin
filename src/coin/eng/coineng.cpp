@@ -28,6 +28,7 @@
 #	endif
 #	pragma comment(lib, "coinutil")
 #	pragma comment(lib, "openssl")
+#	pragma comment(lib, "cryp")
 #endif // defined(_MSC_VER) && !defined(_AFXDLL)
 
 
