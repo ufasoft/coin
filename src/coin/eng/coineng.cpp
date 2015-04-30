@@ -30,6 +30,7 @@
 #	pragma comment(lib, "openssl")
 #	pragma comment(lib, "cryp")
 #	pragma comment(lib, "dblite")
+#	pragma comment(lib, "sqlite3")
 #endif // defined(_MSC_VER) && !defined(_AFXDLL)
 
 

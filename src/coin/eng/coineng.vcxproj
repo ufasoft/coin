@@ -228,7 +228,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ModuleDefinitionFile>coineng.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>coineng-simple.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -317,7 +317,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ModuleDefinitionFile>coineng-64.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>coineng-simple.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -418,7 +418,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>coineng.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>coineng-simple.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -519,7 +519,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>coineng-64.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>coineng-simple.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
