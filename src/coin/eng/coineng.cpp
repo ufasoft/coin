@@ -31,6 +31,9 @@
 #	pragma comment(lib, "cryp")
 #	pragma comment(lib, "dblite")
 #	pragma comment(lib, "sqlite3")
+#	if UCFG_USE_TOR
+#		pragma comment(lib, "tor")
+#	endif
 #endif // defined(_MSC_VER) && !defined(_AFXDLL)
 
 
