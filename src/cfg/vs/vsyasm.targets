@@ -59,7 +59,7 @@
       PreProc="%(YASM.PreProc)"
       Parser="%(YASM.Parser)"
       AdditionalOptions="%(YASM.AdditionalOptions)"
-      Inputs="@(YASM)" />
+      Inputs="%(YASM.Fullpath)" />
   </Target>
   <PropertyGroup>
     <ComputeLinkInputsTargets>
