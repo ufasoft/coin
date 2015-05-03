@@ -1056,7 +1056,9 @@ CoinEngApp::CoinEngApp() {
 	m_internalName = "Coin";
 
 #if !UCFG_WCE
-	m_appDataDir = ToPath(Environment::GetEnvironmentVariable("COIN_APPDATA"));
+	String coinAppData = Environment::GetEnvironmentVariable("COIN_APPDATA");
+	if (!coinAppData.empty())
+		m_appDataDir = ToPath(coinAppData);
 #endif
 
 #if UCFG_TRC //!!!D
