@@ -20,22 +20,24 @@
 #	include "backend-sqlite.h"
 #endif
 
-#if defined(_MSC_VER) && !defined(_AFXDLL)
-#	pragma comment(lib, "libext.lib")
-#	if !UCFG_STDSTL
-#		pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
-#		pragma comment(lib, "el-std")
-#	endif
-#	pragma comment(lib, "coinutil")
-#	pragma comment(lib, "openssl")
+#if defined(_MSC_VER)
 #	pragma comment(lib, "cryp")
-#	pragma comment(lib, "dblite")
-#	pragma comment(lib, "sqlite3")
-#	if UCFG_USE_TOR
-#		pragma comment(lib, "crypt32")
-#		pragma comment(lib, "tor")
-#	endif
-#endif // defined(_MSC_VER) && !defined(_AFXDLL)
+#	ifndef _AFXDLL
+#		pragma comment(lib, "libext.lib")
+#		if !UCFG_STDSTL
+#			pragma comment(lib, "..\\" UCFG_PLATFORM_SHORT_NAME "_Release\\lib\\elrt")
+#			pragma comment(lib, "el-std")
+#		endif
+#		pragma comment(lib, "coinutil")
+#		pragma comment(lib, "openssl")
+#		pragma comment(lib, "dblite")
+#		pragma comment(lib, "sqlite3")
+#		if UCFG_USE_TOR
+#			pragma comment(lib, "crypt32")
+#			pragma comment(lib, "tor")
+#		endif
+#	endif		// !defined(_AFXDLL)
+#endif			// _MSC_VER
 
 
 using Ext::DB::DbException;
@@ -1104,11 +1106,11 @@ void CoinEng::TryUpgradeDb() {
 path CoinEng::GetBootstrapPath() {
 	if (Mode != EngMode::Bootstrap)
 		Throw(errc::invalid_argument);
-	return AfxGetCApp()->get_AppDataDir() / path(ChainParams.Symbol.c_str()) / path(String(ChainParams.Symbol + ".bootstrap.dat").c_str());
+	return AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + ".bootstrap.dat");
 }
 
 path CoinEng::VGetDbFilePath() {
-	path r = AfxGetCApp()->get_AppDataDir() / path(ChainParams.Name.c_str());
+	path r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Name);
 	if (!m_cdb.FilenameSuffix.empty())
 		r += m_cdb.FilenameSuffix.c_str();
 	else  {
@@ -1120,10 +1122,10 @@ path CoinEng::VGetDbFilePath() {
    			r += ".blocks";
    			break;
    		case EngMode::BlockExplorer:
-   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol.c_str() / (ChainParams.Symbol + ".explorer").c_str();
+   			r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + ".explorer");
    			break;
    		case EngMode::Bootstrap:
-   			r = AfxGetCApp()->get_AppDataDir() / ChainParams.Symbol.c_str() / (ChainParams.Symbol + ".bootstrap-index").c_str();
+   			r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + ".bootstrap-index");
    			break;
    		}
    	}
@@ -1133,7 +1135,7 @@ path CoinEng::VGetDbFilePath() {
 path CoinEng::GetDbFilePath() {
 	if (m_dbFilePath.empty()) {
 		m_dbFilePath = VGetDbFilePath();
-		m_dbFilePath += Db->DefaultFileExt.c_str();
+		m_dbFilePath += ToPath(Db->DefaultFileExt);
 	}
 	return m_dbFilePath;
 }

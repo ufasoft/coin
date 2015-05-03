@@ -10,4 +10,9 @@
    	<IntDir>$(SolutionDir)\obj\$(ProjectName)\$(PlatformShortName)_$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)$(PlatformShortName)_$(Configuration)\</OutDir>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>
