@@ -18,9 +18,11 @@ using System.Windows.Shapes;
 
 namespace Coin {
 	public partial class FormOptions : Window {
-		public FormOptions() {
+		public FormOptions(FormMain fmain) {
 			InitializeComponent();
 			cbProxy.SelectedIndex = 0;
+			if (fmain.Eng.SupportsTOR)
+				cbProxy.Items.Add("TOR");			
         }
 
 		private void OnOk(object sender, RoutedEventArgs e) {

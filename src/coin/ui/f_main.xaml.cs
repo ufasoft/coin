@@ -340,7 +340,7 @@ namespace Coin {
         }
 
 		void OnToolsOptions(object sender, RoutedEventArgs argg) {
-			var d = new FormOptions();
+			var d = new FormOptions(this);
 			d.textListeningPort.Text = Eng.LocalPort.ToString();
 
 			var proxyEp = UserAppRegistryKey.GetValue("ProxyEndPoint");
