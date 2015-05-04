@@ -263,10 +263,15 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 	XptPeer& xpt = Xpt();
 	auto algo = xpt.Algo;
+#if UCFG_COIN_PRIME
 	PrimeMinerShare *pms = 0;
+#endif
 	switch (algo) {
+#if UCFG_COIN_PRIME
 	case HashAlgo::Prime:
-		MinerShare = pms = new PrimeMinerShare; break;
+		MinerShare = pms = new PrimeMinerShare;
+		 break;
+#endif
 	default:
 		MinerShare = new Coin::MinerShare; break;
 	}
@@ -294,11 +299,13 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 			Throw(ExtErr::Protocol_Violation);
 		MinerShare->ExtraNonce = rd.ReadBytes(MinerShare->ExtraNonce.Size);
 		break;
+#if UCFG_COIN_PRIME
 	case HashAlgo::Prime:
 		rd >> pms->SieveSize >> pms->SieveCandidate;
 		pms->FixedMultiplier = ReadBigInteger(rd);
 		pms->PrimeChainMultiplier = ReadBigInteger(rd);
 		break;
+#endif
 	}
 	if (xpt.ProtocolVersion >= 5)
 		rd >> Cookie;
