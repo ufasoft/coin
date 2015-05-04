@@ -245,6 +245,7 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 	case HashAlgo::Metis:
 		wr << MinerShare->MerkleRootOriginal << MinerShare->ExtraNonce;
 		break;
+#if UCFG_COIN_PRIME
 	case HashAlgo::Prime:
 		{
 			PrimeMinerShare *pms = dynamic_cast<PrimeMinerShare*>(MinerShare.get());
@@ -254,6 +255,7 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 		}
 		break;
 	}
+#endif
 	if (xpt.ProtocolVersion >= 5)
 		wr << Cookie;
 }

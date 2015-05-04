@@ -24,6 +24,7 @@ public:
 	virtual Coin::HashValue GetHashPow() const;
 };
 
+#if UCFG_COIN_PRIME
 class PrimeMinerShare : public MinerShare {
 	typedef MinerShare base;
 public:
@@ -38,6 +39,7 @@ protected:
 	void WriteHeader(BinaryWriter& wr) const override;
 	uint32_t GetDifficulty() const override;
 };
+#endif // UCFG_COIN_PRIME
 
 class SubmitShareXptMessage : public XptMessage {
 	typedef XptMessage base;
