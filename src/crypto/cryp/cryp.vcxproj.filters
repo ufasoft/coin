@@ -25,6 +25,9 @@
     <Filter Include="shplib">
       <UniqueIdentifier>{3b2a2cad-79cc-48d4-a9f5-a95916232ff3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="shplib\H">
+      <UniqueIdentifier>{5ff9b623-fddb-4199-98eb-649e09031c61}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_config.h">
@@ -148,13 +151,19 @@
       <Filter>Header Files\secp256k1</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\FOREIGN\groestl\groestl-config.h">
-      <Filter>shplib</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\FOREIGN\groestl\sph_types.h">
-      <Filter>shplib</Filter>
+      <Filter>shplib\H</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_groestl.h">
-      <Filter>shplib</Filter>
+      <Filter>shplib\H</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_keccak.h">
+      <Filter>shplib\H</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_shavite.h">
+      <Filter>shplib\H</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\FOREIGN\groestl\sph_types.h">
+      <Filter>shplib\H</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -198,6 +207,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\FOREIGN\sphlib\groestl.c">
+      <Filter>shplib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\FOREIGN\sphlib\keccak.c">
+      <Filter>shplib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\FOREIGN\sphlib\shavite.c">
       <Filter>shplib</Filter>
     </ClCompile>
   </ItemGroup>
