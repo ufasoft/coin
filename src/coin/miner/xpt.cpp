@@ -295,6 +295,7 @@ void XptClient::Execute() {
 
 void XptClient::Submit(BitcoinWorkData *wd) {
 	ptr<MinerShare> share;
+#if UCFG_COIN_PRIME
 	if (XptWorkData *xwd = dynamic_cast<XptWorkData*>(wd)) {
 		ptr<PrimeMinerShare> xshare = new PrimeMinerShare;
 		share = xshare.get();
@@ -303,6 +304,7 @@ void XptClient::Submit(BitcoinWorkData *wd) {
 		xshare->FixedMultiplier = xwd->FixedMultiplier;
 		xshare->PrimeChainMultiplier = xwd->ChainMultiplier;
 	} else
+#endif
 		share = new MinerShare;
 	share->Algo = wd->HashAlgo;
 	share->Ver = wd->Version;
