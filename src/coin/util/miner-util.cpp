@@ -71,6 +71,7 @@ HashValue MinerShare::GetHashPow() const {
 	}
 }
 
+#if UCFG_COIN_PRIME
 void PrimeMinerShare::WriteHeader(BinaryWriter& wr) const {
 	base::WriteHeader(wr);
 	CoinSerialized::WriteBlob(wr, PrimeChainMultiplier.ToBytes());
@@ -86,7 +87,7 @@ uint32_t PrimeMinerShare::GetDifficulty() const {
 	PrimeTester tester;				//!!!TODO move to some long-time scope
 	return uint32_t(tester.ProbablePrimeChainTest(Bn(origin)).BestTypeLength().second * 0x1000000);
 }
-
+#endif // UCFG_COIN_PRIME
 
 
 } // Coin::

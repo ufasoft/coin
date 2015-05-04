@@ -51,6 +51,18 @@ using namespace Ext::Crypto;
 
 #include "coin-err.h"
 
+#ifndef UCFG_COIN_DOGECOIN
+#	define UCFG_COIN_DOGECOIN 1
+#endif
+
+#ifndef UCFG_COIN_MOMENTUM
+#	define UCFG_COIN_MOMENTUM 1
+#endif
+
+#ifndef UCFG_COIN_PRIME
+#	define UCFG_COIN_PRIME 1
+#endif
+
 
 namespace Coin {
 
