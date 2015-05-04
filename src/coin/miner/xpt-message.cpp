@@ -254,8 +254,8 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 			WriteBigInteger(wr, pms->PrimeChainMultiplier);
 		}
 		break;
-	}
 #endif
+	}
 	if (xpt.ProtocolVersion >= 5)
 		wr << Cookie;
 }
