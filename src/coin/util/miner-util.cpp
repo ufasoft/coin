@@ -36,6 +36,7 @@ HashValue MinerShare::GetHash() const {
 		base::WriteHeader(BinaryWriter(ms).Ref());
 		return MetisHash(ms);
 	}
+#if UCFG_COIN_MOMENTUM
 	case HashAlgo::Momentum:
 	{
 		MemoryStream ms;
@@ -43,6 +44,7 @@ HashValue MinerShare::GetHash() const {
 		if (!MomentumVerify(Coin::Hash(ms), BirthdayA, BirthdayB))
 			return s_hashMax;
 	}
+#endif
 	default:
 		return base::GetHash();
 	}
