@@ -544,6 +544,7 @@ public:
 
 	CoinEng(CoinDb& cdb);
 	~CoinEng();
+	static String GetCoinChainsXml();
 	static ptr<CoinEng> CreateObject(CoinDb& cdb, RCString name);
 	void ContinueLoad0();
 	void ContinueLoad();

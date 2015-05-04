@@ -528,18 +528,22 @@ void ChainParams::AddSeedEndpoint(RCString seed) {
 		: IPEndPoint(IPAddress::Parse(seed), DefaultPort));
 }
 
-
-ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
+String CoinEng::GetCoinChainsXml() {
 	String xml;
 	path pathXml = System.GetExeDir() / "coin-chains.xml";
 	if (exists(path(pathXml)))
 		xml = File::ReadAllText(pathXml);
 #if UCFG_WIN32
 	else if (AfxHasResource("coin_chains.xml", RT_RCDATA))
-	    xml = Encoding::UTF8.GetChars(Resource("coin_chains.xml", RT_RCDATA));
+		xml = Encoding::UTF8.GetChars(Resource("coin_chains.xml", RT_RCDATA));
 #endif
 	else
 		Throw(CoinErr::XmlFileNotFound);
+	return xml;
+}
+
+ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
+	String xml = GetCoinChainsXml();
 
 	Coin::ChainParams params;
 	try {

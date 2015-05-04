@@ -625,25 +625,18 @@ public:
 		if (m_vWalletEng.empty()) {
 			m_cdb.Load();
 			vector<String> names;
-			{
-				path pathXml = System.GetExeDir() / "coin-chains.xml";
-				if (!exists(pathXml))
-					Throw(CoinErr::XmlFileNotFound);
-#if UCFG_WIN32
-				XmlDocument doc = new XmlDocument;
-				doc.Load(pathXml.native());
-				XmlNodeReader rd(doc);
+			String xml = CoinEng::GetCoinChainsXml();
+#if UCFG_WIN32		
+			XmlDocument doc = new XmlDocument;
+			doc.LoadXml(xml);		// LoadXml() instead of Load() to eliminate loading shell32.dll
+			XmlNodeReader rd(doc);
 #else
-				ifstream ifs(pathXml.c_str());
-				XmlTextReader rd(ifs);
+			istringstream is(xml.c_str());
+			XmlTextReader rd(is);
 #endif
-				if (rd.ReadToDescendant("Chain")) {
-					do {
-						String name = rd.GetAttribute("Name");
-						names.push_back(name);
-					} while (rd.ReadToNextSibling("Chain"));
-				}
-			}
+			for (bool b = rd.ReadToDescendant("Chain"); b; b=rd.ReadToNextSibling("Chain"))
+				names.push_back(rd.GetAttribute("Name"));
+
 			EXT_FOR (const String& name, names) {
 				m_vWalletEng.push_back(new WalletAndEng(m_cdb, name));
 			}
