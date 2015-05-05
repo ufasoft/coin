@@ -265,16 +265,11 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 	auto algo = xpt.Algo;
 #if UCFG_COIN_PRIME
 	PrimeMinerShare *pms = 0;
-#endif
-	switch (algo) {
-#if UCFG_COIN_PRIME
-	case HashAlgo::Prime:
+	if (algo == HashAlgo::Prime)
 		MinerShare = pms = new PrimeMinerShare;
-		 break;
+	else
 #endif
-	default:
-		MinerShare = new Coin::MinerShare; break;
-	}
+		MinerShare = new Coin::MinerShare;
 	MinerShare->Algo = algo;
 	HashValue merkleRoot;
 	rd >> merkleRoot;
