@@ -223,7 +223,6 @@
       <MapFileName>$(OutDir)/PDB/$(TargetName).map</MapFileName>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">
@@ -281,7 +280,6 @@
       <MapFileName>$(OutDir)/PDB/$(TargetName).map</MapFileName>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <MinimumRequiredVersion>6.0</MinimumRequiredVersion>
     </Link>
     <Lib>
       <TargetMachine>MachineX86</TargetMachine>
@@ -351,7 +349,6 @@
       <AdditionalDependencies>cryp.lib</AdditionalDependencies>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <ImportLibrary>$(TargetDir)\lib\$(TargetName).lib</ImportLibrary>
-      <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">
@@ -403,7 +400,6 @@
       <AdditionalDependencies>
       </AdditionalDependencies>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <MinimumRequiredVersion>6.0</MinimumRequiredVersion>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -469,7 +465,6 @@
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <BaseAddress>0x2F100000</BaseAddress>
-      <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">
@@ -519,7 +514,6 @@
       <ImportLibrary>$(TargetDir)\lib\$(TargetName).lib</ImportLibrary>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
     <Lib>
       <TargetMachine>MachineX86</TargetMachine>
@@ -587,7 +581,6 @@
       <AdditionalDependencies>cryp.lib</AdditionalDependencies>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <ImportLibrary>$(TargetDir)\lib\$(TargetName).lib</ImportLibrary>
-      <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
       <BaseAddress>0x2F100000</BaseAddress>
     </Link>
   </ItemDefinitionGroup>
@@ -634,7 +627,6 @@
       </AdditionalDependencies>
       <LargeAddressAware>false</LargeAddressAware>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <MinimumRequiredVersion>5.2</MinimumRequiredVersion>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
