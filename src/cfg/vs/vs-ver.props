@@ -13,8 +13,13 @@
     <OutDir>$(SolutionDir)$(PlatformShortName)_$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
-    <ClCompile>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-    </ClCompile>
+		<ClCompile>
+      		<DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    	</ClCompile>
+	    <Link>
+    		<LargeAddressAware Condition="'$(Platform)'=='Win32'">true</LargeAddressAware>
+      		<MinimumRequiredVersion Condition="'$(Platform)'=='Win32'">5.01</MinimumRequiredVersion>
+      		<MinimumRequiredVersion Condition="'$(Platform)'=='x64'">5.2</MinimumRequiredVersion>
+    	</Link>
   </ItemDefinitionGroup>
 </Project>
