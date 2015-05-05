@@ -85,12 +85,27 @@ __forceinline M128I Rotr32(M128I v, int n) {
 class SseBitcoinSha256 : public BitcoinSha256 {
 	typedef BitcoinSha256 base;
 public:
+
+
 	void PrepareData(const void *midstate, const void *data, const void *hash1);
 	bool FindNonce(uint32_t& nonce);
-protected:
+
 #	if defined(_WIN64) || defined(_M_IX86_FP) && _M_IX86_FP >= 2
-	__m128i m_4midstate[8];
-	__m128i m_4w[32*UCFG_BITCOIN_WAY];
+	struct CSseData {
+		__m128i m_4midstate[8];
+		__m128i m_4w[32 * UCFG_BITCOIN_WAY];
+	};
+
+	SseBitcoinSha256()
+		: m_sseData(sizeof(CSseData), 16)
+	{}
+protected:
+	AlignedMem m_sseData;
+
+	CSseData& SseData() {
+		return *(CSseData*)m_sseData.get();
+	}
+
 #	endif
 };
 

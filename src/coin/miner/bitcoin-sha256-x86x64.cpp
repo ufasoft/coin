@@ -21,14 +21,16 @@ namespace Coin {
 void SseBitcoinSha256::PrepareData(const void *midstate, const void *data, const void *hash1) {
 	base::PrepareData(midstate, data, hash1);
 
+	CSseData& sseData = SseData();
+
 	for (int i=0; i<8; ++i)
-		m_4midstate[i] = _mm_set1_epi32(m_midstate[i]);
+		sseData.m_4midstate[i] = _mm_set1_epi32(m_midstate[i]);
 
 	for (int i=0; i<=17; ++i)
-		m_4w[i] = _mm_set1_epi32(m_w[i]);
+		sseData.m_4w[i] = _mm_set1_epi32(m_w[i]);
 
 	for (int i=0; i<64; ++i)
-		m_4w[i+64] = _mm_set1_epi32(m_w1[i]);
+		sseData.m_4w[i+64] = _mm_set1_epi32(m_w1[i]);
 }
 
 
@@ -37,7 +39,8 @@ void SseBitcoinSha256::PrepareData(const void *midstate, const void *data, const
 bool SseBitcoinSha256::FindNonce(uint32_t& nonce) {
 
 #if UCFG_BITCOIN_ASM
-	return CalcSha256Sse(m_4w, m_4midstate, m_midstate_after_3, UCFG_BITCOIN_NPAR, nonce);
+	CSseData& sseData = SseData();
+	return CalcSha256Sse(sseData.m_4w, sseData.m_4midstate, m_midstate_after_3, UCFG_BITCOIN_NPAR, nonce);
 
 #else
 	__m128i *m_4w1 = &m_4w[16*UCFG_BITCOIN_WAY];	//!!!?
