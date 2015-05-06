@@ -99,4 +99,4 @@
 
 #define UCFG_BITCOIN_THERMAL_CONTROL 0
 
-
+#define UCFG_USE_TOR 0
