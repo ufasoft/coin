@@ -16,7 +16,6 @@
             <ComboBoxItem Content="None"/>
             <ComboBoxItem Content="SOCKS5"/>
             <ComboBoxItem Content="CONNECT"/>
-            <ComboBoxItem Content="TOR" />
         </ComboBox>
         <TextBox x:Name="editProxy" HorizontalAlignment="Left" Height="23" Margin="204,48,0,0" TextWrapping="Wrap" Text="192.168.0.1:1080" VerticalAlignment="Top" Width="178" Grid.ColumnSpan="3" TabIndex="3"/>
 
