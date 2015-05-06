@@ -293,7 +293,7 @@ namespace Coin {
 			m_Loaded = true;
 			UpdateView();
 			CheckForCommands();
-			RegisterUriHandler();
+//			RegisterUriHandler();
 
 			
 //			OnFileImport(null, null);//!!!D
