@@ -5,6 +5,23 @@
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>..\images\coin-3.ico</ApplicationIcon>
+    <BaseIntermediateOutputPath>$(SolutionDir)$(Platform)_$(Configuration)\</BaseIntermediateOutputPath>
+    <OutputPath>$(SolutionDir)$(Platform)_$(Configuration)\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'D_St|x64' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'R_St|x64' ">
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -14,33 +31,14 @@
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Coin</RootNamespace>
-    <AssemblyName>coin</AssemblyName>
+    <AssemblyName>Groestlcoin-WPF</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
-    <BaseIntermediateOutputPath>$(OUT)\obj\$(AssemblyName)\</BaseIntermediateOutputPath>
-    <OutputPath>$(OUT)\$(Configuration)\</OutputPath>
     <TargetFrameworkProfile>Client</TargetFrameworkProfile>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'D_St|x86' ">
     <DebugSymbols>true</DebugSymbols>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>full</DebugType>
@@ -49,7 +47,7 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'R_St|x86' ">
     <DefineConstants>
     </DefineConstants>
     <Optimize>true</Optimize>
@@ -60,13 +58,15 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Interop.coineng">
-      <HintPath>C:\OUT\Release\inc\Interop.coineng.dll</HintPath>
+    <Reference Include="Interop.coineng, Version=0.1.0.0, Culture=neutral, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
       <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\..\..\..\..\..\OUT\x86_Release\inc\Interop.coineng.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />
@@ -74,6 +74,16 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="..\..\m\guicomp\d_about.xaml">
+      <Link>guicomp\d_about.xaml</Link>
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="..\..\m\guicomp\d_text-info.xaml">
+      <Link>guicomp\d_text-info.xaml</Link>
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="f_address-book.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -86,6 +96,81 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\BalloonIcon.cs">
+      <Link>NotifyIcon\BalloonIcon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\BalloonFlags.cs">
+      <Link>NotifyIcon\BalloonFlags.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\IconDataMembers.cs">
+      <Link>NotifyIcon\IconDataMembers.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\IconState.cs">
+      <Link>NotifyIcon\IconState.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\MouseEvent.cs">
+      <Link>NotifyIcon\MouseEvent.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\NotifyCommand.cs">
+      <Link>NotifyIcon\NotifyCommand.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\NotifyIconData.cs">
+      <Link>NotifyIcon\NotifyIconData.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\NotifyIconVersion.cs">
+      <Link>NotifyIcon\NotifyIconVersion.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\Point.cs">
+      <Link>NotifyIcon\Point.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\TrayInfo.cs">
+      <Link>NotifyIcon\TrayInfo.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\WinApi.cs">
+      <Link>NotifyIcon\WinApi.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\WindowClass.cs">
+      <Link>NotifyIcon\WindowClass.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Interop\WindowMessageSink.cs">
+      <Link>NotifyIcon\WindowMessageSink.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\PopupActivationMode.cs">
+      <Link>NotifyIcon\PopupActivationMode.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\RoutedEventHelper.cs">
+      <Link>NotifyIcon\RoutedEventHelper.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\TaskbarIcon.cs">
+      <Link>NotifyIcon\TaskbarIcon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\TaskbarIcon.Declarations.cs">
+      <Link>NotifyIcon\TaskbarIcon.Declarations.cs</Link>
+    </Compile>
+    <Compile Include="..\..\..\foreign\m-comp\notify-icon\Util.cs">
+      <Link>NotifyIcon\Util.cs</Link>
+    </Compile>
+    <Compile Include="..\..\m\guicomp\d_about.xaml.cs">
+      <Link>guicomp\d_about.xaml.cs</Link>
+      <DependentUpon>d_about.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="..\..\m\guicomp\d_text-info.xaml.cs">
+      <Link>guicomp\d_text-info.xaml.cs</Link>
+      <DependentUpon>d_text-info.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="..\..\m\guicomp\f_querystring.cs">
+      <Link>guicomp\f_querystring.cs</Link>
+      <SubType>form</SubType>
+    </Compile>
+    <Compile Include="..\..\m\guicomp\guicomp.cs">
+      <Link>guicomp\guicomp.cs</Link>
+    </Compile>
+    <Compile Include="..\..\m\win32\win32.cs">
+      <Link>win32\win32.cs</Link>
+    </Compile>
+    <Compile Include="..\..\m\win32\winuser.cs">
+      <Link>win32\winuser.cs</Link>
+    </Compile>
     <Compile Include="app.cs" />
     <Compile Include="f_address-book.xaml.cs">
       <DependentUpon>f_address-book.xaml</DependentUpon>
@@ -140,6 +225,10 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <EmbeddedResource Include="..\..\m\guicomp\f_querystring.resx">
+      <Link>guicomp\f_querystring.resx</Link>
+      <DependentUpon>f_querystring.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -150,16 +239,6 @@
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
     <AppDesigner Include="Properties\" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\m\guicomp\guicomp.csproj">
-      <Project>{0CB510BB-F1E6-4AC6-8E9D-43D93C71F1C4}</Project>
-      <Name>guicomp</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\m\util\u.util.csproj">
-      <Project>{EAD7752E-F97A-4116-ABC1-2E1BA49C2185}</Project>
-      <Name>u.util</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="..\images\coin-3.ico">
@@ -193,6 +272,7 @@
   <ItemGroup>
     <Resource Include="images\litecoin.ico" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>editbin /LARGEADDRESSAWARE $(TargetPath)</PostBuildEvent>
