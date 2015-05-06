@@ -715,12 +715,6 @@
     <ClCompile Include="..\..\el\crypto\sha256.cpp" />
     <ClCompile Include="..\..\el\inet\proxy-client.cpp" />
     <ClCompile Include="..\..\el\inet\proxy.cpp" />
-    <ClCompile Include="..\..\el\libext\win32\simplemapi.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="..\..\el\num\prime.cpp" />
     <ClCompile Include="..\..\el\win\setupdi.cpp" />
     <ClCompile Include="..\..\el\inet\p2p-net.cpp" />
