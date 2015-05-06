@@ -22,10 +22,10 @@
 
 namespace Ext { namespace Crypto {
 
-static struct InitSec256 {
+struct InitSec256 {
 	InitSec256() { secp256k1_start(SECP256K1_START_SIGN | SECP256K1_START_VERIFY); }
 	~InitSec256() { secp256k1_stop(); }
-} s_initSec256;
+} g_initSec256;
 
 Sec256Signature::Sec256Signature() {
 //	secp256k1_ecdsa_sig_init(&m_sig);
