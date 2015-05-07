@@ -58,6 +58,10 @@ protected:
 		return GroestlHash(cbuf);		// OP_HASH256 implementation
 	}
 
+	HashValue HashForAddress(const ConstBuf& cbuf) override {
+		return GroestlHash(cbuf);
+	}
+
 	Target DarkGravityWave(const Block& blockLast, const Block& block, bool bWave3) {
 		const int minBlocks = bWave3 ? 24 : 12,
 			maxBlocks = bWave3 ? 24 : 120;
