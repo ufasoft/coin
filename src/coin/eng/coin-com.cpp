@@ -455,6 +455,7 @@ public:
 
 	HRESULT __stdcall RemoveRecipient(IAddress *addr)
 	METHOD_BEGIN {
+		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
 		CComBSTR bstr;
 		OleCheck(addr->get_Value(&bstr));
 		String s(bstr);

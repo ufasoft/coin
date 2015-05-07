@@ -98,12 +98,12 @@ namespace Coin {
 							break;
 					}
 					finally {
-						Marshal.FinalReleaseComObject(addr);
+//						Marshal.FinalReleaseComObject(addr);
 					}
 				}
 			}
 			if (wf.FormTransactions != null)
-				wf.FormTransactions.UpdateTransactions();
+				wf.FormTransactions.CtlTxes.UpdateTransactions();
 		}
 
 
@@ -294,9 +294,6 @@ namespace Coin {
 			UpdateView();
 			CheckForCommands();
 //			RegisterUriHandler();
-
-			
-//			OnFileImport(null, null);//!!!D
 		}
 
 		public bool EnsurePassphraseUnlock() {
@@ -450,8 +447,11 @@ namespace Coin {
 
 		void ShowTransactions() {
 			WalletForms wf = SelectedWallet();
-			if (wf.FormTransactions == null)
-				wf.FormTransactions = new FormTransactions() { WalletForms = wf };
+			if (wf.FormTransactions == null) {
+				wf.FormTransactions = new FormTransactions();
+				wf.FormTransactions.CtlTxes.WalletForms = wf;
+				wf.FormTransactions.CtlTxes.InitLoaded();
+            }
 			wf.FormTransactions.Show();
 			wf.FormTransactions.Activate();
 		}
@@ -488,7 +488,7 @@ namespace Coin {
 		private void OnAddressBook(object sender, RoutedEventArgs e) {
 			WalletForms wf = SelectedWallet();
 			if (wf.FormAddressBook == null)
-				wf.FormAddressBook = new FormAddressBook() { WalletForms = wf };
+				wf.FormAddressBook = new FormAddressBook(wf);
 			wf.FormAddressBook.Show();
 			wf.FormAddressBook.Activate();
 		}
