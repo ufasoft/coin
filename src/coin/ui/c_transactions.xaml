@@ -10,8 +10,7 @@
 		<local:DateTimeConverter x:Key="dateTimeConverter" />
 	</UserControl.Resources>
 	<DockPanel >
-		
-		<ListView x:Name="lv" MouseDoubleClick="lv_MouseDoubleClick" Margin="0,0,-418,50">
+		<ListView x:Name="lv" MouseDoubleClick="lv_MouseDoubleClick">
 			<ListView.ContextMenu>
 				<ContextMenu >
 					<MenuItem Header="_Info..." Click="OnTxInfo"/>
