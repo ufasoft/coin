@@ -515,7 +515,9 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		}
 		dbtx.Commit();
 		m_masterPassword = newPassword;
- //!!!?		m_dbWallet.ExecuteNonQuery("VACUUM");		// to clean old unencrypted keys
+		
+		m_dbWallet.DisposeCommandsWithoutUnregiter();
+ 		m_dbWallet.ExecuteNonQuery("VACUUM");		// to clean old unencrypted keys
 	}
 }
 
