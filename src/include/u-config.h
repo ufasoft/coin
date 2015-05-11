@@ -20,8 +20,6 @@
 
 #define UCFG_EH_SUPPORT_IGNORE 0
 
-//---------------------------------------------------------------------------
-// Don't change these defines.
 #define UCFG_USELISP 0
 #define UCFG_GUI 0
 #define UCFG_UPGRADE 0
@@ -44,10 +42,6 @@
 #	define WIN32
 #endif
 
-//typedef unsigned int u_int;
-//typedef	unsigned short	u_short;
-
-#define HAVE_BPF_DUMP conflicts
 
 #define MSC_VER _MSC_VER
 
@@ -84,11 +78,6 @@
 
 
 #define _ATL_DLL_IMPL
-//#define USE_STLSOFT
-
-#ifdef _DEBUG
-//	#define CRTDBG_MAP_ALLOC      // define to discover memory leaks
-#endif
 
 #ifndef UCFG_INTRINSIC_MEMFUN
 	#define UCFG_INTRINSIC_MEMFUN 1
