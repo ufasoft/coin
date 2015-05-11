@@ -545,6 +545,7 @@
     <ClInclude Include="..\..\..\FOREIGN\secp256k1\util.h" />
     <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_keccak.h" />
     <ClInclude Include="..\..\..\FOREIGN\sphlib\sph_shavite.h" />
+    <ClInclude Include="..\..\el\crypto\aes-imp.h" />
     <ClInclude Include="..\..\el\crypto\cipher.h" />
     <ClInclude Include="..\..\el\crypto\hash.h" />
     <ClInclude Include="..\..\el\crypto\util.h" />
@@ -690,6 +691,12 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </MASM>
+    <MASM Include="..\..\el\crypto\x86x64\groestl_x86x64.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </MASM>
     <MASM Include="..\..\el\crypto\x86x64\scrypt_x86x64.asm" />
     <MASM Include="..\..\el\crypto\x86x64\sha256_x86x64.asm" />
