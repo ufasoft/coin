@@ -43,7 +43,7 @@ protected:
 			: height>1 ? (max)(5*ChainParams.CoinValue, int64_t(512 * ChainParams.CoinValue * exp(logBase6percent * (height / 10080))))
 			: height==1 ? 240640 * ChainParams.CoinValue
 			: ChainParams.CoinValue;
-		return (bForCheck ? 1 : -1) + r;
+		return (bForCheck ? 1 : -44) + r;			// max difference with reference implementation is 43 until Block #10,000,000
 	}
 
 	HashValue HashFromTx(const Tx& tx) override {
