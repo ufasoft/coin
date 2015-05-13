@@ -22,6 +22,9 @@
 
 #if defined(_MSC_VER)
 #	pragma comment(lib, "cryp")
+#	if UCFG_COIN_GENERATE
+#		pragma comment(lib, "miner")
+#	endif
 #	ifndef _AFXDLL
 #		pragma comment(lib, "libext.lib")
 #		if !UCFG_STDSTL
