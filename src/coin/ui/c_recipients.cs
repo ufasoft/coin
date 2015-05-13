@@ -105,17 +105,17 @@ namespace Coin {
 			}
 		}
 
+		public event SendToRecipientEventHandler SendToRecipient;
+
 		void OnSendMoney(object sender, RoutedEventArgs e) {
 			Address a = GetRecipientSelectedAddress();
-			var dlg = new FormSendMoney();
-			dlg.textAddress.Text = a.Value;
-			dlg.textComment.Text = a.Comment;
-			dlg.Wallet = Wallet;
-			Dialog.ShowDialog(dlg, Window.GetWindow(this));
+			if (SendToRecipient != null)
+				SendToRecipient(this, Wallet, a.Value, null, a.Comment);
 		}
-
 		
 	}
+
+	public delegate void SendToRecipientEventHandler(object sender, IWallet wallet, string address, decimal? amount, string comment);
 
 	public class Address {
 		internal IAddress m_iface;

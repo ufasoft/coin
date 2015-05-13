@@ -1,53 +1,16 @@
-﻿<Window x:Class="Coin.FormAddressBook"
+﻿<Window
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Coin" x:Class="Coin.FormAddressBook"
         Title="AddressBook" Height="324" Width="630"  Closed="FormAddressBook_Closed" Loaded="Window_Loaded">
-    <DockPanel>
+	<DockPanel>
 		<TabControl >
 			<TabItem Header="My Addresses">
-				<ListView x:Name="lvMyAddresses">
-                    <ListView.ContextMenu>
-                        <ContextMenu >
-                            <MenuItem Header="_Copy" Click="OnMyAddressCopy"/>
-                            <MenuItem Header="_Edit Comment" Click="OnMyAddressEditComment"/>
-                            <MenuItem Header="_Generate New..." Click="OnMyAddressGenerateNew"/>
-                        </ContextMenu>
-                    </ListView.ContextMenu>
-                    <ListView.View>
-        		        <GridView>
-							<GridViewColumn DisplayMemberBinding="{Binding Path=Value}" Width="250">
-								<GridViewColumnHeader Tag="Value" Content="Address" />
-							</GridViewColumn>
-                            <GridViewColumn DisplayMemberBinding="{Binding Path=Comment}" Width="300">
-                                <GridViewColumnHeader Tag="Comment" Content="Comment" />
-							</GridViewColumn>
-        		        </GridView>
-		            </ListView.View>					
-				</ListView>
+				<local:CtlMyAddresses x:Name="lvMyAddresses" />
 			</TabItem>
 			<TabItem Header="Recipients" >
-				<ListView x:Name="lvRecipients">
-					<ListView.ContextMenu>
-						<ContextMenu >
-							<MenuItem Header="_Send" Click="OnSendMoney"/>
-							<Separator/>
-							<MenuItem Header="_Add" Click="OnAddRecipient"/>
-							<MenuItem Header="_Edit" Click="OnEditRecipient"/>
-							<MenuItem Header="_Remove" Click="OnRemoveRecipient"/>
-						</ContextMenu>
-					</ListView.ContextMenu>
-					<ListView.View>
-        		        <GridView>
-							<GridViewColumn DisplayMemberBinding="{Binding Path=Value}" Width="250">
-								<GridViewColumnHeader Tag="Value" Content="Address" />
-							</GridViewColumn>
-                            <GridViewColumn  DisplayMemberBinding="{Binding Path=Comment}" Width="300">
-								<GridViewColumnHeader Tag="Comment" Content="Comment" />
-							</GridViewColumn>
-        		        </GridView>
-		            </ListView.View>					
-				</ListView>
-			</TabItem>
+				<local:CtlRecipients x:Name="lvRecipients" SendToRecipient="OnSendToRecipient"/>
+			</TabItem>			
 		</TabControl>
 	</DockPanel>
 </Window>

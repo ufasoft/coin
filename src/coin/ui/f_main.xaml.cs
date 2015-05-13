@@ -382,22 +382,22 @@ namespace Coin {
 
 		public void SendMoney(string netName, string address, decimal amount, string label, string comment) {
 			var dlg = new FormSendMoney();
-			dlg.Wallet = FindWallet(netName).Wallet;
+			dlg.CtlSend.Wallet = FindWallet(netName).Wallet;
 			try {
-				dlg.Wallet.AddRecipient(address, label);
+				dlg.CtlSend.Wallet.AddRecipient(address, label);
 			} catch (Exception) {
 			}
 			if (comment == "")
 				comment = label;
-			dlg.textAddress.Text = address;
-			dlg.textAmount.Text = amount.ToString();
-			dlg.textComment.Text = comment;
+			dlg.CtlSend.textAddress.Text = address;
+			dlg.CtlSend.textAmount.Text = amount.ToString();
+			dlg.CtlSend.textComment.Text = comment;
 			Dialog.ShowDialog(dlg, this);
 		}
 
 		void OnSendMoney(object sender, RoutedEventArgs argg) {
 			var dlg = new FormSendMoney();
-			dlg.Wallet = SelectedWallet().Wallet;
+			dlg.CtlSend.Wallet = SelectedWallet().Wallet;
 			Dialog.ShowDialog(dlg, this);
 		}
 
