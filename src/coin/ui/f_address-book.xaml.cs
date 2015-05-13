@@ -34,11 +34,11 @@ namespace Coin {
 		}
 
 
-
+		ListViewSortHelper LvMyAddressesSortHelper = new ListViewSortHelper();
 
 
 		private void Window_Loaded(object sender, RoutedEventArgs e) {
-			lvMyAddresses.Wallet = Wallet;
+            lvMyAddresses.Wallet = Wallet;
 			lvMyAddresses.UpdateMyAddresses();
 
 			lvRecipients.Wallet = Wallet;

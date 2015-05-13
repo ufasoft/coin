@@ -33,18 +33,17 @@ namespace Coin {
 
 			GridViewColumn c = new GridViewColumn();
 			c.DisplayMemberBinding = new Binding("Value");
-			c.Header = "Address";
+			c.Header = new GridViewColumnHeader() { Tag="Value", Content = "Address" };
 			c.Width = 250;
 			gv.Columns.Add(c);
 
 			c = new GridViewColumn();
 			c.DisplayMemberBinding = new Binding("Comment");
-			c.Header = "Comment";
+			c.Header = new GridViewColumnHeader() { Tag = "Comment", Content = "Comment" };
 			c.Width = 300;
 			gv.Columns.Add(c);
 
 			View = gv;
-			LvMyAddressesSortHelper.ListView = this;
 
 			var menu = new ContextMenu();
 
@@ -62,6 +61,8 @@ namespace Coin {
 
 
 			ContextMenu = menu;
+			
+			LvMyAddressesSortHelper.ListView = this;
 		}
 
 
