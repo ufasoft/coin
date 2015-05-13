@@ -1,0 +1,210 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\el\comp\stdafx.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\gpu-cal.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\gpu-adl.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="bitcoin-sha256.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bitcoin-gpu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bitcoin-sha256-x86x64.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\ext-opencl.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\comp\crashdump.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="miner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\libext\win32\simplemapi.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-opencl.cpp">
+      <Filter>Source Files\devices</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-bitforce.cpp">
+      <Filter>Source Files\devices</Filter>
+    </ClCompile>
+    <ClCompile Include="stratum-client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\sha256.cpp">
+      <Filter>Comp\Crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-fpga-modminer.cpp">
+      <Filter>Source Files\devices</Filter>
+    </ClCompile>
+    <ClCompile Include="serial-device.cpp">
+      <Filter>Source Files\devices</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\win\setupdi.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="dynclock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-cal.cpp">
+      <Filter>Source Files\inc</Filter>
+    </ClCompile>
+    <ClCompile Include="miner-cuda.cpp">
+      <Filter>Source Files\inc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\num\prime.cpp">
+      <Filter>Comp</Filter>
+    </ClCompile>
+    <ClCompile Include="xpt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="xpt-message.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\p2p-net.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\p2p-peers.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-metis.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-sha3.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-solid.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-prime.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-scrypt.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-sha256.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-neoscrypt.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+    <ClCompile Include="bitcoin-miner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy-client.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\inet\proxy.cpp">
+      <Filter>Source Files\p2p</Filter>
+    </ClCompile>
+    <ClCompile Include="hasher\hasher-groestl.cpp">
+      <Filter>Source Files\hasher</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Comp">
+      <UniqueIdentifier>{34cfb8fa-46e1-4279-9256-743e2267a965}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="H">
+      <UniqueIdentifier>{c3c26116-4ef5-4ba9-8e4b-bd09d68ffe49}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{99dc3eee-56ee-4c44-ae7d-947d382340a9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{c1b781a5-7a72-4d16-a33d-1dc7d9a5f595}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\asm">
+      <UniqueIdentifier>{1758a5ef-b1a7-4fc8-84b7-552fe4dfd751}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\asm\test">
+      <UniqueIdentifier>{b6348f31-17a1-40cb-905f-b1c7f3bbbe7d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\devices">
+      <UniqueIdentifier>{fadfd800-2a01-4c95-acc5-5708712fc027}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Comp\Crypto">
+      <UniqueIdentifier>{852f7fed-e0c2-45d3-a04c-4c1904447caf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Comp\Crypto\x86x64">
+      <UniqueIdentifier>{63160de2-bdb2-44e7-be6d-f3a16a6e505b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\inc">
+      <UniqueIdentifier>{324f8e1f-aad2-4b83-a2f1-5459fe26b6bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\p2p">
+      <UniqueIdentifier>{b91d05f3-407c-4ab6-aed4-f24d632910d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\hasher">
+      <UniqueIdentifier>{384deb41-70d3-4a69-a1a3-ebee7f05770c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="bitcoin-sha256.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Resources</Filter>
+    </ClInclude>
+    <ClInclude Include="file_config.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="bitcoin-common.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="bitcoin-sha256sse.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="elf.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="miner.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="..\util\miner-interface.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="serial-device.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="dynclock.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="miner-prime.h">
+      <Filter>H</Filter>
+    </ClInclude>
+    <ClInclude Include="xpt.h">
+      <Filter>H</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="bitcoin-miner.rc">
+      <Filter>Resources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="bitcoin_sha256_x86x64.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+    <MASM Include="..\..\el\crypto\x86x64\sha256_x86x64.asm">
+      <Filter>Comp\Crypto\x86x64</Filter>
+    </MASM>
+    <MASM Include="bitset-op.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="btc-mine-amd.il">
+      <Filter>Source Files\asm</Filter>
+    </None>
+  </ItemGroup>
+</Project>
