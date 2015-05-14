@@ -182,8 +182,11 @@ public:
 		}
 #endif
 
-		for (Hasher *p=Hasher::GetRoot(); p && (HashAlgo = p->Algo) != Coin::HashAlgo::Sha256; p=p->Next)		// Set any existing algorithm as Default, but SHA-256 has priority
-			;
+		for (Hasher *p=Hasher::GetRoot(); p; p=p->Next) {		// Set any existing algorithm as Default, but SHA-256 has priority
+			HashAlgo = p->Algo;
+			if (HashAlgo == Coin::HashAlgo::Sha256)
+				break;
+		}
 
 #if !UCFG_WIN32
 		CPreciseTimeBase::s_pCurrent = nullptr;
