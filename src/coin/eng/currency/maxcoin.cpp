@@ -27,7 +27,6 @@ public:
 		MaxBlockVersion = 112;
 	}
 protected:
-	bool MiningAllowed() override { return false; }
 	BlockObj *CreateBlockObj() override { return new MaxBlockObj; }
 
 	HashValue HashMessage(const ConstBuf& cbuf) override {

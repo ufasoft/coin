@@ -339,11 +339,12 @@ protected:
 };
 
 class MINER_CLASS BitcoinMiner : public IMiner {
+	typedef BitcoinMiner class_type;
 public:
 	int GetworkPeriod;
-	float Speed;		// float to be atomic
+	float Speed;					// float to be atomic
 	int64_t EntireHashCount;
-	float CPD; //!!! should be atomic
+	float CPD; 						//!!! should be atomic
 	DateTime DtStart;
 	volatile uint32_t MaxHeight;
 
@@ -353,8 +354,7 @@ public:
 
 	int GpuIdleMilliseconds;
 	CBool m_bTryGpu, m_bTryFpga, m_bLongPolling;
-	Coin::HashAlgo HashAlgo;
-
+	
 	HashValue HashBest;
 
 	mutex MtxDevices;
@@ -414,8 +414,13 @@ public:
 
 	BitcoinMiner();
 	virtual ~BitcoinMiner() {}
+		
 
 	void Release() override { delete this; }
+
+	Coin::HashAlgo get_HashAlgo() { return m_hashAlgo; }
+	void put_HashAlgo(Coin::HashAlgo v);
+	DEFPROP(Coin::HashAlgo, HashAlgo);
 
 	void InitDevices(vector<String>& selectedDevs);
 	ptr<BitcoinWorkData> GetWorkForThread(WorkerThreadBase& wt, uint32_t portion, bool bAllHashAlgoAllowed);
@@ -477,6 +482,8 @@ private:
 
 	mutex m_csLongPollingThread;
 	ptr<Thread> m_LongPollingThread;
+
+	Coin::HashAlgo m_hashAlgo;
 
 	friend class WorkerThread;
 	friend class LongPollingThread;

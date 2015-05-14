@@ -24,8 +24,8 @@ public:
 	{
 		HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
 
-#	ifdef X_DEBUG //!!!D
-		ThreadCount = 0;
+#	ifdef X_DEBUG//!!!D
+		ThreadCount = 1;
 #	endif
 	}
 
@@ -80,6 +80,25 @@ void WalletBase::ReserveGenKey() {
 	}
 }
 
+Tx WalletBase::CreateCoinbaseTx() {
+	Tx tx;
+	tx.EnsureCreate();
+	tx.m_pimpl->m_txIns.resize(1);
+	tx.m_pimpl->m_bLoadedIns = true;
+	tx.TxOuts().resize(1);
+
+	MemoryStream ms;
+	ScriptWriter wr(ms);
+//!!!?	if (m_genPubKey.Size != 0)
+//!!!?		wr << m_genPubKey << OP_CHECKSIG;
+//!!!?	else
+		wr << OP_DUP << OP_HASH160 << HashValue160(m_genHash160) << OP_EQUALVERIFY << OP_CHECKSIG;
+
+	tx.TxOuts()[0].m_pkScript = Blob(ConstBuf(ms));
+
+	return tx;
+}
+
 Block WalletBase::CreateNewBlock() {
 	CCoinEngThreadKeeper engKeeper(&get_Eng());
 
@@ -87,23 +106,11 @@ Block WalletBase::CreateNewBlock() {
 		return Block(nullptr);
 
 	Block block;
-	Tx tx;
-	tx.EnsureCreate();
-	tx.m_pimpl->m_txIns.resize(1);
-	tx.m_pimpl->m_bLoadedIns = true;
-	tx.TxOuts().resize(1);
 	int64_t nFees = 0;
 	EXT_LOCK (m_eng->Mtx) {
-		MemoryStream ms;
-		ScriptWriter wr(ms);
-		if (m_genPubKey.Size != 0)
-			wr << m_genPubKey << OP_CHECKSIG;
-		else
-			wr << OP_DUP << OP_HASH160 << HashValue160(m_genHash160) << OP_EQUALVERIFY << OP_CHECKSIG;
+		block.Add(CreateCoinbaseTx());
 
-		tx.TxOuts()[0].m_pkScript = Blob(ConstBuf(ms));
-		block.Add(tx);
-
+#if UCFG_COIN_GENERATE_TXES_FROM_POOL
 		COrhpans orphans;
 		unordered_map<HashValue, vector<COrhpans::iterator>> mapDependers;
 		multimap<double, Tx> mapPriority;
@@ -134,15 +141,17 @@ Block WalletBase::CreateNewBlock() {
 				}
 			}
 		}
+#endif // UCFG_COIN_GENERATE_TXES_FROM_POOL
 
 		Block bestBlock = m_eng->BestBlock();
 		block.m_pimpl->PrevBlockHash = Hash(bestBlock);
-		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height+1, block.m_pimpl->PrevBlockHash)+nFees;
+		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height+1, block.m_pimpl->PrevBlockHash) + nFees;
 		block.m_pimpl->Height = bestBlock.Height+1;
 		block.m_pimpl->Timestamp = m_eng->GetTimestampForNextBlock();
 		block.m_pimpl->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
 		block.m_pimpl->Nonce = 0;
 
+#if UCFG_COIN_GENERATE_TXES_FROM_POOL
 		CoinsView view;
 		int nBlockSigOps = 100;
 		for (uint32_t cbBlockSize=1000; !mapPriority.empty();) {
@@ -178,6 +187,7 @@ Block WalletBase::CreateNewBlock() {
 				}
 			}
 		}
+#endif // UCFG_COIN_GENERATE_TXES_FROM_POOL
 	}
 	return block;
 }
@@ -250,7 +260,7 @@ void WalletBase::RegisterForMining(WalletBase* wallet) {
 void WalletBase::UnregisterForMining(WalletBase* wallet) {
 	if (Miner.get()) {
 		dynamic_cast<EmbeddedMiner*>(Miner.get())->UnregisterForMining();
-		Miner.reset();
+		EXT_LOCKED(MtxMiner, Miner.reset());
 	}
 }
 
@@ -317,30 +327,52 @@ LAB_START:
 
 	Blob blob = stm;
 	size_t len = blob.Size;
-	blob.Size = 128;
-	FormatHashBlocks(blob.data(), len);
-
-	wd->Hash1 = Blob(0, 64);
-	FormatHashBlocks(wd->Hash1.data(), 32);
 
 	wd->HashTarget = HashValue::FromDifficultyBits(block.get_DifficultyTarget().m_value);
 	wd->Timestamp = now;
-	wd->Data = blob;
-	wd->Midstate = CalcSha256Midstate(wd->Data);
 	wd->HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
+	wd->Height = MaxHeight = block.Height;
+
+#ifdef X_DEBUG//!!!D
+	wd->Height = MaxHeight = 590050;
+	blob = Blob::FromHexString("70000000b528872c4636b188198c2befa8688c7ea48ec70c38996b3c31c75c0a000000004d72851cb2e78cb32e0231fd5d313e82c35df2cce9186902ba27cc5478797313ef8c5355f1931b1c35796600");
+	HashValue merkle(ConstBuf(blob.constData()+36, 32));
+	m_merkleToBlock[hashMerkleRoot] = block;
+#endif
+
+	switch (wd->HashAlgo) {
+	case Coin::HashAlgo::Sha256:			
+		blob.Size = 128;
+		FormatHashBlocks(blob.data(), len);
+
+		wd->Hash1 = Blob(0, 64);
+		FormatHashBlocks(wd->Hash1.data(), 32);
+
+		wd->Data = blob;
+		wd->Midstate = CalcSha256Midstate(wd->Data);
+		break;
+	default:
+		{
+			uint32_t *pd = (uint32_t*)blob.data();
+			for (int i=0, n=blob.Size/4; i<n; ++i)
+				pd[i] = betoh(pd[i]);
+			wd->Data = blob;
+		}
+	}
+
 
 	return wd;
 }
 
 void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
-	TRC(0, "FOUND BLOCK " << wd.Data);
-
-	if (wd.Data.Size != 128)
-		Throw(E_INVALIDARG);
+	if (wd.Data.Size != 128 && wd.Data.Size != 80)
+		Throw(errc::invalid_argument);
 	Blob data = wd.Data;
 	uint32_t *pd = (uint32_t*)data.data();
-	for (int i=0; i<128/4; ++i)
-		pd[i] = _byteswap_ulong(pd[i]);
+	for (int i=0, n=wd.Data.Size/4; i<n; ++i)
+		pd[i] = betoh(pd[i]);
+
+	TRC(0, "FOUND BLOCK " << wd.Data);
 
 	HashValue merkle(ConstBuf(data.constData()+36, 32));
 

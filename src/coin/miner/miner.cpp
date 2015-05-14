@@ -274,7 +274,6 @@ BitcoinMiner::BitcoinMiner()
 	,	GpuIdleMilliseconds(1)
 	,	m_bTryGpu(true)
 	,	m_bTryFpga(true)
-	,	HashAlgo(Coin::HashAlgo::Sha256)
 	,	m_bLongPolling(true)
 	,	m_dtSwichToMainUrl(DateTime::MaxValue)
 	,	m_msWait(NORMAL_WAIT)
@@ -293,6 +292,8 @@ BitcoinMiner::BitcoinMiner()
 	,	m_pWTraceStream(&GetWNullStream())
 #endif
 {
+	HashAlgo = Coin::HashAlgo::Sha256;
+
 	memset(HashBest.data(), 0xFF, 32);
 	if (!ThreadCount)
 		ThreadCount = 1;
@@ -309,6 +310,22 @@ BitcoinMiner::BitcoinMiner()
 	UserAgentString += " "+String(VER_INTERNALNAME_STR)+"/"+VER_PRODUCTVERSION_STR;
 #endif
 //!!! UserAgentString += " (" + Environment.OSVersion.VersionString + ") "; //!!! XPT server wants short strings
+}
+
+void BitcoinMiner::put_HashAlgo(Coin::HashAlgo v) {
+	switch (m_hashAlgo = v) {
+	case Coin::HashAlgo::Sha3:
+	case Coin::HashAlgo::Prime:
+	case Coin::HashAlgo::Momentum:
+	case Coin::HashAlgo::Metis:
+	case Coin::HashAlgo::Solid:
+	case Coin::HashAlgo::NeoSCrypt:
+	case Coin::HashAlgo::Groestl:
+		m_bTryGpu = false;
+	case Coin::HashAlgo::SCrypt:
+		m_bTryFpga = false;
+		break;
+	}
 }
 
 void BitcoinMiner::InitDevices(vector<String>& selectedDevs) {
@@ -459,7 +476,7 @@ void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 	if (exchange(s_hashAlgo, wd.HashAlgo) != wd.HashAlgo)
 		*m_pTraceStream << "Algo: " << AlgoToString(wd.HashAlgo) << endl;
 
-	if (wd.Data.Size != 128 ||
+	if (wd.Data.Size != 128 && wd.Data.Size != 80 ||
 		wd.HashAlgo == Coin::HashAlgo::Sha256 && (wd.Midstate.Size != 32 || wd.Hash1.Size != 64))
 		Throw(E_FAIL);
 
@@ -1258,7 +1275,7 @@ void Hasher::MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, uint32_t *
 	for (int i = 0; i < UCFG_BITCOIN_NPAR; ++i, ++nonce) {
 		SetNonce(buf, nonce);
 #ifdef X_DEBUG//!!!D
-		SetNonce(buf, 0xa5bb3e40);
+		SetNonce(buf, nonce = 0x00667935);
 #endif
 		HashValue hash = CalcHash(ConstBuf(buf, cbBuf));
 #ifdef X_DEBUG //!!!D

@@ -32,9 +32,13 @@ using P2P::Peer;
 
 
 #ifndef UCFG_COIN_GENERATE
-//#	define UCFG_COIN_GENERATE (!UCFG_WCE && UCFG_WIN32)
-#	define UCFG_COIN_GENERATE 0
+#	define UCFG_COIN_GENERATE (!UCFG_WCE)
 #endif
+
+#ifndef UCFG_COIN_GENERATE_TXES_FROM_POOL
+#	define UCFG_COIN_GENERATE_TXES_FROM_POOL 0
+#endif
+
 
 #include "param.h"
 

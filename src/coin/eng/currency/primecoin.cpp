@@ -112,7 +112,6 @@ public:
 		ChainParams.MedianTimeSpan = 99;
 	}
 protected:
-	bool MiningAllowed() override { return false; }
 	BlockObj *CreateBlockObj() override { return new PrimeCoinBlockObj; }
 
 	double ToDifficulty(const Target& target) override {

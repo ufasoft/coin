@@ -4,6 +4,7 @@
 #	define UCFG_COIN_DOGECOIN 1
 #endif
 
+
 #if UCFG_COIN_DOGECOIN
 
 #define UUID_AA15E74A856F11E08B8D93F24824019B	//!!!T
@@ -32,8 +33,6 @@ public:
 		MaxBlockVersion = 6;
 	}
 protected:
-	bool MiningAllowed() override { return false; }
-
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
 		return ChainParams.CoinValue * (
 			height >= 600000 ? 10000

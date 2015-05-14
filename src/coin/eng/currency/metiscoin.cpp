@@ -47,7 +47,6 @@ public:
 		MaxBlockVersion = 112;
 	}
 protected:
-	bool MiningAllowed() override { return false; }
 	BlockObj *CreateBlockObj() override { return new MetisBlockObj; }
 	TxObj *CreateTxObj() override { return new MetisTxObj; }
 

@@ -283,20 +283,6 @@ public:
 		}
 #endif
 
-		switch (HashAlgo) {
-		case Coin::HashAlgo::Sha3:
-		case Coin::HashAlgo::Prime:
-		case Coin::HashAlgo::Momentum:
-		case Coin::HashAlgo::Metis:
-		case Coin::HashAlgo::Solid:
-		case Coin::HashAlgo::NeoSCrypt:
-		case Coin::HashAlgo::Groestl:
-			m_bTryGpu = false;
-		case Coin::HashAlgo::SCrypt:
-			m_bTryFpga = false;
-			break;
-		}
-
 		BitcoinMiner *miner = this;
 
 #if UCFG_BITCOIN_SOLO_MINING

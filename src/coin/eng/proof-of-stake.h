@@ -125,7 +125,6 @@ public:
 	virtual int64_t GetProofOfStakeReward(int64_t coinAge, const Target& target, const DateTime& dt);
 protected:
 	int64_t GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
-	bool MiningAllowed() override { return false; }
 	int64_t GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
 

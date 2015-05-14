@@ -109,6 +109,7 @@ void ChainParams::Init() {
 	Listen = true;
 	MedianTimeSpan = 11;
 	AllowLiteMode = true;
+	AllowMining = false;
 }
 
 MyKeyInfo::~MyKeyInfo() {
@@ -505,6 +506,8 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 	if (!(a = xml.GetAttribute("AllowLiteMode")).empty())
 		AllowLiteMode = stoi(a);
 
+	if (!(a = xml.GetAttribute("AllowMining")).empty())
+		AllowMining = stoi(a);
 
 	if (!(a = xml.GetAttribute("MergedMiningStartBlock")).empty()) {
 		AuxPowEnabled = true;

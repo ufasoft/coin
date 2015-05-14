@@ -142,6 +142,7 @@ public:
 	int AuxPowStartBlock;
 	bool IsTestNet;
 	bool AllowLiteMode;
+	bool AllowMining;
 	bool Listen;
 	size_t MedianTimeSpan;
 	
@@ -226,11 +227,13 @@ public:
 	virtual void AddRecipient(const Address& a) { Throw(E_NOTIMPL); }
 
 #if UCFG_COIN_GENERATE
+	mutex MtxMiner;
 	unique_ptr<BitcoinMiner> Miner;
 
 	Blob m_genPubKey;
 	HashValue160 m_genHash160;
 	void ReserveGenKey();
+	Tx CreateCoinbaseTx();
 	virtual Block CreateNewBlock();
 	void RegisterForMining(WalletBase* wallet);			// only single wallet for each Eng allowed
 	void UnregisterForMining(WalletBase* wallet);
@@ -645,9 +648,6 @@ public:
 	}
 
 	virtual Target GetNextTarget(const Block& blockLast, const Block& block);
-
-	virtual bool MiningAllowed() { return true; }
-
 
 	bool GetPkId(const HashValue160& hash160, CIdPk& id);
 	bool GetPkId(const ConstBuf& cbuf, CIdPk& id);

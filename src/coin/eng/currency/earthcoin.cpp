@@ -57,8 +57,6 @@ public:
 	{
 	}
 protected:
-	bool MiningAllowed() override { return false; }
-
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
 		if (height == 1)
 			return ChainParams.MaxMoney / 50;

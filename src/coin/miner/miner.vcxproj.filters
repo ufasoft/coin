@@ -28,9 +28,6 @@
     <ClCompile Include="miner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\libext\win32\simplemapi.cpp">
-      <Filter>Comp</Filter>
-    </ClCompile>
     <ClCompile Include="miner-opencl.cpp">
       <Filter>Source Files\devices</Filter>
     </ClCompile>

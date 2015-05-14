@@ -16,13 +16,13 @@ const double CPF_PERCENT = 0.05;
 class SolidcoinBlockObj : public BlockObj {
 	typedef BlockObj base;
 public:
-    UInt64 Nonce1, Nonce2, Nonce3;
+    uint64_t Nonce1, Nonce2, Nonce3;
     char MinerId[12];
 protected:
 	SolidcoinBlockObj *Clone() override { return new SolidcoinBlockObj(*this); }
 
 	void WriteHeader(BinaryWriter& wr) const override {
-		wr << Ver << PrevBlockHash << MerkleRoot() << Int64(Height) << (UInt64)to_time_t(Timestamp) << Nonce1 << Nonce2 << Nonce3 << Nonce;
+		wr << Ver << PrevBlockHash << MerkleRoot() << int64_t(Height) << (uint64_t)to_time_t(Timestamp) << Nonce1 << Nonce2 << Nonce3 << Nonce;
 		wr.WriteStruct(MinerId);
 		wr << DifficultyTarget;
 	}
@@ -31,7 +31,7 @@ protected:
 		HashValue h;
 		rd >> Ver >> PrevBlockHash >> h;
 		m_merkleRoot = h;
-		Height = (UInt32)rd.ReadInt64();
+		Height = (uint32_t)rd.ReadInt64();
 		Timestamp = DateTime::from_time_t(rd.ReadUInt64());
 		rd >> Nonce1 >> Nonce2 >> Nonce3 >> Nonce;
 		rd.ReadStruct(MinerId);
@@ -117,10 +117,10 @@ protected:
 		return sum1>=128 && sum2>=239;
 	}
 
-	void CheckCoinbaseTx(Int64 nFees) override {
+	void CheckCoinbaseTx(int64_t nFees) override {
 		CoinEng& eng = Eng();
 
-		Int64 val = eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget));
+		int64_t val = eng.GetSubsidy(Height, PrevBlockHash, eng.ToDifficulty(DifficultyTarget));
 		if (Height % 2) {
 			if (Height >= 50000 && IsPower())
 				val *= 2;
@@ -138,12 +138,12 @@ class SolidcoinVersionMessage : public VersionMessage {
 protected:
 	void Write(BinaryWriter& wr) const override {
 		base::Write(wr);
-		wr << UInt32(0);
+		wr << uint32_t(0);
 	}
 
 	void Read(const BinaryReader& rd) override {
 		base::Read(rd);
-		UInt32 highHeight = rd.ReadUInt32();
+		uint32_t highHeight = rd.ReadUInt32();
 		if (highHeight != 0)
 			Throw(E_FAIL);
 	}
@@ -164,7 +164,7 @@ protected:
 	/*!!! base::  works
 	double ToDifficulty(const Target& target) override {
 		int nShift = (target.m_value >> 24) & 0xff;
-		UInt32 dwDiff1 = ChainParams.MaxPossibleTarget.m_value;
+		uint32_t dwDiff1 = ChainParams.MaxPossibleTarget.m_value;
 		double dDiff =  (double)(dwDiff1&0x00FFFFFF) / (double)(target.m_value & 0x00ffffff);
 		for (; nShift < ((dwDiff1>>24)&0xFF); nShift++)
 			dDiff *= 256.0;
@@ -173,25 +173,25 @@ protected:
 		return dDiff;
 	}*/
 
-	Int64 GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
+	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {
 		double dCoinInflationModifier = difficulty / 100000.0;
 		if (height == 0)
 			return 1200000 * ChainParams.CoinValue;
 		else if (height < 50000) {
-			Int64 qBaseValue = 32;
+			int64_t qBaseValue = 32;
 			qBaseValue -= (height/1000000);
-			qBaseValue = std::max(Int64(4), qBaseValue) * ChainParams.CoinValue;
-			qBaseValue += Int64(dCoinInflationModifier*qBaseValue);
-			return height % 2 ? qBaseValue : Int64(qBaseValue*CPF_PERCENT)+1;
+			qBaseValue = std::max(int64_t(4), qBaseValue) * ChainParams.CoinValue;
+			qBaseValue += int64_t(dCoinInflationModifier*qBaseValue);
+			return height % 2 ? qBaseValue : int64_t(qBaseValue*CPF_PERCENT)+1;
 		} else if (height < 180000) {
 			double dBaseValue = 5;
-			dBaseValue -=  ((Int64)(height/1000000)) *0.1;
+			dBaseValue -=  ((int64_t)(height/1000000)) *0.1;
 			dBaseValue = std::max(1., dBaseValue) * ChainParams.CoinValue;
 			dBaseValue += dCoinInflationModifier*dBaseValue;
 			if ((height % 2) == 0) {
-				return ((Int64)(dBaseValue * CPF_PERCENT))+1;
+				return ((int64_t)(dBaseValue * CPF_PERCENT))+1;
 			}
-			return (Int64)dBaseValue;
+			return (int64_t)dBaseValue;
 		}
 		
 		double dYearsPassed = ( (double)(height-179999) /(60*24*365));							// We need to work out how many years it has been running to calculate estimated electricity price increases and hardware improvements
@@ -202,7 +202,7 @@ protected:
 		if ((height%2) == 0) {			
 			dBaseValue = (dBaseValue*CPF_PERCENT);												// trust blocks are only worth 5% of normal blocks
 		}
-		return Int64((std::max(0.0001, dBaseValue) + 0.05)*ChainParams.CoinValue);			// 0.0001 SC is the minimum amount and each block needs at least that to be worth something, also add a minimum amount to cover the existing fee
+		return int64_t((std::max(0.0001, dBaseValue) + 0.05)*ChainParams.CoinValue);			// 0.0001 SC is the minimum amount and each block needs at least that to be worth something, also add a minimum amount to cover the existing fee
 	}
 
 	void CheckCoinbasedTxPrev(int height, const Tx& txPrev) override {
@@ -210,17 +210,16 @@ protected:
 			base::CheckCoinbasedTxPrev(height, txPrev);
 	}
 
-	Int64 GetMinRelayTxFee() override {
+	int64_t GetMinRelayTxFee() override {
 		return ChainParams.MinTxFee;
 	}
 
-	bool MiningAllowed() override { return false; }
 
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
 		int nTargetTimespan = 12 * 60 * 60;			// 12 hours, but it's really 6 due to trusted blocks not being taken into account
 		TimeSpan targetSpan = TimeSpan::FromSeconds(nTargetTimespan);	
-		Int64 nTargetSpacing = 2 * 60;    //2 minute blocks
-		Int64 nInterval = nTargetTimespan / nTargetSpacing;
+		int64_t nTargetSpacing = 2 * 60;    //2 minute blocks
+		int64_t nInterval = nTargetTimespan / nTargetSpacing;
 		TimeSpan span(0);
 
 		if (0 == blockLast.Height)
@@ -257,20 +256,13 @@ protected:
 		return Target(BigInteger(prev.DifficultyTarget)*span.Ticks/targetSpan.Ticks);
 	}
 
+	void SetChainParams(const Coin::ChainParams& p) override {
+		base::SetChainParams(p);
+		ChainParams.MaxPossibleTarget = Target(0x1E7FFFFF);
+	}
 };
 
-static class SolidcoinChainParams : public ChainParams {
-	typedef ChainParams base;
-public:
-	SolidcoinChainParams(bool)
-		:	base("SolidCoin"			, false)
-	{	
-		MaxPossibleTarget = Target(0x1E7FFFFF);
-	}
-
-	SolidcoinEng *CreateEng(CoinDb& cdb) override { return new SolidcoinEng(cdb); }
-} s_solidcoinParams(true);
-
+static CurrencyFactory<SolidcoinEng> s_solidcoin("SolidCoin");
 
 } // Coin::
 

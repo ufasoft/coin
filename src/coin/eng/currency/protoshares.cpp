@@ -60,7 +60,6 @@ public:
 	}
 
 protected:
-	bool MiningAllowed() override { return false; }
 	BlockObj *CreateBlockObj() override { return new ProtoSharesBlockObj; }
 
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override {

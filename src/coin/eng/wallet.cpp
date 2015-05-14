@@ -382,7 +382,7 @@ void Wallet::ProcessPendingTxes() {
 void Wallet::OnBlockchainChanged() {
 	for (int i=0; i<2; ++i) {
 		if (Thread::CurrentThread->m_bStop)
-			break;
+			return;
 		bool bChanged = false;
 		EXT_LOCK (MtxCurrentHeight) {
 			Block bestBlock = m_eng->BestBlock();
@@ -424,6 +424,21 @@ void Wallet::OnBlockchainChanged() {
 		ProcessPendingTxes();
 	if (m_iiWalletEvents)
 		m_iiWalletEvents->OnStateChanged();
+
+#if UCFG_COIN_GENERATE
+	int bestHeight = m_eng->BestBlockHeight();
+	EXT_LOCK(MtxMiner) {
+		if (Miner) {
+			EXT_LOCK(Miner->m_csCurrentData) {
+#ifndef X_DEBUG//!!!D
+				Miner->MaxHeight = bestHeight;
+				Miner->TaskQueue.clear();
+				Miner->WorksToSubmit.clear();
+#endif
+			}
+		}
+	}
+#endif // UCFG_COIN_GENERATE
 }
 
 void Wallet::OnEraseTx(const HashValue& hashTx) {
@@ -467,7 +482,7 @@ void CompactThread::Execute() {
 				if (m_pWallet->m_iiWalletEvents)
 					m_pWallet->m_iiWalletEvents->OnStateChanged();
 			}
-		} threadPointerCleaner = { &Wallet};
+		} threadPointerCleaner = { &Wallet };
 
 		m_count = uint32_t(file_size(eng.GetDbFilePath()) / (128*1024));
 
