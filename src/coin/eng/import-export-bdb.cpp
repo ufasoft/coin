@@ -184,6 +184,17 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 	}
     dbenv.txn_checkpoint(0, 0, 0);
     dbenv.lsn_reset(name.string().c_str(), 0);
+
+	char** listp = 0;
+	int rcArch = dbenv.log_archive(&listp, DB_ARCH_ABS|DB_ARCH_LOG);
+	dbenv.close(0);
+	if (listp) {
+		for (; *listp; ++listp)
+			sys::remove(*listp);
+	}
+
+	DbEnv dbenv2(0);
+	dbenv2.remove(dir.string().c_str(), 0);
 }
 
 
