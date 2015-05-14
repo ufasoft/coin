@@ -12,7 +12,6 @@
 
    		<Label Content="Fee:" HorizontalAlignment="Left" Margin="10,80,0,0" VerticalAlignment="Top" />
    		<Label Content="0.01" HorizontalAlignment="Left" Margin="100,80,0,0" VerticalAlignment="Top" x:Name="labelFee" />
-   		<Label Content="{Binding Content, ElementName=labelCurrencySymbol}" Margin="242,80,0,0"  x:Name="labelCurrencySymbol1" HorizontalAlignment="Left" Width="55" />
 
    		<Label Content="Comment:" HorizontalAlignment="Left" Margin="10,120,0,0" VerticalAlignment="Top" TabIndex="4" />
    		<TextBox Margin="100,120,28,0" x:Name="textComment" x:FieldModifier="public" Text="" TextWrapping="Wrap" VerticalAlignment="Top" TabIndex="5" />
