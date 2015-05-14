@@ -8,6 +8,9 @@
 #include <el/crypto/hash.h>
 #include <el/db/bdb-reader.h>
 
+#ifndef UCFG_COIN_BIP0014_USER_AGENT
+#	define UCFG_COIN_BIP0014_USER_AGENT ("/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/")
+#endif
 
 //#include "coineng.h"
 #include "coin-protocol.h"
@@ -939,7 +942,7 @@ ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 
 void CoinEng::SendVersionMessage(Link& link) {
 	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
-	m->UserAgent = "/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/";		// BIP 0014
+	m->UserAgent = UCFG_COIN_BIP0014_USER_AGENT;		// BIP 0014
 	m->RemoteTimestamp = DateTime::UtcNow();
 	GetSystemURandomReader() >> m->Nonce;
 	EXT_LOCK (m_mtxVerNonce) {
