@@ -81,8 +81,15 @@ void CoinDb::InitAes(BuggyAes& aes, RCString password, byte encrtyptAlgo) {
 
 MyKeyInfo& CoinDb::AddNewKey(MyKeyInfo& ki) {
 	BuggyAes aes;
-	if (!m_masterPassword.empty())
-		InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
+	if (!m_masterPassword.empty()) {
+		if (m_cachedMasterKey.first.Size == 0) {
+			InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
+			m_cachedMasterKey = make_pair(aes.Key, aes.IV);
+		} else {
+			aes.Key = m_cachedMasterKey.first;
+			aes.IV = m_cachedMasterKey.second;
+		}
+	}
 		
 	CmdAddNewKey.Bind(1, !m_masterPassword.empty() ? ki.EncryptedPrivKey(aes) : ki.PlainPrivKey())
 		.Bind(2, ToCompressedKey(ki.PubKey))
@@ -341,6 +348,7 @@ void CoinDb::LoadKeys(RCString password) {
 					Throw(HRESULT_FROM_WIN32(ERROR_LOGON_FAILURE));
 				if (password == nullptr) {
 					m_masterPassword = nullptr;
+					m_cachedMasterKey = make_pair(Blob(), Blob());
 					ki.Key = CngKey::Import(ki.PubKey, CngKeyBlobFormat::OSslEccPublicBlob);
 				} else {
 // try { //!!!T
@@ -486,6 +494,7 @@ void CoinDb::put_Password(RCString password) {
 		LoadKeys(password);
 	}
 	m_masterPassword = password;
+	m_cachedMasterKey = make_pair(Blob(), Blob());
 	Load();
 	TopUpPool();
 }
@@ -515,6 +524,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		}
 		dbtx.Commit();
 		m_masterPassword = newPassword;
+		m_cachedMasterKey = make_pair(Blob(), Blob());
 		
 		m_dbWallet.DisposeCommandsWithoutUnregiter();
  		m_dbWallet.ExecuteNonQuery("VACUUM");		// to clean old unencrypted keys

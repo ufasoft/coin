@@ -304,8 +304,10 @@ public:
 
 	Coin::IrcManager IrcManager;
 
-	String m_masterPassword;
 	array<byte, 8> Salt;
+	String m_masterPassword;
+	pair<Blob, Blob> m_cachedMasterKey;				// for DEFAULT_PASSWORD_ENCRYPT_METHOD
+
 	IPAddress LocalIp4, LocalIp6;
 	String ProxyString;
 	CBool m_bLoaded;
