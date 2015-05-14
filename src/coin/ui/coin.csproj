@@ -61,7 +61,7 @@
     <Reference Include="Interop.coineng, Version=0.1.0.0, Culture=neutral, processorArchitecture=x86">
       <SpecificVersion>False</SpecificVersion>
       <EmbedInteropTypes>True</EmbedInteropTypes>
-      <HintPath>..\..\..\..\..\..\OUT\x86_Release\inc\Interop.coineng.dll</HintPath>
+      <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
