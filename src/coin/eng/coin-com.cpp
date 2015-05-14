@@ -349,7 +349,7 @@ public:
 
 	HRESULT __stdcall get_MiningAllowed(VARIANT_BOOL *r)
 	METHOD_BEGIN {
-		*r = m_wallet.Eng.ChainParams.AllowMining;
+		*r = m_wallet.Eng.ChainParams.MiningAllowed;
 		aStateChanged = 1;
 	} METHOD_END
 

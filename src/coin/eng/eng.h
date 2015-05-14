@@ -142,7 +142,7 @@ public:
 	int AuxPowStartBlock;
 	bool IsTestNet;
 	bool AllowLiteMode;
-	bool AllowMining;
+	bool MiningAllowed;
 	bool Listen;
 	size_t MedianTimeSpan;
 	

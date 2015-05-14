@@ -132,7 +132,7 @@
 		<Checkpoint Block='41300' 	Hash='8c4e02f6c0d20e856fd7e952a147fee30ce145ca6932a284f354924362d2b408' />
 	</Chain>
 
-	<Chain Name='GroestlCoin' Symbol='GRS' Algo='groestl' AddressVersion='36' ScriptAddressVersion='5' AllowMining='1'
+	<Chain Name='GroestlCoin' Symbol='GRS' Algo='groestl' AddressVersion='36' ScriptAddressVersion='5' MiningAllowed='1'
 			Genesis='00000ac5927c594d49cc0bdb81759d0da8297eb614683d3acb62f0703b639023'
 			MaxMoney='105000000'  MinTxFee='1000000' 
 			InitBlockValue='100' MaxTargetHex='1E0FFFFF' InitTargetHex='1E0FFFFF'  BlockSpan='60'
