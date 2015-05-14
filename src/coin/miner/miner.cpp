@@ -471,6 +471,11 @@ vector<SUrlTtr> GetUrlTtrs(RCString s) {
 	return r;
 }
 
+void BitcoinMiner::SetSpeedCPD(float speed, float cpd) {
+	Speed = speed;
+	CPD = cpd;
+}
+
 void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 	static Coin::HashAlgo s_hashAlgo = (Coin::HashAlgo)-1;
 	if (exchange(s_hashAlgo, wd.HashAlgo) != wd.HashAlgo)
@@ -1090,8 +1095,7 @@ LAB_WAIT:
 			cout << "Adding: " << nProcessed << "    meanHash.m_deq.size() = " << meanHash.m_deq.size() << "\r";
 #endif
 
-			Miner.Speed = float(meanHash.FindMeanValue());
-			Miner.CPD = float(meanChain.FindMeanValue() * (60*60*24));
+			Miner.SetSpeedCPD(float(meanHash.FindMeanValue()), float(meanChain.FindMeanValue() * (60*60*24)));
 
 			for (ComputationArchitecture *p=ComputationArchitecture::s_pChain; p; p=p->m_pNext) {
 				if (Miner.m_bTryGpu) {

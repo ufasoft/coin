@@ -425,7 +425,8 @@ public:
 	void InitDevices(vector<String>& selectedDevs);
 	ptr<BitcoinWorkData> GetWorkForThread(WorkerThreadBase& wt, uint32_t portion, bool bAllHashAlgoAllowed);
 	virtual BitcoinWebClient GetWebClient(WorkerThreadBase *wt);
-//!!!	void SetNewData(const BitcoinWorkData& wd);
+	virtual void SetSpeedCPD(float speed, float cpd);
+	//!!!	void SetNewData(const BitcoinWorkData& wd);
 	void SetNewData(const BitcoinWorkData& wd, bool bClearOld = false);
 	void SetWebInfo(const WebHeaderCollection& headers);
 	void CheckLongPolling(WebClient& wc, RCString longPollUri = nullptr, RCString longPollId = nullptr);

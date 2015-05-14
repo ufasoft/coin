@@ -24,7 +24,7 @@ public:
 	{
 		HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
 
-#	ifdef X_DEBUG//!!!D
+#	ifdef _DEBUG//!!!D
 		ThreadCount = 1;
 #	endif
 	}
@@ -32,6 +32,7 @@ public:
 	void RegisterForMining();
 	void UnregisterForMining();
 protected:
+	void SetSpeedCPD(float speed, float cpd) override;
 	ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient) override;
 	void SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) override;
 private:
@@ -286,14 +287,20 @@ void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
 	block.m_pimpl->m_hash.reset();
 }
 
+void EmbeddedMiner::SetSpeedCPD(float speed, float cpd) {
+	bool bChanged = Speed != speed;
+	base::SetSpeedCPD(speed, cpd);
+	m_wallet.Speed = Speed;
+	if (bChanged)
+		m_wallet.OnChange();
+}
+
 ptr<BitcoinWorkData> EmbeddedMiner::GetWork(WebClient*& curWebClient) {
 	int msWait = 0;
 LAB_START:
 	Thread::Sleep(msWait);
 
 	ptr<BitcoinWorkData> wd = new BitcoinWorkData;
-	m_wallet.Speed = Speed;
-	m_wallet.OnChange();
 
 	DateTime now = DateTime::UtcNow();		
 	Block block(nullptr);
