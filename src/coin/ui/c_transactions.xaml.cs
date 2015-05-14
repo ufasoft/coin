@@ -72,6 +72,8 @@ namespace Coin {
 		}
 
 		void ShowTxInfo(Tx tx) {
+			if (tx == null)
+				return;
 			var dlg = new DialogTextInfo();
 			dlg.Title = "Transaction Info";
 			dlg.textInfo.Text = string.Format("DateTime:  {0}\nValue:   {1}\nFee:  {6}\nConfirmations: {2}\nTo:   {3}\nComment:  {4}\nHash:   {5}", tx.Timestamp, tx.m_iTx.Amount, tx.Confirmations.ToString(), tx.Address + " " + tx.m_iTx.Address.Comment, tx.m_iTx.Comment, tx.Hash, tx.Fee);
@@ -90,6 +92,8 @@ namespace Coin {
 
 		private void OnEditComment(object sender, RoutedEventArgs e) {
 			var tx = GetSelectedTransaction();
+			if (tx == null)
+				return;
 			string r = FormQueryString.QueryString("Edit Comment", tx.Comment);
 			if (r != null) {
 				tx.m_iTx.Comment = r;

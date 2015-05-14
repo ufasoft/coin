@@ -118,7 +118,7 @@ namespace Coin {
 			wf.Wallet.Enabled = true;
 			if (App.CancelPendingTxes)
 				wf.Wallet.CancelPendingTxes();
-			wf.Wallet.MiningEnabled = wf.MiningEnabled;			
+//			wf.Wallet.MiningEnabled = wf.MiningEnabled;			
 			UpdateData(wf);
 			ActiveWalletForms.Add(wf);
 //			LvWallet.ItemsSource = ActiveWalletForms;
@@ -129,8 +129,10 @@ namespace Coin {
 		void SaveActiveCurrencies() {
 			var list = new List<string>();
 			foreach (var w in Eng.Wallets)
-				if (w.Enabled)
-					list.Add(w.CurrencyName + (w.MiningEnabled ? " Mining" : ""));
+				if (w.Enabled) {
+					list.Add(w.CurrencyName);
+	                UserAppRegistryKey.OpenSubKey(w.CurrencySymbol, true).SetValue("Mining", w.MiningEnabled ? 1 : 0);
+				}
 			UserAppRegistryKey.SetValue("ActiveCurrencies", list.ToArray());
 		}
 
@@ -236,6 +238,7 @@ namespace Coin {
 				m_wallet2forms[wallet] = wf;
 
 				EEngMode mode = wallet.CurrencySymbol == "BTC" ? EEngMode.Bootstrap : EEngMode.Normal;
+				bool bMiningEnabled = false;
                 var sk = UserAppRegistryKey.OpenSubKey(wf.Wallet.CurrencySymbol);
 				if (sk != null) {
 					switch ((string)sk.GetValue("DBMode")) {
@@ -243,8 +246,13 @@ namespace Coin {
 					case "Bootstrap": mode = EEngMode.Bootstrap; break;
 					case "Lite": mode = EEngMode.Lite; break;
 					}
+					try {
+//						bMiningEnabled = (int)sk.GetValue("Mining", 0) != 0;
+					} catch (Exception) { }
 				}
 				wallet.Mode = mode;
+				if (wallet.MiningAllowed)
+					wallet.MiningEnabled = bMiningEnabled;
 			}
 
 			timer1.Tick += (s, e1) => {
@@ -273,10 +281,6 @@ namespace Coin {
 								break;
 							}
 						if (wf != null) {
-							wf.MiningEnabled = false;
-							foreach (var subs in ss) {
-								//!!! wf.MiningEnabled |= subs == "Mining";  // CRASH danger when Mining on Start
-							}
 							ar.Add(wf);
 						}
 					} catch (Exception) {

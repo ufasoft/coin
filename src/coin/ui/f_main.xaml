@@ -3,7 +3,7 @@
 	    xmlns:k="clr-namespace:Coin" 		
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:tb="http://www.hardcodet.net/taskbar"
-        Title="Ufasoft Coin" Height="300" Width="664" Loaded="Window_Loaded" Closed="Window_Closed" Icon="coin.ico" Closing="Window_Closing">
+        Title="Ufasoft Coin" Height="300" Width="700" Loaded="Window_Loaded" Closed="Window_Closed" Icon="coin.ico" Closing="Window_Closing">
     <Grid>
         <DockPanel>
             <Menu DockPanel.Dock="Top">
@@ -35,22 +35,20 @@
 			    <StatusBarItem Name="statusItem2" Width="100"/>
 		    </StatusBar>
 		    <TabControl >
-			    <TabItem Header="Wallets" Height="22" VerticalAlignment="Bottom">
+			    <TabItem Header="Wallets">
                     <ListView Name="LvWallet" MouseDoubleClick="LvWallet_MouseDoubleClick">
 					    <ListView.ContextMenu>
 						    <ContextMenu Opened="ContextMenu_Opened">
-							    <MenuItem Header="Transactions" Click="OnTransactions"/>
-							    <MenuItem Header="Send money" Click="OnSendMoney"/>
-							    <MenuItem Header="Address Book"  Click="OnAddressBook"/>
-								<MenuItem Name="MenuDBMode" Header="DB _Mode" >
+							    <MenuItem Header="_Transactions" Click="OnTransactions"/>
+							    <MenuItem Header="_Send money" Click="OnSendMoney"/>
+							    <MenuItem Header="_Address Book"  Click="OnAddressBook"/>
+								<MenuItem Name="MenuDBMode" Header="_DB Mode" >
 									<MenuItem Name="MenuModeNormal" Header="_Normal" IsCheckable="True"  Click="MenuDBMode_Click" />	
 									<MenuItem Name="MenuModeBootstrap" Header="_bootstrap.dat (Fast)" IsCheckable="True" Click="MenuDBMode_Click"  />	
 									<MenuItem Name="MenuModeLite" Header="_Lite" IsCheckable="True" Click="MenuDBMode_Click"  />	
 								</MenuItem>
-								
-								
-<!--							    <MenuItem Header="Mining" IsCheckable="True" IsEnabled="{Binding Path=MiningAllowed}" IsChecked="{Binding Path=MiningEnabled}" Name="menuMining" Unchecked="menuMining_Checked" Checked="menuMining_Checked" />
--->
+								<Separator/>						
+							    <MenuItem Name="MenuMining" Header="_Mining" IsCheckable="True" IsEnabled="{Binding Path=MiningAllowed}" IsChecked="{Binding Path=MiningEnabled}"  Unchecked="menuMining_Checked" Checked="menuMining_Checked" />
 						    </ContextMenu>
 					    </ListView.ContextMenu>
 					    <ListView.View>
