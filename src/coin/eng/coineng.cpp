@@ -1066,7 +1066,7 @@ Blob CoinEng::SpendVectorToBlob(const vector<bool>& vec) {
 }
 
 CoinEngApp::CoinEngApp() {
-	m_internalName = "Coin";
+	m_internalName = VER_INTERNALNAME_STR;
 
 #if !UCFG_WCE
 	String coinAppData = Environment::GetEnvironmentVariable("COIN_APPDATA");
