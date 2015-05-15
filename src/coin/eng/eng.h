@@ -871,16 +871,8 @@ Version CheckUserVersion(SqliteConnection& db);
 
 class CEngStateDescription : noncopyable {
 public:
-	CEngStateDescription(CoinEng& eng, RCString s)
-		: m_eng(eng)
-		, m_s(s)
-	{
-		EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.insert(s));
-	}
-
-	~CEngStateDescription() {
-		EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.erase(m_s));
-	}
+	CEngStateDescription(CoinEng& eng, RCString s);
+	~CEngStateDescription();
 private:
 	CoinEng& m_eng;
 	String m_s;

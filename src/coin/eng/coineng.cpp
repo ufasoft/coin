@@ -1632,5 +1632,21 @@ Version CheckUserVersion(SqliteConnection& db) {
 	return dver;
 }
 
+CEngStateDescription::CEngStateDescription(CoinEng& eng, RCString s)
+	: m_eng(eng)
+	, m_s(s) {
+	TRC(2, s);
+
+	EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.insert(s));
+	if (m_eng.m_iiEngEvents)
+		m_eng.m_iiEngEvents->OnChange();
+}
+
+CEngStateDescription::~CEngStateDescription() {
+	EXT_LOCKED(m_eng.m_mtxStates, m_eng.m_setStates.erase(m_s));
+	if (m_eng.m_iiEngEvents)
+		m_eng.m_iiEngEvents->OnChange();
+}
+
 } // Coin::
 

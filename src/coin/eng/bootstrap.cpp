@@ -26,9 +26,7 @@ void BootstrapDbThread::Execute() {
 
 	DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
 	DBG_LOCAL_IGNORE_CONDITION(CoinErr::InvalidBootstrapFile);
-
-	TRC(2, "Bootstrapping from " << PathBootstrap);
-	
+    	
 	CEngStateDescription stateDesc(Eng, EXT_STR("Bootstrapping from " << PathBootstrap));
 
 	FileStream stm(PathBootstrap, FileMode::Open, FileAccess::Read, FileShare::ReadWrite, Stream::DEFAULT_BUF_SIZE, FileOptions::SequentialScan);
@@ -63,17 +61,18 @@ void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 	
 #ifndef X_DEBUG//!!!T
 	if (Mode == EngMode::Bootstrap) {
-		TRC(1, "Copying " << GetBootstrapPath() << " -> " << pathBoostrap);
+		CEngStateDescription stateDesc(_self, EXT_STR("Copying " << GetBootstrapPath() << " -> " << pathBoostrap));
+
 		return (void)copy_file(GetBootstrapPath(), pathBoostrap, copy_options::overwrite_existing);
 	}
 #endif
 
-	TRC(1, "Exporting " << n << " blocks to " << pathBoostrap);
+	CEngStateDescription stateDesc(_self, EXT_STR("Exporting " << n << " blocks to " << pathBoostrap));
 
 	FileStream fs(pathBoostrap, FileMode::Create, FileAccess::Write);
 	BinaryWriter wr(fs);
 
-	for (uint32_t i=0; i<n; ++i) {
+	for (uint32_t i=0; i<n && Runned; ++i) {
 		wr << ChainParams.ProtocolMagic;
 		MemoryStream ms;
 
