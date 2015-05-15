@@ -10,6 +10,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Globalization;
+using System.Diagnostics;
 
 using Utils;
 using GuiComp;
@@ -79,6 +80,18 @@ namespace Coin {
 			dlg.textInfo.Text = string.Format("DateTime:  {0}\nValue:   {1}\nFee:  {6}\nConfirmations: {2}\nTo:   {3}\nComment:  {4}\nHash:   {5}", tx.Timestamp, tx.m_iTx.Amount, tx.Confirmations.ToString(), tx.Address + " " + tx.m_iTx.Address.Comment, tx.m_iTx.Comment, tx.Hash, tx.Fee);
 			dlg.Width = 600;
 			dlg.Height = 200;
+
+			switch (Wallet.CurrencySymbol) {
+				case "GRS":
+					dlg.Hyperlink.NavigateUri = new Uri(string.Format("https://chainz.cryptoid.info/{0}/tx.dws?{1}", Wallet.CurrencySymbol.ToLower(), tx.Hash));
+					dlg.Hyperlink.Inlines.Add("Block Explorer");
+					dlg.Hyperlink.RequestNavigate += (sender, e) => { Process.Start(e.Uri.ToString()); };
+					break;
+				default:
+					dlg.Hyperlink.IsEnabled = false;
+                    break;
+			}
+
 			Dialog.ShowDialog(dlg, FormMain.I);
 		}
 

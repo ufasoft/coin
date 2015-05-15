@@ -4,6 +4,7 @@
         Title="Info" Height="391" Width="436" ResizeMode="NoResize">
 	<StackPanel>
    		<TextBox Name="textInfo" x:FieldModifier="public" IsReadOnly="True"/>
+		<Label><Hyperlink Name="Hyperlink" x:FieldModifier="public" />  </Label>		
         <Button Content="Ok" IsCancel="true" IsDefault="true" HorizontalAlignment="Center"   VerticalAlignment="Bottom" Padding="7,3.5" RenderTransformOrigin="0.533,0.001" />
 	</StackPanel>
 </Window>
