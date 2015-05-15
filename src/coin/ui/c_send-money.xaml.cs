@@ -45,10 +45,13 @@ namespace Coin {
 			if (decimal.TryParse(textAmount.Text, out amount)) {
 				try {
 					labelFee.Content = Wallet.CalcFee(amount).ToString();
-				} catch (Exception ex) {
+					buttonSend.IsEnabled = true;
+                } catch (Exception ex) {
 					labelFee.Content = ex.Message;
+					buttonSend.IsEnabled = false;
 				}
-			}
+			} else
+				buttonSend.IsEnabled = false;
 		}
 
 
@@ -71,6 +74,10 @@ namespace Coin {
 				} finally {
 					Cursor = prevCursor;
 				}
+				textAmount.Text = "";
+				textAddress.Text = "";
+				textComment.Text = "";
+                MessageBox.Show("The coins were sent successfully");
 			}
 
 			if (Send != null)
