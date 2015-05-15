@@ -291,7 +291,7 @@ bool DbliteBlockChainDb::Create(const path& p) {
 	CoinEng& eng = Eng();
 	
 	BeforeDbOpenCreate();
-	m_db.AppName = VER_INTERNALNAME_STR;
+	m_db.AppName = "Coin";
 	m_db.UserVersion = Version(VER_PRODUCTVERSION);
 	m_db.Create(p);
 	{
@@ -369,9 +369,9 @@ void DbliteBlockChainDb::Close(bool bAsync) {
 }
 
 Version DbliteBlockChainDb::CheckUserVersion() {
-	if (m_db.AppName != VER_INTERNALNAME_STR) {
+	if (m_db.AppName != "Coin") {
 		m_db.Close();
-		throw Exception(E_FAIL, "This database has AppName \"" + m_db.AppName + "\", but should be \"" + VER_INTERNALNAME_STR + "\"");
+		throw Exception(E_FAIL, "This database has AppName \"" + m_db.AppName + "\", but should be \"Coin\"");
 	}	
 
     Version ver(VER_PRODUCTVERSION),
