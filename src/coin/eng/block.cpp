@@ -836,7 +836,7 @@ void CConnectJob::Calculate() {
 #else
 	for (CMap::iterator it=Map.begin(), e=Map.end(); it!=e; ++it) {
 		if (it->second.IsTask)
-			CalcPubkeyHash, &*it);
+			CalcPubkeyHash(&*it);
 	}
 #endif
 }
