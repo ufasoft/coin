@@ -684,47 +684,6 @@ void CoinEng::StartIrc() {
 	}
 }
 
-void CoinEng::Start() {
-	if (Runned)
-		return;
-
-	EXT_LOCKED(m_cdb.MtxDb, Filter = Mode==EngMode::Lite ? m_cdb.Filter : nullptr);
-
-	Net::Start();
-	EXT_LOCKED(m_cdb.MtxNets, m_cdb.m_nets.push_back(this));
-	
-	if (m_cdb.ProxyString.ToUpper() != "TOR")
-		StartIrc();	
-
-	DateTime now = DateTime::UtcNow();
-	Ext::Random rng;
-	EXT_FOR (const IPEndPoint& ep, ChainParams.Seeds) {
-		Add(ep, NODE_NETWORK, now-TimeSpan::FromDays(7 + rng.Next(7)));
-	}
-}
-
-void CoinEng::SignalStop() {
-	Runned = false;
-	EXT_LOCK (m_mtxThreadStateChange) {
-		m_tr.interrupt_all();
-	}
-}
-
-void CoinEng::Stop() {
-	if (Runned)
-		SignalStop();
-	EXT_LOCK (m_cdb.MtxNets) {
-		Ext::Remove(m_cdb.m_nets, this);
-	}
-	if (ChannelClient)
-		m_cdb.IrcManager.DetachChannelClient(exchange(ChannelClient, nullptr));
-	EXT_LOCK (m_mtxThreadStateChange) {
-		m_tr.join_all();
-	}
-	m_bSomeInvReceived = false;				// clear state for next Start()
-	Close();
-}
-
 Block CoinEng::BestBlock() {
 	EXT_LOCK (Caches.Mtx) {
 		return Caches.m_bestBlock;
@@ -1205,13 +1164,54 @@ void CoinEng::Load() {
 	ContinueLoad0();
 	if (bContinue)
 		ContinueLoad();
+}
+
+void CoinEng::Start() {
+	if (Runned)
+		return;
+
+	EXT_LOCKED(m_cdb.MtxDb, Filter = Mode==EngMode::Lite ? m_cdb.Filter : nullptr);
+
+	Net::Start();
+	EXT_LOCKED(m_cdb.MtxNets, m_cdb.m_nets.push_back(this));
 
 	if (Mode == EngMode::Bootstrap) {
 		path pathBootstrap = GetBootstrapPath();
 		TRC(2, "Checking for " << pathBootstrap);
 		if (exists(pathBootstrap) && Db->GetBoostrapOffset() < file_size(pathBootstrap))
-			(new BootstrapDbThread(_self, pathBootstrap))->Start();
+			(new BootstrapDbThread(_self, pathBootstrap))->Start();							// uses field CoinEng.Runned. Must be called after base::Start()
 	}
+
+	if (m_cdb.ProxyString.ToUpper() != "TOR")
+		StartIrc();
+
+	DateTime now = DateTime::UtcNow();
+	Ext::Random rng;
+	EXT_FOR(const IPEndPoint& ep, ChainParams.Seeds) {
+		Add(ep, NODE_NETWORK, now-TimeSpan::FromDays(7 + rng.Next(7)));
+	}
+}
+
+void CoinEng::SignalStop() {
+	Runned = false;
+	EXT_LOCK(m_mtxThreadStateChange) {
+		m_tr.interrupt_all();
+	}
+}
+
+void CoinEng::Stop() {
+	if (Runned)
+		SignalStop();
+	EXT_LOCK(m_cdb.MtxNets) {
+		Ext::Remove(m_cdb.m_nets, this);
+	}
+	if (ChannelClient)
+		m_cdb.IrcManager.DetachChannelClient(exchange(ChannelClient, nullptr));
+	EXT_LOCK(m_mtxThreadStateChange) {
+		m_tr.join_all();
+	}
+	m_bSomeInvReceived = false;				// clear state for next Start()
+	Close();
 }
 
 VersionMessage::VersionMessage()
