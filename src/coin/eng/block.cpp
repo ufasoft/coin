@@ -824,16 +824,21 @@ static void CalcPubkeyHash(PubKeyTask *pr) {
 }
 
 void CConnectJob::Calculate() {
+#if UCFG_COIN_USE_FUTURES
 	vector<future<void>> futures;
-
 	for (CMap::iterator it=Map.begin(), e=Map.end(); it!=e; ++it) {
 		if (it->second.IsTask)
 			futures.push_back(std::async(CalcPubkeyHash, &*it));   // by pointer, because async params transferred by value
 	}
-
 	EXT_FOR (future<void>& fut, futures) {
 		fut.wait();
 	}
+#else
+	for (CMap::iterator it=Map.begin(), e=Map.end(); it!=e; ++it) {
+		if (it->second.IsTask)
+			CalcPubkeyHash, &*it);
+	}
+#endif
 }
 
 void Block::Connect() const {
