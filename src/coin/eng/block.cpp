@@ -709,6 +709,7 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 		fut.wait();
 	}
 
+#if UCFG_COIN_TX_CONNECT_FUTURES
 	vector<future<int64_t>> futures;
 	futures.reserve(Tasks.size());
 	EXT_FOR (const ptr<ConnectTask>& task, Tasks) {
@@ -716,6 +717,11 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 	}
 	for (int i=0; i<futures.size(); ++i)
 		Fee = Eng.CheckMoneyRange(Fee + futures[i].get());
+#else
+	EXT_FOR(const ptr<ConnectTask>& task, Tasks) {
+		Fee = Eng.CheckMoneyRange(Fee + RunConnectTask(this, task.get()));
+	}
+#endif
 }
 
 void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKey) {
