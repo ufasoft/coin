@@ -34,6 +34,10 @@ using P2P::Peer;
 #	include "../miner/miner.h"
 #endif
 
+#ifndef UCFG_COIN_DEFAULT_PORT
+#	define UCFG_COIN_DEFAULT_PORT 8333
+#endif
+
 #include "crypter.h"
 
 using P2P::NetManager;

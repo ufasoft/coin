@@ -45,7 +45,7 @@ CoinDb::CoinDb()
 	,	CmdInsertEndpoint("INSERT INTO endpoints (netid, ip, port, services) VALUES(?, ?, ?, ?)"														, m_dbPeers)
 	,	CmdUpdateEndpoint("UPDATE endpoints SET port=?, services=? WHERE rowid=?"																		, m_dbPeers)
 {
-	ListeningPort = 8333;
+	ListeningPort = UCFG_COIN_DEFAULT_PORT;
 	SoftPortRestriction = true;
 	IrcManager.m_pTr.reset(&m_tr);
 
