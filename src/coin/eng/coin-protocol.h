@@ -207,11 +207,13 @@ protected:
 class GetHeadersMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
+	uint32_t Ver;
 	LocatorHashes Locators;
 	HashValue HashStop;
 
 	GetHeadersMessage()
 		:	base("getheaders")
+		,	Ver(Eng().ChainParams.ProtocolVersion) 
 	{}
 
 protected:

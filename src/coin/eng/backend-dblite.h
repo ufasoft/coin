@@ -168,9 +168,6 @@ public:
 		Throw(E_NOTIMPL);
 	}
 
-	vector<Block> GetBlocks(const LocatorHashes& locators, const HashValue& hashStop) override {
-		Throw(E_NOTIMPL);
-	}
 
 	Blob FindPubkey(int64_t id) override;
 	void InsertPubkey(int64_t id, const ConstBuf& pk) override;
@@ -198,6 +195,7 @@ public:
 
 	uint64_t GetBoostrapOffset() override;
 	void SetBoostrapOffset(uint64_t v) override;
+	vector<Block> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) override;
 protected:
 	virtual void OnOpenTables(DbTransaction& dbt, bool bCreate) {}
 private:

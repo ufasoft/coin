@@ -470,11 +470,25 @@ Block DbliteBlockChainDb::FindBlock(const HashValue& hash) {
 
 Block DbliteBlockChainDb::FindBlock(int height) {
 	DbReadTxRef dbt(m_db);
-
 	DbCursor c(dbt, m_tableBlocks);
 	if (!c.Get(BlockKey(height)))
 		Throw(CoinErr::BlockNotFound);
 	return LoadBlock(dbt, height, c.Data);
+}
+
+vector<Block> DbliteBlockChainDb::GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableBlocks);
+
+	vector<Block> r;
+	for (int height = locators.FindHeightInMainChain()+1; c.Get(BlockKey(height)); ++height) {
+		TRC(4, "H: " << height);
+		Block block = LoadBlock(dbt, height, c.Data, false);
+		r.push_back(block);
+		if (Hash(block) == hashStop || r.size()>=2000)
+			break;
+	}
+	return r;
 }
 
 Block DbliteBlockChainDb::FindBlockPrefixSuffix(int height) {

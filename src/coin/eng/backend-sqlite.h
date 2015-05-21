@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include <sqlite3.h>
@@ -72,7 +77,6 @@ public:
 		,	m_cmdInsertBlock("INSERT INTO blocks (hash, id, data, txhashes) VALUES(?, ?, ?, ?)"								, m_db)
 		,	m_cmdTxBlockordIdxToHash("SELECT txhashes FROM blocks WHERE id=?"												, m_db)
 	{
-		IsSlow = true;
 	}
 
 	void *GetDbObject() override { return &m_db; }
@@ -86,8 +90,8 @@ public:
 		m_db.ExecuteNonQuery("PRAGMA locking_mode=EXCLUSIVE");
 	}
 	
-	bool Create(RCString path) override {
-		m_db.Create(path);
+	bool Create(const path& p) override {
+		m_db.Create(p);
 
 		m_db.ExecuteNonQuery("PRAGMA page_size=8192");
 
@@ -115,8 +119,8 @@ public:
 		return true;
 	}
 	
-	bool Open(RCString path) override {
-		m_db.Open(path, FileAccess::ReadWrite, FileShare::None);
+	bool Open(const path& p) override {
+		m_db.Open(p, FileAccess::ReadWrite, FileShare::None);
 		SetPragmas();
 		return true;
 	}
@@ -190,31 +194,31 @@ public:
 		return TxHashesOutNums(m_cmdTxBlockordIdxToHash.Bind(1, height).ExecuteVector().GetBytes(0));
 	}
 
-	void InsertBlock(int height, const HashValue& hash, const ConstBuf& data, const ConstBuf& txData) override {
+	vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) override {
 		m_cmdInsertBlock
-			.Bind(1, ReducedBlockHash(hash))
-			.Bind(2, Int64(height))
+			.Bind(1, ReducedBlockHash(Hash(block)))
+			.Bind(2, int64_t(block.Height))
 			.Bind(3, data)
 			.Bind(4, txData)
 			.ExecuteNonQuery();
+		return vector<uint32_t>();
 	}
 
-	void DeleteBlock(int height, const vector<Int64>& txids) override {
+	void DeleteBlock(int height, const vector<int64_t>& txids) override {
 		CoinEng& eng = Eng();
 
 		ostringstream os;
 		os << "DELETE FROM txes WHERE id IN (";
-		for (int i=0; i<txids.size(); ++i)
+		for (size_t i=0; i<txids.size(); ++i)
 			os << (i ? ", " : "") << txids[i];
 		os << ")";
-		//!!!R		SqliteCommand(EXT_STR("DELETE FROM txes WHERE blockord=" << height), m_db).ExecuteNonQuery();
 		SqliteCommand(os.str(), m_db).ExecuteNonQuery();
 		SqliteCommand(EXT_STR("DELETE FROM blocks WHERE id=" << height), m_db).ExecuteNonQuery();
 	}
 
 	bool FindTxById(const ConstBuf& txid, Tx *ptx) override {
 		EXT_LOCK (MtxSqlite) {
-			DbDataReader dr = m_cmdFindTx.Bind(1, *(Int64*)txid.P).ExecuteReader();
+			DbDataReader dr = m_cmdFindTx.Bind(1, *(int64_t*)txid.P).ExecuteReader();
 			if (!dr.Read())
 				return false;
 			if (ptx) {
@@ -256,41 +260,12 @@ public:
 		wr.Write7BitEncoded(height-heightOut+1);
 		pair<int, int> pp = TxHashesOutNums(dr.GetBytes(1)).StartingTxOutIdx(hash);
 		if (pp.second < 0)
-			Throw(E_COIN_InconsistentDatabase);
+			Throw(CoinErr::InconsistentDatabase);
 		return pp;
 	}
 
 	void InsertPubkeyToTxes(const Tx& tx);
-	vector<Int64> GetTxesByPubKey(const HashValue160& pubkey) override;
-
-	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) override {
-		CoinEng& eng = Eng();
-
-		m_cmdInsertTx
-			.Bind(1, ReducedHashValue(txHash))
-			.Bind(2, (Int64)height)
-			.Bind(3, txIns)
-			.Bind(4, spend);
-
-		m_cmdInsertTx.Bind(5, data);
-		try {
-			DBG_LOCAL_IGNORE_NAME(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, SQLITE_CONSTRAINT_PRIMARYKEY), ignSQLITE_CONSTRAINT_PRIMARYKEY);
-					
-			m_cmdInsertTx.ExecuteNonQuery();
-		} catch (const SqliteException&) {
-			TRC(1, "Duplicated Transaction: " << txHash);
-
-			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
-				Throw(E_COIN_DupNonSpentTx);						
-
-			SqliteCommand("UPDATE txes SET coins=? WHERE id=?", m_db)
-				.Bind(1, spend)
-				.Bind(2, ReducedHashValue(txHash))
-				.ExecuteNonQuery();
-		}
-		if (eng.Mode == EngMode::BlockExplorer)
-			InsertPubkeyToTxes(tx);
-	}
+	vector<int64_t> GetTxesByPubKey(const HashValue160& pubkey) override;
 
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override {
 		DbDataReader dr = m_cmdTxFindCoins.Bind(1, ReducedHashValue(hash)).ExecuteVector();
@@ -305,6 +280,35 @@ public:
 		return vec;
 	}
 
+	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) override {
+		CoinEng& eng = Eng();
+
+		m_cmdInsertTx
+			.Bind(1, ReducedHashValue(txHash))
+			.Bind(2, (int64_t)height)
+			.Bind(3, txIns)
+			.Bind(4, spend);
+
+		m_cmdInsertTx.Bind(5, data);
+		try {
+			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, SQLITE_CONSTRAINT_PRIMARYKEY));
+					
+			m_cmdInsertTx.ExecuteNonQuery();
+		} catch (const SqliteException&) {
+			TRC(1, "Duplicated Transaction: " << txHash);
+
+			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
+				Throw(CoinErr::DupNonSpentTx);						
+
+			SqliteCommand("UPDATE txes SET coins=? WHERE id=?", m_db)
+				.Bind(1, spend)
+				.Bind(2, ReducedHashValue(txHash))
+				.ExecuteNonQuery();
+		}
+		if (eng.Mode == EngMode::BlockExplorer)
+			InsertPubkeyToTxes(tx);
+	}
+
 	void SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) override {
 		if (find(vec.begin(), vec.end(), true) != vec.end())
 			m_cmdTxUpdateCoins.Bind(1, CoinEng::SpendVectorToBlob(vec));
@@ -314,19 +318,19 @@ public:
 			.ExecuteNonQuery();
 	}
 
-	Blob FindPubkey(Int64 id) override {
+	Blob FindPubkey(int64_t id) override {
 		EXT_LOCK (MtxSqlite) {
 			DbDataReader dr = CmdPubkeyIdToData.Bind(1, id).ExecuteReader();
 			return dr.Read() ? Blob(dr.GetBytes(0)) : Blob(nullptr);
 		}
 	}
 
-	void InsertPubkey(Int64 id, const ConstBuf& pk) override {
+	void InsertPubkey(int64_t id, const ConstBuf& pk) override {
 //!!!		ASSERT(!MtxSqlite.try_lock());
 		CmdPubkeyInsert.Bind(1, id).Bind(2, pk).ExecuteNonQuery();
 	}
 
-	void UpdatePubkey(Int64 id, const ConstBuf& pk) override {
+	void UpdatePubkey(int64_t id, const ConstBuf& pk) override {
 //!!!		ASSERT(!MtxSqlite.try_lock());
 		CmdPubkeyUpdate.Bind(1, pk).Bind(2, id).ExecuteNonQuery();
 	}
@@ -380,7 +384,7 @@ public:
 		}
 	}
 
-	vector<Block> GetBlocks(const LocatorHashes& locators, const HashValue& hashStop) override {
+	vector<Block> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) override {
 		vector<Block> r;
 		int idx = locators.FindIndexInMainChain();
 		EXT_LOCK (MtxSqlite) {

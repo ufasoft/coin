@@ -100,7 +100,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	}
 	CMemReadStream ms(payload);
 	HashValue h = Eng().HashMessage(payload);
-	if (*(uint32_t*)h.data() != checksum)
+	if (letoh(*(uint32_t*)h.data()) != checksum)
 		Throw(ExtErr::Protocol_Violation);
 	ms.Position = 0;
 	r->Link = &link;
@@ -163,7 +163,7 @@ void AddrMessage::Process(P2P::Link& link) {
 	}
 }
 
-int LocatorHashes::FindIndexInMainChain() const {
+int LocatorHashes::FindHeightInMainChain() const {
 	CoinEng& eng = Eng();
 	
 	EXT_FOR (const HashValue& hash, _self) {
@@ -199,16 +199,20 @@ void HeadersMessage::Write(BinaryWriter& wr) const {
 
 void HeadersMessage::Read(const BinaryReader& rd) {
 	Headers.resize((size_t)CoinSerialized::ReadVarInt(rd));
-	for (int i=0; i<Headers.size(); ++i)
+	for (int i=0; i<Headers.size(); ++i) {
 		Headers[i].ReadHeader(rd);
+		CoinSerialized::ReadVarInt(rd);		// tx count unused
+	}
 }
 
 void GetHeadersMessage::Write(BinaryWriter& wr) const {
+	wr << Ver;
 	CoinSerialized::Write(wr, Locators);
 	wr << HashStop;
 }
 
 void GetHeadersMessage::Read(const BinaryReader& rd) {
+	rd >> Ver;
 	CoinSerialized::Read(rd, Locators);
 	rd >> HashStop;
 }
@@ -226,7 +230,7 @@ void GetHeadersMessage::Process(P2P::Link& link) {
 		} else
 			return;
 	} else {
-		m->Headers = eng.Db->GetBlocks(Locators, HashStop);
+		m->Headers = eng.Db->GetBlockHeaders(Locators, HashStop);
 	}
 	link.Send(m);
 }
@@ -284,7 +288,7 @@ void GetBlocksMessage::Process(P2P::Link& link) {
 	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		return;
 
-	int idx = Locators.FindIndexInMainChain();
+	int idx = Locators.FindHeightInMainChain();
 	int limit = 500 + Locators.DistanceBack;
 	for (int i=idx+1; i<limit+idx; ++i) {
 		if (i > eng.BestBlockHeight())

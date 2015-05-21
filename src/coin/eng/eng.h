@@ -420,7 +420,7 @@ COIN_EXPORT CoinEng& ExternalEng();
 class LocatorHashes : public vector<HashValue> {
 	typedef LocatorHashes class_type;
 public:
-	int FindIndexInMainChain() const;
+	int FindHeightInMainChain() const;
 
 	int get_DistanceBack() const;
 	DEFPROP_GET(int, DistanceBack);
@@ -472,7 +472,7 @@ public:
 
 	virtual void BeginEngTransaction()															=0;
 	virtual void SetProgressHandler(int(* pfn)(void*), void*p = 0, int n = 1)					=0;
-	virtual vector<Block> GetBlocks(const LocatorHashes& locators, const HashValue& hashStop)	=0;
+	virtual vector<Block> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop)	=0;
 
 	virtual Blob FindPubkey(int64_t id)															=0;
 	virtual void InsertPubkey(int64_t id, const ConstBuf& pk)										=0;

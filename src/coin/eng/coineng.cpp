@@ -779,6 +779,8 @@ void CoinEng::OnMessageReceived(P2P::Message *m) {
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::AlertVerifySignatureFailed);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::ProofOfWorkFailed);
 
+		TRC(4, "from " << m->Link->Peer->get_EndPoint() << ": " << *static_cast<CoinMessage*>(m));
+
 		m->Process(*m->Link);
 	} catch (const DbException&) {
 		EXT_LOCK (Mtx) {
@@ -1399,7 +1401,7 @@ void GetDataMessage::Process(P2P::Link& link) {
 		case InventoryType::MSG_BLOCK:
 		case InventoryType::MSG_FILTERED_BLOCK:
 			if (eng.Mode == EngMode::Lite
-#if UCFG_DEBUG //!!!
+#ifdef _UCFG_DEBUG //!!!
 				|| eng.Mode == EngMode::Normal			// Low performance
 #endif
 				)
