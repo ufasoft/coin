@@ -482,7 +482,6 @@ vector<Block> DbliteBlockChainDb::GetBlockHeaders(const LocatorHashes& locators,
 
 	vector<Block> r;
 	for (int height = locators.FindHeightInMainChain()+1; c.Get(BlockKey(height)); ++height) {
-		TRC(4, "H: " << height);
 		Block block = LoadBlock(dbt, height, c.Data, false);
 		r.push_back(block);
 		if (Hash(block) == hashStop || r.size()>=2000)

@@ -1412,23 +1412,18 @@ void GetDataMessage::Process(P2P::Link& link) {
 			//		ASSERT(EXT_LOCKED(eng.Mtx, (block.m_pimpl->m_hash.reset(), Hash(block)==inv.HashValue)));
 
 					if (InventoryType::MSG_BLOCK == inv.Type) {
-						TRC(1, "Block Message sending");
+						TRC(2, "Block Message sending");
+
 						link.Send(new BlockMessage(block));
 					} else {
-						ptr<MerkleBlockMessage> mbm = new MerkleBlockMessage;
-						vector<Tx> matchedTxes;
-						EXT_LOCK (clink.MtxFilter) {
-							if (clink.Filter)
-								matchedTxes = mbm->Init(block, *clink.Filter);
-							else {
-								CoinFilter dummyFilter;
-								mbm->Init(block, dummyFilter);
+						ptr<MerkleBlockMessage> mbm;
+						vector<Tx> matchedTxes = EXT_LOCKED(clink.MtxFilter, clink.Filter ? (mbm = new MerkleBlockMessage)->Init(block, *clink.Filter) : vector<Tx>());
+						if (mbm) {
+							link.Send(mbm);
+							EXT_FOR(const Tx& tx, matchedTxes) {
+								if (!EXT_LOCKED(clink.Mtx, clink.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(tx)))))
+									link.Send(new TxMessage(tx));
 							}
-						}
-						link.Send(mbm);
-						EXT_FOR (const Tx& tx, matchedTxes) {
-							if (!EXT_LOCKED(clink.Mtx, clink.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(tx)))))
-								link.Send(new TxMessage(tx));									
 						}
 					}
 					
