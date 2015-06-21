@@ -335,7 +335,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
@@ -654,10 +654,12 @@
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\aes.cpp" />
     <ClCompile Include="..\..\el\crypto\blake.cpp" />
+    <ClCompile Include="..\..\el\crypto\cipher.cpp" />
     <ClCompile Include="..\..\el\crypto\groestl-hash.cpp" />
     <ClCompile Include="..\..\el\crypto\neoscrypt.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\el\crypto\pbkdf.cpp" />
     <ClCompile Include="..\..\el\crypto\ripemd.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
     </ClCompile>

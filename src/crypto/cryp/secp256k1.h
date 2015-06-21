@@ -18,6 +18,7 @@
 
 #include <secp256k1/group.h>
 #include <secp256k1/ecdsa.h>
+#include <secp256k1/secp256k1.h>
 
 namespace Ext { namespace Crypto {
 
@@ -38,6 +39,8 @@ private:
 
 class Sec256Dsa : public DsaBase {
 public:
+	Blob m_privKey;
+
 	static Blob RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed = false);
 
 	void ParsePubKey(const ConstBuf& cbuf);
@@ -47,8 +50,14 @@ public:
 	bool VerifyHash(const ConstBuf& hash, const ConstBuf& bufSig) override {
 		return VerifyHashSig(hash, bufSig);
 	}
+
+	static vararray<byte, 65> PrivKeyToPubKey(const ConstBuf& privKey, bool bCompressed);
+	static Blob PrivKeyToDER(const ConstBuf& privKey, bool bCompressed);
+	static Blob PrivKeyFromDER(const ConstBuf& der);
+	static Blob DecompressPubKey(const ConstBuf& cbuf);
 private:
 	secp256k1_ge_t m_pubkey;
 };
+
 
 }} // Ext::Crypto::

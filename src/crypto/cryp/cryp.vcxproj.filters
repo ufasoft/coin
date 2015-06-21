@@ -218,6 +218,12 @@
     <ClCompile Include="..\..\..\FOREIGN\sphlib\shavite.c">
       <Filter>shplib</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\el\crypto\pbkdf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\cipher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cryp-64.def">

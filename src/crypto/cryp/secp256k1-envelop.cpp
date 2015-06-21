@@ -22,10 +22,24 @@
 
 namespace Ext { namespace Crypto {
 
-struct InitSec256 {
-	InitSec256() { secp256k1_start(SECP256K1_START_SIGN | SECP256K1_START_VERIFY); }
-	~InitSec256() { secp256k1_stop(); }
-} g_initSec256;
+struct Sec256Ctx {
+	Sec256Ctx() {
+		Ctx = ::secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
+	}
+	~Sec256Ctx() {
+		::secp256k1_context_destroy(Ctx);
+	}
+
+	operator const secp256k1_context_t*() { return Ctx; }
+	const secp256k1_ecmult_context_t *MultCtx() { return &Ctx->ecmult_ctx; }
+private:
+	secp256k1_context_t* Ctx;
+} g_sec256Ctx;
+
+void Sec256Check(int rc) {
+	if (!rc)
+		Throw(ExtErr::Crypto);
+}
 
 Sec256Signature::Sec256Signature() {
 //	secp256k1_ecdsa_sig_init(&m_sig);
@@ -83,7 +97,7 @@ Blob Sec256Dsa::RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, 
 	ASSERT(!over);
     secp256k1_ge_t q;
 	Blob r(nullptr);
-	if (secp256k1_ecdsa_sig_recover(&sig.m_sig, &q, &m, recid)) {
+	if (secp256k1_ecdsa_sig_recover(g_sec256Ctx.MultCtx(), &sig.m_sig, &q, &m, recid)) {
 		r = SerializePubKey(q, bCompressed);
 	}
 	return r;
@@ -95,7 +109,12 @@ void Sec256Dsa::ParsePubKey(const ConstBuf& cbuf) {
 }
 
 Blob Sec256Dsa::SignHash(const ConstBuf& hash) {
-	Throw(E_NOTIMPL);
+	if (hash.Size != 32)
+		Throw(errc::invalid_argument);
+	byte sig[72];
+	int nSigLen = sizeof sig;
+	Sec256Check(::secp256k1_ecdsa_sign(g_sec256Ctx, hash.P, sig, &nSigLen, m_privKey.constData(), secp256k1_nonce_function_rfc6979, nullptr));
+	return Blob(sig, nSigLen);
 }
 
 bool Sec256Dsa::VerifyHashSig(const ConstBuf& hash, const Sec256Signature& sig) {
@@ -104,8 +123,40 @@ bool Sec256Dsa::VerifyHashSig(const ConstBuf& hash, const Sec256Signature& sig) 
 	int over;
 	secp256k1_scalar_set_b32(&msg, hash.P, &over);
 	ASSERT(!over);
-	return secp256k1_ecdsa_sig_verify(&sig.m_sig, &m_pubkey, &msg);
+	return ::secp256k1_ecdsa_sig_verify(g_sec256Ctx.MultCtx(), &sig.m_sig, &m_pubkey, &msg);
 }
+
+vararray<byte, 65> Sec256Dsa::PrivKeyToPubKey(const ConstBuf& privKey, bool bCompressed) {
+	ASSERT(privKey.Size == 32);
+	vararray<byte, 65> r;
+	int clen = 65;
+	Sec256Check(::secp256k1_ec_pubkey_create(g_sec256Ctx, r.data(), &clen, privKey.P, bCompressed));
+	r.resize(clen);
+	return r;	
+}
+
+Blob Sec256Dsa::PrivKeyToDER(const ConstBuf& privKey, bool bCompressed) {
+	ASSERT(privKey.Size == 32);
+	byte ar[279];
+	int privkeylen = sizeof ar;
+	Sec256Check(::secp256k1_ec_privkey_export(g_sec256Ctx, privKey.P, ar, &privkeylen, bCompressed));
+	return Blob(ar, privkeylen);
+}
+
+Blob Sec256Dsa::PrivKeyFromDER(const ConstBuf& der) {
+	byte ar[32];
+	Sec256Check(::secp256k1_ec_privkey_import(g_sec256Ctx, ar, der.P, der.Size));
+	return Blob(ar, 32);
+}
+
+Blob Sec256Dsa::DecompressPubKey(const ConstBuf& cbuf) {
+	byte buf[65];
+	int pubkeylen = 33;
+	Sec256Check(::secp256k1_ec_pubkey_decompress(g_sec256Ctx, cbuf.P, buf, &pubkeylen));
+	return Blob(buf, pubkeylen);
+}
+
+
 
 
 }} // Ext::Crypto::
