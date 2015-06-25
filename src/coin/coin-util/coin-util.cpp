@@ -101,7 +101,7 @@ public:
 				currency = optarg;
 				break;
 			case 'h':
-				PrintUsage(cout);
+				PrintUsage(&cout);
 				return;
 			default:
 				PrintUsage();
