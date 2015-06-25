@@ -45,8 +45,8 @@ static HasherEng *g_hasher;
 
 class UtilApp : public CConApp {
 public:
-	void PrintUsage() {
-		cout << "Usage: " << System.get_ExeFilePath().stem() << " {-options} command args"
+	void PrintUsage(ostream *os = &cerr) {
+		*os << "Usage: " << System.get_ExeFilePath().stem() << " {-options} command args"
 			"\nOptions:\n"
 			"  -a currencyName     Bitcoin|BTC|Litecoin|LTC|Groestlcoin|GRS|...\n"
 			"  -h                  this help\n"
@@ -101,7 +101,7 @@ public:
 				currency = optarg;
 				break;
 			case 'h':
-				PrintUsage();
+				PrintUsage(cout);
 				return;
 			default:
 				PrintUsage();

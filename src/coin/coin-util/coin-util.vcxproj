@@ -104,6 +104,30 @@
   <ItemDefinitionGroup>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">libext.lib;coinutil.lib;cryp.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">libext.lib;coinutil.lib;cryp.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">libext.lib;coinutil.lib;cryp.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">libext.lib;coinutil.lib;cryp.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">$(OutDir)</AdditionalLibraryDirectories>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">false</RandomizedBaseAddress>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">false</ImageHasSafeExceptionHandlers>
     </Link>
     <ClCompile>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
@@ -112,6 +136,8 @@
     <ClCompile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">el/ext.h</PrecompiledHeaderFile>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">/J %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
@@ -120,6 +146,8 @@
     <ClCompile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">el/ext.h</PrecompiledHeaderFile>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/J %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
@@ -128,6 +156,8 @@
     <ClCompile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">el/ext.h</PrecompiledHeaderFile>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/J %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='D_St|x64'">/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
@@ -136,6 +166,8 @@
     <ClCompile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">el/ext.h</PrecompiledHeaderFile>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">/J %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">/J %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
