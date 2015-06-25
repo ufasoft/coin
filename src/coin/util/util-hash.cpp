@@ -12,24 +12,27 @@ using namespace Crypto;
 
 namespace Coin {
 
+HashValue SHA256_SHA256(const ConstBuf& cbuf) {
+	SHA256 sha;
+	return ConstBuf(sha.ComputeHash(sha.ComputeHash(cbuf)));
+}
+
+HashValue160 Hash160(const ConstBuf& mb) {
+	return HashValue160(RIPEMD160().ComputeHash(SHA256().ComputeHash(mb)));
+}
+
 HashValue ScryptHash(const ConstBuf& mb) {
-	array<uint32_t, 8> ar = CalcSCryptHash(mb);
-	HashValue r;
-	memcpy(r.data(), ar.data(), 32);
-	return r;
+	CArray8UInt32 ar = CalcSCryptHash(mb);
+	return HashValue(ConstBuf(ar.data(), 32));
 }
 
 HashValue NeoSCryptHash(const ConstBuf& mb, int profile) {
-	array<uint32_t, 8> ar = CalcNeoSCryptHash(mb, profile);
-	HashValue r;
-	memcpy(r.data(), ar.data(), 32);
-	return r;
+	return HashValue(ConstBuf(CalcNeoSCryptHash(mb, profile).data(), 32));
 }
 
 HashValue GroestlHash(const ConstBuf& mb) {
 	Groestl512Hash hf;
-	hashval hv = hf.ComputeHash(hf.ComputeHash(mb));
-	return HashValue(ConstBuf(hv.data(), 32));
+	return HashValue(ConstBuf(hf.ComputeHash(hf.ComputeHash(mb)).data(), 32));
 }
 
 
