@@ -81,26 +81,26 @@ Blob Sec256Signature::Serialize() const {
 	return Blob(buf, size);
 }
 
-static Blob SerializePubKey(secp256k1_ge_t& q, bool bCompressed = false) {
+static vararray<byte, 65> SerializePubKey(secp256k1_ge_t& q, bool bCompressed = false) {
 	byte buf[100];
 	int pubkeylen;
 	secp256k1_eckey_pubkey_serialize(&q, buf, &pubkeylen, bCompressed);
-	return Blob(buf, pubkeylen);
+	return vararray<byte, 65>(buf, pubkeylen);
 }
 
-Blob Sec256Dsa::RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed) {
+vararray<byte, 65> Sec256Dsa::RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed) {
 	ASSERT(hash.Size==32 && recid < 3);
 
 	secp256k1_scalar_t m;
 	int over;
 	secp256k1_scalar_set_b32(&m, hash.P, &over);
 	ASSERT(!over);
-    secp256k1_ge_t q;
+	secp256k1_ge_t q;
 	Blob r(nullptr);
-	if (secp256k1_ecdsa_sig_recover(g_sec256Ctx.MultCtx(), &sig.m_sig, &q, &m, recid)) {
-		r = SerializePubKey(q, bCompressed);
+	if (::secp256k1_ecdsa_sig_recover(g_sec256Ctx.MultCtx(), &sig.m_sig, &q, &m, recid)) {
+		return SerializePubKey(q, bCompressed);
 	}
-	return r;
+	return vararray<byte, 65>();
 }
 
 void Sec256Dsa::ParsePubKey(const ConstBuf& cbuf) {
@@ -147,6 +147,10 @@ Blob Sec256Dsa::PrivKeyFromDER(const ConstBuf& der) {
 	byte ar[32];
 	Sec256Check(::secp256k1_ec_privkey_import(g_sec256Ctx, ar, der.P, der.Size));
 	return Blob(ar, 32);
+}
+
+bool Sec256Dsa::VerifyPubKey(const ConstBuf& cbuf) {
+	return ::secp256k1_ec_pubkey_verify(g_sec256Ctx, cbuf.P, cbuf.Size);
 }
 
 Blob Sec256Dsa::DecompressPubKey(const ConstBuf& cbuf) {

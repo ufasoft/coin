@@ -41,7 +41,7 @@ class Sec256Dsa : public DsaBase {
 public:
 	Blob m_privKey;
 
-	static Blob RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed = false);
+	static vararray<byte, 65> RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed = false);
 
 	void ParsePubKey(const ConstBuf& cbuf);
 	Blob SignHash(const ConstBuf& hash) override;
@@ -54,6 +54,7 @@ public:
 	static vararray<byte, 65> PrivKeyToPubKey(const ConstBuf& privKey, bool bCompressed);
 	static Blob PrivKeyToDER(const ConstBuf& privKey, bool bCompressed);
 	static Blob PrivKeyFromDER(const ConstBuf& der);
+	static bool VerifyPubKey(const ConstBuf& cbuf);
 	static Blob DecompressPubKey(const ConstBuf& cbuf);
 private:
 	secp256k1_ge_t m_pubkey;
