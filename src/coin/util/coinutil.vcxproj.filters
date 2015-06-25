@@ -13,9 +13,6 @@
     <ClCompile Include="util-hash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\crypto\ripemd.cpp">
-      <Filter>Comp\crypto</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
       <Filter>Comp\crypto</Filter>
     </ClCompile>
@@ -57,6 +54,12 @@
     </ClCompile>
     <ClCompile Include="coin-err.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="key.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ecdsa.cpp">
+      <Filter>Comp\DEBUG</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -106,6 +109,9 @@
     </Filter>
     <Filter Include="Source Files\C">
       <UniqueIdentifier>{a3d33afb-08f7-418e-8610-a389dfef2b4e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Comp\DEBUG">
+      <UniqueIdentifier>{6979104d-5939-4d98-90b8-112d1ea688cc}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
