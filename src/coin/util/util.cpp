@@ -95,6 +95,8 @@ void BitsToTargetBE(uint32_t bits, byte target[32]) {
 		target[31-off] = byte(bits);
 }
 
+static const HashValue s_NullHashValue;
+
 HashValue::HashValue(const hashval& hv) {
 	if (hv.size() != 32)
 		Throw(E_INVALIDARG);
@@ -105,6 +107,10 @@ HashValue::HashValue(const ConstBuf& mb) {
 	if (mb.Size != 32)
 		Throw(E_INVALIDARG);
 	memcpy(data(), mb.P, mb.Size);
+}
+
+const HashValue& HashValue::Null() {
+	return s_NullHashValue;
 }
 
 HashValue HashValue::FromDifficultyBits(uint32_t bits) {
@@ -161,12 +167,9 @@ bool HashValue::operator<(const HashValue& v) const {
 
 HashValue HashValue::Combine(const HashValue& h1, const HashValue& h2) {
 	byte buf[64];
-	memcpy(buf, h1.data(), h1.size());
-	memcpy(buf+32, h2.data(), h2.size());
+	memcpy(buf, h1.data(), 32);
+	memcpy(buf+32, h2.data(), 32);
 	SHA256 sha;
-#ifdef X_DEBUG//!!!D
-	return HashValue(sha.ComputeHash(ConstBuf(buf, 64)));
-#endif
 	return HashValue(sha.ComputeHash(sha.ComputeHash(ConstBuf(buf, 64))));
 }
 
@@ -177,9 +180,10 @@ HashValue160::HashValue160(RCString s) {
 }
 
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
-	Blob blob(&hash[0], hash.size());
-	reverse(blob.data(), blob.data()+blob.Size);
-	return os << blob;
+	byte buf[32];
+	memcpy(buf, hash.data(), 32);
+	std::reverse(buf, buf+32);
+	return os << ConstBuf(buf, 32);
 }
 
 Blob CalcSha256Midstate(const ConstBuf& mb) {
@@ -348,8 +352,7 @@ void HasherEng::SetCurrent(HasherEng *heng) {
 }
 
 HashValue HasherEng::HashBuf(const ConstBuf& cbuf) {
-	SHA256 sha;
-	return ConstBuf(sha.ComputeHash(sha.ComputeHash(cbuf)));
+	return SHA256_SHA256(cbuf);
 }
 
 HashValue HasherEng::HashForAddress(const ConstBuf& cbuf) {
