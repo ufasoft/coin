@@ -48,7 +48,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 
 	NonceRange = FromOptionalNonceRange(json);
 
-	MyExpireTime = DateTime::UtcNow() + TimeSpan::FromSeconds(json.HasKey("expires") ? int32_t(json["expires"].ToInt64()) : 600);
+	MyExpireTime = Clock::now() + TimeSpan::FromSeconds(json.HasKey("expires") ? int32_t(json["expires"].ToInt64()) : 600);
 
 	if (VarValue coinbaseAux = json["coinbaseaux"]) {
 		MemoryStream ms;
@@ -166,7 +166,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
-	wr << uint32_t(1) << byte(1) << HashValue() << uint32_t(-1);
+	wr << uint32_t(1) << byte(1) << HashValue::Null() << uint32_t(-1);
 	CoinSerialized::WriteVarInt(wr, scriptIn.Size);
 	coinb1Size += int(ms.Position);
 	ms.WriteBuf(scriptIn);

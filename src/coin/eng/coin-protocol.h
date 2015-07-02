@@ -50,7 +50,7 @@ public:
 		Type = InventoryType(typ);
 	}
 protected:
-	String ToString() const override;
+	void Print(ostream& os) const override;
 };
 
 } namespace std {
@@ -64,29 +64,34 @@ protected:
 class CoinLink : public P2P::Link {
 	typedef P2P::Link base;
 public:
-	int32_t LastReceivedBlock;
 	LruCache<Inventory> KnownInvertorySet;
 	
 	typedef unordered_set<Inventory> CInvertorySetToSend;
 	CInvertorySetToSend InvertorySetToSend;
 
 	HashValue HashContinue;
-	
+	HashValue HashBlockLastUnknown;
+	HashValue HashBlockLastCommon, HashBlockBestKnown;
+
 	Block m_curMerkleBlock;
 	vector<HashValue> m_curMatchedHashes;
 
+	BlocksInFlightList BlocksInFlight;
+
 	mutex MtxFilter;
 	ptr<CoinFilter> Filter;
+	int32_t LastReceivedBlock;
 	CBool RelayTxes;
+	CBool IsClient;
+	CBool IsPreferredDownload;
+	CBool IsSyncStarted;
 
-	CoinLink(P2P::NetManager& netManager, thread_group& tr)
-		:	base(&netManager, &tr)
-		,	LastReceivedBlock(-1)
-		,	m_curMerkleBlock(nullptr)
-	{}
-
+	CoinLink(P2P::NetManager& netManager, thread_group& tr);
 	void Push(const Inventory& inv);
 	void Send(ptr<P2P::Message> msg) override;
+	void UpdateBlockAvailability(const HashValue& hashBlock);
+	void RequestHeaders();
+	void RequestBlocks();
 protected:
 	void OnPeriodic() override;
 };
@@ -108,7 +113,7 @@ protected:
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
 	void Process(P2P::Link& link) override;
-	String ToString() const override;
+	void Print(ostream& os) const override;
 };
 
 class VerackMessage : public CoinMessage {
@@ -143,6 +148,7 @@ public:
 protected:
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
+	void Print(ostream& os) const override;
 	void Process(P2P::Link& link) override;
 };
 
@@ -151,14 +157,14 @@ class InvGetDataMessage : public CoinMessage {
 public:
 	vector<Inventory> Invs;
 protected:
-	InvGetDataMessage(RCString cmd)
+	InvGetDataMessage(const char *cmd)
 		:	base(cmd)
 	{}
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
 	void Process(P2P::Link& link) override;
-	String ToString() const override;
+	void Print(ostream& os) const override;
 };
 
 class InvMessage : public InvGetDataMessage {
@@ -194,7 +200,7 @@ public:
 class HeadersMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	vector<Block> Headers;
+	vector<BlockHeader> Headers;
 
 	HeadersMessage()
 		:	base("headers")
@@ -202,45 +208,51 @@ public:
 protected:
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
+	void Print(ostream& os) const override;
+	void Process(P2P::Link& link) override;
 };
 
-class GetHeadersMessage : public CoinMessage {
+class GetHeadersGetBlocksMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
 	uint32_t Ver;
 	LocatorHashes Locators;
 	HashValue HashStop;
 
-	GetHeadersMessage()
-		:	base("getheaders")
+	GetHeadersGetBlocksMessage(const char *cmd)
+		:	base(cmd)
 		,	Ver(Eng().ChainParams.ProtocolVersion) 
 	{}
 
+	void Set(const HashValue& hashLast, const HashValue& hashStop);
 protected:
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
+	void Print(ostream& os) const override;
+};
+
+class GetHeadersMessage : public GetHeadersGetBlocksMessage {
+	typedef GetHeadersGetBlocksMessage base;
+public:
+	GetHeadersMessage()
+		:	base("getheaders")
+	{}
+
+	GetHeadersMessage(const HashValue& hashLast, const HashValue& hashStop = HashValue::Null());
+protected:
 	void Process(P2P::Link& link) override;
 };
 
-class GetBlocksMessage : public CoinMessage {
-	typedef CoinMessage base;
+class GetBlocksMessage : public GetHeadersGetBlocksMessage {
+	typedef GetHeadersGetBlocksMessage base;
 public:
-	uint32_t Ver;
-	LocatorHashes Locators;
-	HashValue HashStop;
-
 	GetBlocksMessage()
 		:	base("getblocks")
-		,	Ver(Eng().ChainParams.ProtocolVersion)
 	{}	
 
-	GetBlocksMessage(const Block& blockLast, const HashValue& hashStop);
-	void Set(const Block& blockLast, const HashValue& hashStop);
+	GetBlocksMessage(const HashValue& hashLast, const HashValue& hashStop);
 protected:
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
 	void Process(P2P::Link& link) override;
-	String ToString() const override;
 };
 
 class TxMessage : public CoinMessage {
@@ -253,17 +265,11 @@ public:
 		,	Tx(tx)
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << Tx;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		rd >> Tx;
-	}
-
 	void Process(P2P::Link& link) override;
 protected:
-	String ToString() const override;
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
+	void Print(ostream& os) const override;
 };
 
 class BlockMessage : public CoinMessage {
@@ -271,22 +277,17 @@ class BlockMessage : public CoinMessage {
 public:
 	Coin::Block Block;
 
-	BlockMessage(const Coin::Block& block = nullptr, RCString commandName = "block")
-		:	base(commandName)
+	BlockMessage(const Coin::Block& block = nullptr, const char *cmd = "block")
+		:	base(cmd)
 		,	Block(block)
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << Block;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		Block = Coin::Block();
-		rd >> Block;
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 protected:
+	virtual void ProcessContent(P2P::Link& link);
 	void Process(P2P::Link& link) override;
-	String ToString() const override;
+	void Print(ostream& os) const override;
 };
 
 class MerkleBlockMessage : public BlockMessage {
@@ -301,6 +302,8 @@ public:
 	vector<Tx> Init(const Coin::Block& block, CoinFilter& filter);
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
+protected:
+	void ProcessContent(P2P::Link& link) override;
 	void Process(P2P::Link& link) override;
 };
 
@@ -321,13 +324,8 @@ public:
 		:	base("submitorder")
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << TxHash;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		rd >> TxHash;
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 };
 
 class ReplyMessage : public CoinMessage {
@@ -339,13 +337,8 @@ public:
 		:	base("reply")
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << Code;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		Code = rd.ReadUInt32();
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 };
 
 class PingPongMessage : public CoinMessage {
@@ -353,17 +346,12 @@ class PingPongMessage : public CoinMessage {
 public:
 	uint64_t Nonce;
 
-	PingPongMessage(RCString command)
-		:	base(command)
+	PingPongMessage(const char *cmd)
+		:	base(cmd)
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << Nonce;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		rd >> Nonce;
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 };
 
 class PingMessage : public PingPongMessage {
@@ -375,11 +363,7 @@ public:
 		Ext::Random().NextBytes(Buf(&Nonce, sizeof Nonce));
 	}
 
-	void Read(const BinaryReader& rd) override {
-		if (Link->PeerVersion >= 60001 && !rd.BaseStream.Eof())
-			base::Read(rd);
-	}
-
+	void Read(const BinaryReader& rd) override;
 	void Process(P2P::Link& link) override;
 };
 
@@ -415,15 +399,8 @@ public:
 		:	base("alert")
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		WriteBlob(wr, Payload);
-		WriteBlob(wr, Signature);
-	}
-
-	void Read(const BinaryReader& rd) override {
-		Payload = ReadBlob(rd);
-		Signature = ReadBlob(rd);
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 protected:
 	void Process(P2P::Link& link) override;
 };
@@ -438,23 +415,10 @@ public:
 		,	Filter(filter)
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << *Filter;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		rd >> *(Filter = new CoinFilter);
-		if ((Filter->Bitset.size()+7)/8 > MAX_BLOOM_FILTER_SIZE || Filter->HashNum > MAX_HASH_FUNCS)
-			throw PeerMisbehavingException(100);
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 protected:
-	void Process(P2P::Link& link) override {
-		CoinLink& clink = (CoinLink&)link;
-		EXT_LOCK (clink.MtxFilter) {
-			clink.Filter = Filter;
-		}
-		clink.RelayTxes = true;
-	}
+	void Process(P2P::Link& link) override;
 };
 
 class FilterAddMessage : public CoinMessage {
@@ -466,24 +430,10 @@ public:
 		:	base("filteradd")
 	{}
 
-	void Write(BinaryWriter& wr) const override {
-		CoinSerialized::WriteBlob(wr, Data);
-	}
-
-	void Read(const BinaryReader& rd) override {
-		Data = CoinSerialized::ReadBlob(rd);
-		if (Data.Size > MAX_SCRIPT_ELEMENT_SIZE)
-			throw PeerMisbehavingException(100);
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 protected:
-	void Process(P2P::Link& link) override {
-		CoinLink& clink = (CoinLink&)link;
-		EXT_LOCK (clink.MtxFilter) {
-			if (!clink.Filter)
-				throw PeerMisbehavingException(100);
-			clink.Filter->Insert(Data);
-		}
-	}
+	void Process(P2P::Link& link) override;
 };
 
 class FilterClearMessage : public CoinMessage {
@@ -528,11 +478,12 @@ public:
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
-	String ToString() const override;
+	void Print(ostream& os) const override;
 protected:
 	void Process(P2P::Link& link) override {
 		TRC(2, ToString());
 	}
 };
+
 
 } // Coin::

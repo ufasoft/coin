@@ -8,6 +8,10 @@
 #include <el/crypto/ecdsa.h>
 using namespace Ext::Crypto;
 
+#ifndef UCFG_COIN_BIP0014_USER_AGENT
+#	define UCFG_COIN_BIP0014_USER_AGENT ("/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/")
+#endif
+
 
 #include "coin-protocol.h"
 #include "eng.h"
@@ -92,8 +96,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 			r = (eng.*mfn)();
 		else {
 			TRC(2, "Unknown command: " << cmd);
-
-			r = new CoinMessage(cmd);
+//!!!R			r = new CoinMessage(cmd);
 		}
 		payload.Size = len;
 		rd.Read(payload.data(), payload.Size);
@@ -103,14 +106,15 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 	if (letoh(*(uint32_t*)h.data()) != checksum)
 		Throw(ExtErr::Protocol_Violation);
 	ms.Position = 0;
-	r->Link = &link;
-
-	try {
-		DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
-		r->Read(BinaryReader(ms));
-	} catch (RCExc ex) {
-		link.Send(new RejectMessage(RejectReason::Malformed, r->Command, "error parsing message"));
-		throw ex;		//!!!T
+	if (r) {
+		r->Link = &link;
+		try {
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
+			r->Read(BinaryReader(ms));
+		} catch (RCExc ex) {
+			link.Send(new RejectMessage(RejectReason::Malformed, r->Cmd, "error parsing message"));
+			throw ex;		//!!!T
+		}
 	}
 	return r;
 }
@@ -121,40 +125,105 @@ void CoinMessage::Write(BinaryWriter& wr) const {
 void CoinMessage::Read(const BinaryReader& rd) {
 }
 
-String CoinMessage::ToString() const {
-	return "Msg "+Command;
+void CoinMessage::Print(ostream& os) const {
+	os << Cmd << " ";
+}
+
+VersionMessage::VersionMessage()
+	: base("version")
+	, ProtocolVer(Eng().ChainParams.ProtocolVersion)
+	, Services(0)
+	, LastReceivedBlock(-1)
+	, RelayTxes(true)
+{
+	CoinEng& eng = Eng();
+	if (eng.Mode == EngMode::Lite)
+		RelayTxes = !eng.Filter;
+	else
+		Services |= uint64_t(NodeServices::NODE_NETWORK);
+}
+
+void VersionMessage::Write(BinaryWriter& wr) const {
+	wr << ProtocolVer << Services << int64_t(to_time_t(RemoteTimestamp)) << RemotePeerInfo << LocalPeerInfo << Nonce;
+	WriteString(wr, UserAgent);
+	wr << LastReceivedBlock << RelayTxes;
+}
+
+void VersionMessage::Read(const BinaryReader& rd) {
+	ProtocolVer = rd.ReadUInt32();
+	Services = rd.ReadUInt64();
+	RemoteTimestamp = DateTime::from_time_t(rd.ReadUInt64());
+	if (ProtocolVer >= 106) {
+		rd >> RemotePeerInfo >>	LocalPeerInfo >> Nonce;
+		UserAgent = ReadString(rd);
+		if (ProtocolVer >= 209) {
+			LastReceivedBlock = (int32_t)rd.ReadUInt32();
+			RelayTxes = rd.BaseStream.Eof() ? true : rd.ReadByte();
+		}
+	}
+}
+
+void VersionMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << "Ver: " << ProtocolVer << ", " << UserAgent << ", LastBlock: " << LastReceivedBlock << ", Services: " << Services;
+}
+
+void VerackMessage::Process(P2P::Link& link) {
+	Eng().RemoveVerNonce(link);
+}
+
+
+void CoinEng::SendVersionMessage(Link& link) {
+	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
+	m->UserAgent = UCFG_COIN_BIP0014_USER_AGENT;		// BIP 0014
+	m->RemoteTimestamp = Clock::now();
+	GetSystemURandomReader() >> m->Nonce;
+	EXT_LOCK(m_mtxVerNonce) {
+		m_nonce2link[m->Nonce] = &link;
+	}
+	if (Listen)
+		m->LocalPeerInfo.Ep = NetManager.LocalEp4;		//!!!? IPv6
+	m->RemotePeerInfo.Ep = link.Tcp.Client.RemoteEndPoint;
+	m->LastReceivedBlock = BestBlockHeight();
+	link.Send(m);
 }
 
 void GetAddrMessage::Process(P2P::Link& link) {
-	EXT_LOCK (link.Mtx) {
-		link.m_setPeersToSend.clear();
-	}
-	EXT_FOR (const ptr<Peer>& peer, link.Net->GetPeers(1000)) {
-		link.Push(peer);
+	if (link.Incoming) {
+		EXT_LOCK(link.Mtx) {
+			link.m_setPeersToSend.clear();
+		}
+		vector<ptr<Peer>> peers = link.Net->GetPeers(1000);
+		EXT_FOR(const ptr<Peer>& peer, peers) {
+			link.Push(peer);
+		}
 	}
 }
 
 void AddrMessage::Write(BinaryWriter& wr) const {
 	CoinSerialized::Write(wr, PeerInfos);
-
-	/*!!!
-	WriteVarInt(wr, PeerInfos.size());
-	for (int i=0; i<PeerInfos.size(); ++i)
-		WritePeerInfo(wr, PeerInfos[i], true);*/
 }
 
 void AddrMessage::Read(const BinaryReader& rd) {
 	CoinSerialized::Read(rd, PeerInfos);
-	/*!!!R
-	PeerInfos.resize((size_t)ReadVarInt(rd));
-	for (int i=0; i<PeerInfos.size(); ++i)
-		PeerInfos[i] = ReadPeerInfo(rd, true);*/
+}
+
+void AddrMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << PeerInfos.size() << " peers: ";
+	for (int i=0; i<PeerInfos.size(); ++i) {
+		if (i >= 2) {
+			os << " ... ";
+			break;
+		}
+		os << PeerInfos[i].Ep.Address << " ";
+	}
 }
 
 void AddrMessage::Process(P2P::Link& link) {
 	if (PeerInfos.size() > 1000)
 		throw PeerMisbehavingException(20);
-	DateTime now = DateTime::UtcNow(),
+	DateTime now = Clock::now(),
 		lowerLimit(1974, 1, 1),
 		upperLimit(now + TimeSpan::FromMinutes(10)),
 		dtDefault(now + TimeSpan::FromDays(5));
@@ -191,94 +260,111 @@ int LocatorHashes::get_DistanceBack() const {
 
 void HeadersMessage::Write(BinaryWriter& wr) const {
 	CoinSerialized::WriteVarInt(wr, Headers.size());
-	EXT_FOR (const Block& block, Headers) {
-		block.WriteHeader(wr);
+	EXT_FOR (const BlockHeader& header, Headers) {
+		header.WriteHeader(wr);
 		CoinSerialized::WriteVarInt(wr, 0);
 	}
 }
 
 void HeadersMessage::Read(const BinaryReader& rd) {
+	CoinEng& eng = Eng();
+
 	Headers.resize((size_t)CoinSerialized::ReadVarInt(rd));
 	for (int i=0; i<Headers.size(); ++i) {
-		Headers[i].ReadHeader(rd);
+		(Headers[i] = BlockHeader(eng.CreateBlockObj())).ReadHeader(rd);
 		CoinSerialized::ReadVarInt(rd);		// tx count unused
 	}
 }
 
-void GetHeadersMessage::Write(BinaryWriter& wr) const {
+void HeadersMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << Headers.size() << " headers:";
+	for (int i=0; i<Headers.size(); ++i) {
+		if (i < 2 || i == Headers.size()-1)
+			os << " " << Hash(Headers[i]);
+		else if (i == 2)
+			os << " ...";
+	}
+}
+
+void GetHeadersGetBlocksMessage::Write(BinaryWriter& wr) const {
 	wr << Ver;
 	CoinSerialized::Write(wr, Locators);
 	wr << HashStop;
 }
 
-void GetHeadersMessage::Read(const BinaryReader& rd) {
+void GetHeadersGetBlocksMessage::Read(const BinaryReader& rd) {
 	rd >> Ver;
 	CoinSerialized::Read(rd, Locators);
 	rd >> HashStop;
+}
+
+void GetHeadersGetBlocksMessage::Print(ostream& os) const {
+	base::Print(os);
+	for (int i=0; i<Locators.size(); ++i) {
+		if (i >= 2) {
+			os << " ... ";
+			break;
+		}
+		os << Locators[i] << " ";
+	}
+	os << " HashStop: " << HashStop;
+}
+
+void GetHeadersGetBlocksMessage::Set(const HashValue& hashLast, const HashValue& hashStop) {
+	CoinEng& eng = Eng();
+
+	Locators.clear();
+	if (!hashLast)
+		HashStop = eng.ChainParams.Genesis;
+	else {
+		BlockTreeItem bti = eng.Tree.GetItem(hashLast);
+		int step = 1, h = bti.Height;
+		for (HashValue hash=hashLast; hash; hash=eng.Tree.GetAncestor(hash, h)) {	//!!!? bool
+			Locators.push_back(hash);
+			if ((h -= step) <= 0)
+				break;
+			if (Locators.size() > 10)
+				step *= 2;
+		}
+		Locators.push_back(eng.ChainParams.Genesis);
+		HashStop = hashStop;
+	}
+}
+
+GetHeadersMessage::GetHeadersMessage(const HashValue& hashLast, const HashValue& hashStop)
+	: base("getheaders")
+{
+	Set(hashLast, hashStop);
 }
 
 void GetHeadersMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 
 	ptr<HeadersMessage> m = new HeadersMessage;
-	if (Locators.empty()) {
-		if (Block block = eng.LookupBlock(HashStop)) {
-			if (block.IsInMainChain())
-				m->Headers.push_back(block);
-			else
-				return;			
-		} else
-			return;
-	} else {
+	if (!Locators.empty())
 		m->Headers = eng.Db->GetBlockHeaders(Locators, HashStop);
+	else if (Block block = eng.LookupBlock(HashStop)) {
+		if (block.IsInMainChain())
+			m->Headers.push_back(block);
 	}
-	link.Send(m);
+	if (!m->Headers.empty())
+		link.Send(m);
 }
 
-GetBlocksMessage::GetBlocksMessage(const Block& blockLast, const HashValue& hashStop)
+void Inventory::Print(ostream& os) const {
+	switch (Type) {
+	case InventoryType::MSG_TX: os << "MSG_TX "; break;
+	case InventoryType::MSG_BLOCK: os << "MSG_BLOCK "; break;
+	case InventoryType::MSG_FILTERED_BLOCK: os << "MSG_FILTERED_BLOCK "; break;
+	}
+	os << HashValue;
+}
+
+GetBlocksMessage::GetBlocksMessage(const HashValue& hashLast, const HashValue& hashStop)
 	:	base("getblocks")
-	,	Ver(Eng().ChainParams.ProtocolVersion)
 {
-	Set(blockLast, hashStop);
-}
-
-void GetBlocksMessage::Set(const Block& blockLast, const HashValue& hashStop) {
-	CoinEng& eng = Eng();
-
-	Locators.clear();
-	int step = 1;
-	for (Block block=blockLast; block;) {
-		Locators.push_back(Hash(block));
-		if (block.IsInMainChain()) {
-			int idxPrev = block.Height-step;
-			block = idxPrev > 0 ? eng.GetBlockByHeight(idxPrev) : nullptr;
-		} else {
-			for (int i = 0; block && i < step; i++)
-				block = block.GetPrevBlock();
-		}
-		if (Locators.size() > 10)
-			step *= 2;
-	}
-	Locators.push_back(eng.ChainParams.Genesis);
-#ifdef X_DEBUG//!!!D
-	for (int i=0; i<Locators.size(); ++i) {
-		Block b = eng.LookupBlock(Locators[i]);
-		TRC(1, Locators[i] << " " << (b ? b.Height : -2));
-	}
-#endif
-	HashStop = hashStop;
-}
-
-void GetBlocksMessage::Write(BinaryWriter& wr) const  {
-	wr << Ver;
-	CoinSerialized::Write(wr, Locators);
-	wr << HashStop;
-}
-
-void GetBlocksMessage::Read(const BinaryReader& rd) {
-	rd >> Ver;
-	CoinSerialized::Read(rd, Locators);
-	rd >> HashStop;
+	Set(hashLast, hashStop);
 }
 
 void GetBlocksMessage::Process(P2P::Link& link) {
@@ -301,20 +387,6 @@ void GetBlocksMessage::Process(P2P::Link& link) {
 	}
 }
 
-String GetBlocksMessage::ToString() const {
-	ostringstream os;
-	os << base::ToString() << " ";
-	for (int i=0; i<Locators.size(); ++i) {
-		if (i >= 2) {
-			os << " ... ";
-			break;
-		}
-		os << Locators[i] << " ";
-	}
-	os << " HashStop: " << HashStop;
-	return os.str();
-}
-
 void Alert::Read(const BinaryReader& rd) {
 	int64_t relayUntil, expiration;
 	rd >> Ver >> relayUntil >> expiration >> NId >> NCancel >> SetCancel >> MinVer >> MaxVer;
@@ -330,13 +402,22 @@ void Alert::Read(const BinaryReader& rd) {
 	Reserved = CoinSerialized::ReadString(rd);
 }
 
+void AlertMessage::Write(BinaryWriter& wr) const {
+	WriteBlob(wr, Payload);
+	WriteBlob(wr, Signature);
+}
+
+void AlertMessage::Read(const BinaryReader& rd) {
+	Payload = ReadBlob(rd);
+	Signature = ReadBlob(rd);
+}
+
 void AlertMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
 
 	HashValue hv = Hash(Payload);
-	for (int i=0; i<eng.ChainParams.AlertPubKeys.size(); ++i) {
-		ECDsa dsa(CngKey::Import(eng.ChainParams.AlertPubKeys[i], CngKeyBlobFormat::OSslEccPublicBlob));
-		if (dsa.VerifyHash(hv, Signature))
+	EXT_FOR(const Blob& pubKey, eng.ChainParams.AlertPubKeys) {
+		if (KeyInfoBase::VerifyHash(pubKey, hv, Signature))
 			goto LAB_VERIFIED;
 	}
 	Throw(CoinErr::AlertVerifySignatureFailed);
@@ -345,7 +426,7 @@ LAB_VERIFIED:
 	CMemReadStream stm(Payload);
 	(Alert = new Coin::Alert)->Read(BinaryReader(stm));
 
-	if (DateTime::UtcNow() < Alert->Expiration) {
+	if (Clock::now() < Alert->Expiration) {
 		TRC(2, Alert->Expiration << "\t" << Alert->StatusBar);
 
 		if (eng.m_iiEngEvents)
@@ -359,7 +440,17 @@ LAB_VERIFIED:
 	}
 }
 
+CoinLink::CoinLink(P2P::NetManager& netManager, thread_group& tr)
+	: base(&netManager, &tr)
+	, LastReceivedBlock(-1)
+	, m_curMerkleBlock(nullptr)
+{
+}
+
 void CoinLink::OnPeriodic() {
+	if (!PeerVersion)							// wait for "version" message
+		return;
+
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 	CCoinEngThreadKeeper engKeeper(&eng);
 
@@ -403,6 +494,9 @@ void CoinLink::OnPeriodic() {
 		if (m)
 			Send(m);
 	}
+
+	RequestHeaders();
+	RequestBlocks();
 }
 
 void CoinLink::Push(const Inventory& inv) {
@@ -416,18 +510,56 @@ void CoinLink::Send(ptr<P2P::Message> msg) {
 	CoinMessage& m = *static_cast<CoinMessage*>(msg.get());
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
-	TRC(2, Peer->get_EndPoint() << " send " << m);
+	TRC(2, Peer->get_EndPoint().Address << " send " << m);
 	
 	Blob blob = EXT_BIN(m);
 	MemoryStream qs2;
 	BinaryWriter wrQs2(qs2);
 	wrQs2 << eng.ChainParams.ProtocolMagic;
 	char cmd[12] = { 0 };
-	strcpy(cmd, m.Command);
+	strcpy(cmd, m.Cmd);
 	wrQs2.WriteStruct(cmd);
 	wrQs2 << uint32_t(blob.Size) << letoh(*(uint32_t*)Eng().HashMessage(blob).data());	
 	wrQs2.Write(blob.constData(), blob.Size);
 	SendBinary(qs2);
+}
+
+
+void FilterLoadMessage::Write(BinaryWriter& wr) const {
+	wr << *Filter;
+}
+
+void FilterLoadMessage::Read(const BinaryReader& rd) {
+	rd >> *(Filter = new CoinFilter);
+	if ((Filter->Bitset.size()+7)/8 > MAX_BLOOM_FILTER_SIZE || Filter->HashNum > MAX_HASH_FUNCS)
+		throw PeerMisbehavingException(100);
+}
+
+void FilterLoadMessage::Process(P2P::Link& link) {
+	CoinLink& clink = (CoinLink&)link;
+	EXT_LOCK(clink.MtxFilter) {
+		clink.Filter = Filter;
+	}
+	clink.RelayTxes = true;
+}
+
+void FilterAddMessage::Write(BinaryWriter& wr) const {
+	CoinSerialized::WriteBlob(wr, Data);
+}
+
+void FilterAddMessage::Read(const BinaryReader& rd) {
+	Data = CoinSerialized::ReadBlob(rd);
+	if (Data.Size > MAX_SCRIPT_ELEMENT_SIZE)
+		throw PeerMisbehavingException(100);
+}
+
+void FilterAddMessage::Process(P2P::Link& link) {
+	CoinLink& clink = (CoinLink&)link;
+	EXT_LOCK(clink.MtxFilter) {
+		if (!clink.Filter)
+			throw PeerMisbehavingException(100);
+		clink.Filter->Insert(Data);
+	}
 }
 
 void RejectMessage::Write(BinaryWriter& wr) const {
@@ -446,8 +578,8 @@ void RejectMessage::Read(const BinaryReader& rd) {
 		rd >> Hash;
 }
 
-String RejectMessage::ToString() const {
-	ostringstream os;
+void RejectMessage::Print(ostream& os) const {
+	base::Print(os);
 	if (Link)
 		os << "From " << Link->Peer->get_EndPoint() << ": ";
 	os << "Reject to command " << Command << ": " << Reason;
@@ -457,7 +589,195 @@ String RejectMessage::ToString() const {
 #endif
 	if (Command=="block" || Command=="tx")
 		os << " " << Hash;
-	return String(os.str());
+}
+
+void InvGetDataMessage::Write(BinaryWriter& wr) const {
+	CoinSerialized::Write(wr, Invs);
+}
+
+void InvGetDataMessage::Read(const BinaryReader& rd) {
+	CoinSerialized::Read(rd, Invs);
+}
+
+void InvGetDataMessage::Process(P2P::Link& link) {
+	if (Invs.size() > MAX_INV_SZ)
+		throw PeerMisbehavingException(20);
+}
+
+void InvGetDataMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << Invs.size() << " invs: ";
+	for (int i=0; i<Invs.size(); ++i) {
+		if (i > 18) {
+			os << " ... ";
+			break;
+		}
+		os << (i ? ", " : "     ") << Invs[i];
+	}
+}
+
+vector<Tx> MerkleBlockMessage::Init(const Coin::Block& block, CoinFilter& filter) {
+	Block = block;
+	const CTxes& txes = block.get_Txes();
+	PartialMT.NItems = txes.size();
+
+	vector<HashValue> vHash(PartialMT.NItems);
+	dynamic_bitset<byte> bsMatch(PartialMT.NItems);
+	vector<Tx> r;
+	for (size_t i=0; i<PartialMT.NItems; ++i) {
+		const Tx& tx = txes[i];
+		vHash[i] = Hash(tx);
+		if (filter.IsRelevantAndUpdate(tx)) {
+			r.push_back(tx);
+			bsMatch.set(i);
+		}
+	}
+	PartialMT.Init(vHash, bsMatch);
+	return r;
+}
+
+void MerkleBlockMessage::Write(BinaryWriter& wr) const {
+	Block.m_pimpl->WriteHeader(wr);
+	wr << uint32_t(PartialMT.NItems);
+	CoinSerialized::Write(wr, PartialMT.Items);
+	vector<byte> v;
+	to_block_range(PartialMT.Bitset, back_inserter(v));
+	CoinSerialized::WriteBlob(wr, ConstBuf(&v[0], v.size()));
+}
+
+void MerkleBlockMessage::Read(const BinaryReader& rd) {
+	Block.m_pimpl->ReadHeader(rd, false, 0);
+	Block.m_pimpl->m_bTxesLoaded = true;
+	PartialMT.NItems = rd.ReadUInt32();
+	CoinSerialized::Read(rd, PartialMT.Items);
+	Blob blob = CoinSerialized::ReadBlob(rd);
+	const byte *p = blob.constData();
+	PartialMT.Bitset.resize(blob.Size*8);
+	for (int i=0; i<blob.Size; ++i)
+		for (int j=0; j<8; ++j) {
+			PartialMT.Bitset.replace(i*8+j, (p[i] >> j) & 1);
+		}
+}
+
+void TxMessage::Write(BinaryWriter& wr) const {
+	wr << Tx;
+}
+
+void TxMessage::Read(const BinaryReader& rd) {
+	rd >> Tx;
+}
+
+void TxMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << Hash(Tx);
+}
+
+void BlockMessage::Write(BinaryWriter& wr) const {
+	wr << Block;
+}
+
+void BlockMessage::Read(const BinaryReader& rd) {
+	Block = Coin::Block();
+	rd >> Block;
+}
+
+void BlockMessage::Print(ostream& os) const {
+	base::Print(os);
+	if (Block.Height >= 0)
+		os << Block.Height;
+	os << " " << Hash(Block);
+}
+
+bool CoinEng::CheckSelfVerNonce(uint64_t nonce) {
+	bool bSelf = false;
+	EXT_LOCK (m_mtxVerNonce) {
+		 if (bSelf = m_nonce2link.count(nonce))
+			m_nonce2link[nonce]->OnSelfLink();
+	}
+	return !bSelf;
+}
+
+void CoinEng::RemoveVerNonce(P2P::Link& link) {
+	EXT_LOCK (m_mtxVerNonce) {
+		for (CNonce2link::iterator it=m_nonce2link.begin(), e=m_nonce2link.end(); it!=e; ++it)
+			if (it->second.get() == &link) {
+				m_nonce2link.erase(it);
+				break;
+			}
+	}
+}
+
+void VersionMessage::Process(P2P::Link& link) {
+	if (ProtocolVer < MIN_PEER_PROTO_VERSION)
+		Throw(ExtErr::ObsoleteProtocolVersion);
+
+	CoinEng& eng = Eng();
+	CoinLink& clink = static_cast<CoinLink&>(link);
+	if (clink.PeerVersion)
+		Throw(CoinErr::DupVersionMessage);
+
+	DateTime now = Clock::now();
+	if (eng.CheckSelfVerNonce(Nonce)) {
+		clink.PeerVersion = ProtocolVer;
+		clink.TimeOffset = RemoteTimestamp - now;
+		clink.LastReceivedBlock = LastReceivedBlock;
+		clink.RelayTxes = RelayTxes;
+		clink.IsClient = !(Services & uint64_t(NodeServices::NODE_NETWORK));
+
+		eng.aPreferredDownloadPeers += (clink.IsPreferredDownload = !link.Incoming && !link.IsOneShot && !clink.IsClient);
+
+		if (link.Incoming)
+			eng.SendVersionMessage(link);
+		clink.Send(eng.CreateVerackMessage());
+
+		if (!link.Incoming)
+			link.Send(new GetAddrMessage);
+
+		if (eng.Filter) {
+			link.Send(new FilterLoadMessage(eng.Filter.get()));
+		}
+		clink.RequestHeaders();
+	}
+	if (link.Incoming)
+		if (ptr<Peer> p = link.Net->Add(link.Tcp.Client.RemoteEndPoint, Services, now))
+			link.Peer = p;
+	eng.Good(link.Peer);
+}
+
+void SubmitOrderMessage::Write(BinaryWriter& wr) const {
+	wr << TxHash;
+}
+
+void SubmitOrderMessage::Read(const BinaryReader& rd) {
+	rd >> TxHash;
+}
+
+void ReplyMessage::Write(BinaryWriter& wr) const {
+	wr << Code;
+}
+
+void ReplyMessage::Read(const BinaryReader& rd) {
+	Code = rd.ReadUInt32();
+}
+
+
+void PingPongMessage::Write(BinaryWriter& wr) const {
+	wr << Nonce;
+}
+
+void PingPongMessage::Read(const BinaryReader& rd) {
+	rd >> Nonce;
+}
+
+void PingMessage::Read(const BinaryReader& rd) {
+	if (Link->PeerVersion >= 60001 && !rd.BaseStream.Eof())
+		base::Read(rd);
+}
+
+void PingMessage::Process(P2P::Link& link) {
+	ptr<PongMessage> m = new PongMessage;
+	m->Nonce = Nonce;
+	link.Send(m);
 }
 
 

@@ -69,6 +69,10 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::BadTxnsVinEmpty								, "Transaction has no Inputs"					}
 	, { CoinErr::BadTxnsVoutEmpty								, "Transaction has no Outputs"					}
 	, { CoinErr::BadTxnsVoutNegative							, "Transaction out value is Negative"			}
+	, { CoinErr::BadPrevBlock									, "Previous Block not found"					}
+	, { CoinErr::InvalidPrivateKey								, "Invalid Private Key"							}
+	, { CoinErr::VersionMessageMustBeFirst						, "Version message must be first"				}
+
 
 	, { CoinErr::RPC_MISC_ERROR									, "Exception thrown in command handling"		}
 	, { CoinErr::RPC_FORBIDDEN_BY_SAFE_MODE						, "Server is in safe mode, and command is not allowed in safe mode"	}

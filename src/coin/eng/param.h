@@ -7,7 +7,8 @@
 
 namespace Coin {
 
-const uint32_t PROTOCOL_VERSION = 70002;
+const uint32_t PROTOCOL_VERSION = 70002,
+	MIN_PEER_PROTO_VERSION = 31800;				//  getheaders message
 
 const uint64_t SEND_FEE_THOUSANDTH = 4;		// 0.4%
 
@@ -26,6 +27,12 @@ const int MAX_HASH_FUNCS = 50;
 static const int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
 
 const int MAX_SEND_SIZE = 1000000;
+
+const int
+	MAX_BLOCKS_IN_TRANSIT_PER_PEER = 32,				// 16 in the reference client
+	BLOCK_DOWNLOAD_WINDOW = 1024,						// at least 1024 is recommended for some non-sorted bootstrap.dat files
+	MAX_HEADERS_RESULTS	= 2000;
+
 
 //!!!static const int64_t MIN_TX_FEE = 50000;
 //!!!static const int64_t MIN_RELAY_TX_FEE = 10000;
@@ -69,7 +76,4 @@ const size_t MAX_INV_SZ = 50000;
 #	define UCFG_COIN_COMPACT_AUX 0					// incompatible space optimization
 #endif
 
-#ifndef UCFG_COIN_USE_OPENSSL
-#	define UCFG_COIN_USE_OPENSSL 1
-#endif
 

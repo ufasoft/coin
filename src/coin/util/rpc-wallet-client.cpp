@@ -212,7 +212,7 @@ public:
 
 	SinceBlockInfo ListSinceBlock(const HashValue& hashBlock) override {
 		SinceBlockInfo	r;
-		VarValue v = hashBlock==HashValue() ? Call("listsinceblock") : Call("listsinceblock", EXT_STR(hashBlock));
+		VarValue v = !hashBlock ? Call("listsinceblock") : Call("listsinceblock", EXT_STR(hashBlock));
 		r.LastBlock = HashValue(v["lastblock"].ToString());
 		VarValue vtx = v["transactions"];
 		r.Txes.resize(vtx.size());
@@ -251,7 +251,7 @@ public:
 		case VarType::Map:
 			throw system_error(SubmitRejectionCode("rejected"), coin_category(), String::Join(", ", v.Keys()));
 		default:
-			Throw(E_INVALIDARG);
+			Throw(errc::invalid_argument);
 		}
 	}
 

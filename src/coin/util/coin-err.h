@@ -68,7 +68,9 @@ ENUM_CLASS(CoinErr) {
 	, BadTxnsVinEmpty
 	, BadTxnsVoutEmpty
 	, BadTxnsVoutNegative
-
+	, BadPrevBlock
+	, InvalidPrivateKey
+	, VersionMessageMustBeFirst
 	, RPC_MISC_ERROR			= 1001
 	, RPC_FORBIDDEN_BY_SAFE_MODE
 	, RPC_TYPE_ERROR

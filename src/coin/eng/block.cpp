@@ -9,19 +9,19 @@
 
 #include <el/crypto/hash.h>
 
-#define OPENSSL_NO_SCTP
-#include <openssl/err.h>
-#include <openssl/ec.h>
-
 #include "coin-protocol.h"
 #include "script.h"
 #include "eng.h"
 
-namespace Coin {
+#if UCFG_COIN_ECC=='S'
+#	include <crypto/cryp/secp256k1.h>
+#else
+#	define OPENSSL_NO_SCTP
+#	include <openssl/err.h>
+#	include <openssl/ec.h>
+#endif
 
-HashValue160 Hash160(const ConstBuf& mb) {
-	return HashValue160(RIPEMD160().ComputeHash(SHA256().ComputeHash(mb)));
-}
+namespace Coin {
 
 CTxes::CTxes(const CTxes& txes)												// Cloning ctor
 	:	base(txes.size())
@@ -106,7 +106,7 @@ TxHashesOutNums::TxHashesOutNums(const ConstBuf& buf) {
 Target::Target(uint32_t v) {
 	int32_t m = int32_t(v << 8) >> 8;
 //	if (m < 0x8000)			// namecoin violates spec
-//		Throw(E_INVALIDARG);	
+//		Throw(errc::invalid_argument);	
 	m_value = v;
 }
 
@@ -206,20 +206,19 @@ static CCoinMerkleTree CalcTxHashes(const BlockObj& block) {
 }
 
 HashValue BlockObj::MerkleRoot(bool bSave) const {
-	if (bSave) {
-		if (!m_merkleRoot) {
-			if (m_txHashesOutNums.empty())
-				get_Txes();						// to eliminate dead lock
-			EXT_LOCK (m_mtx) {
-				if (!m_merkleRoot) {
-					m_merkleTree = m_txHashesOutNums.empty() ? CalcTxHashes(_self) : BuildMerkleTree<Coin::HashValue>(m_txHashesOutNums, &TxHashOf, &HashValue::Combine);
-					m_merkleRoot = m_merkleTree.empty() ? Coin::HashValue() : m_merkleTree.back();
-				}
+	if (!bSave)
+		return (m_merkleTree = CalcTxHashes(_self)).empty() ? Coin::HashValue::Null() : m_merkleTree.back();
+	if (!m_merkleRoot) {
+		if (m_txHashesOutNums.empty())
+			get_Txes();						// to eliminate dead lock
+		EXT_LOCK (m_mtx) {
+			if (!m_merkleRoot) {
+				m_merkleTree = m_txHashesOutNums.empty() ? CalcTxHashes(_self) : BuildMerkleTree<Coin::HashValue>(m_txHashesOutNums, &TxHashOf, &HashValue::Combine);
+				m_merkleRoot = m_merkleTree.empty() ? Coin::HashValue::Null() : m_merkleTree.back();
 			}
 		}
-		return m_merkleRoot.get();
-	} else
-		return (m_merkleTree = CalcTxHashes(_self)).empty() ? Coin::HashValue() : m_merkleTree.back();
+	}
+	return m_merkleRoot.get();
 }
 
 HashValue BlockObj::Hash() const {
@@ -276,7 +275,7 @@ void BlockObj::ReadHeader(const BinaryReader& rd, bool bParent, const HashValue 
 		if (ver > 112)															//!!!?
 			Throw(ExtErr::Protocol_Violation);
 		else if (ver < 1 || ver > eng.MaxBlockVersion)
-			Throw(ExtErr::New_Protocol_Version);
+			Throw(ExtErr::NewProtocolVersion);
 
 //!!! can be checked only the Height known		if (!bParent && ChainId != eng.ChainParams.ChainId)
 //			Throw(CoinErr::BlockDoesNotHaveOurChainId);
@@ -471,11 +470,8 @@ Target CoinEng::GetNextTarget(const Block& blockLast, const Block& block) {
 
 static const TimeSpan s_spanFuture = seconds(MAX_FUTURE_SECONDS);
 
-void BlockObj::Check(bool bCheckMerkleRoot) {
+void BlockObj::CheckHeader() {
 	CoinEng& eng = Eng();
-	if (eng.Mode!=EngMode::Lite && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
-		Throw(CoinErr::SizeLimits);
-
 	if (Height != -1) {
 		if (Height >= eng.ChainParams.AuxPowStartBlock) {
 			if ((Ver >> 16) != eng.ChainParams.ChainId)
@@ -502,8 +498,18 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 		}
 	}
 
-	if (Timestamp > DateTime::UtcNow() + s_spanFuture)
+	if (Timestamp > Clock::now() + s_spanFuture)
 		Throw(CoinErr::BlockTimestampInTheFuture);
+}
+
+void BlockObj::Check(bool bCheckMerkleRoot) {
+	CheckHeader();
+	if (IsHeaderOnly())
+		return;
+
+	CoinEng& eng = Eng();
+	if (eng.Mode!=EngMode::Lite && (m_txes.empty() || m_txes.size() > MAX_BLOCK_SIZE))
+		Throw(CoinErr::SizeLimits);
 
 	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		if (!m_txes[0].IsCoinBase())
@@ -653,8 +659,10 @@ static void RecoverPubKey(CoinEng *eng, const TxOut *txOut, TxObj* pTxObj, int n
 					}
 #endif
 					bool bCompressed = pk.Size<35;
+					ConstBuf hsig = hashSig.ToConstBuf(),
+						pubKeyData = ConstBuf(pk.P+1, pk.Size-1);
 					for (byte recid=0; recid<3; ++recid) {
-						if (Sec256Dsa::RecoverPubKey(hashSig, sigObj, recid, bCompressed) == ConstBuf(pk.P+1, pk.Size-1)) {
+						if (Sec256Dsa::RecoverPubKey(hsig, sigObj, recid, bCompressed) == pubKeyData) {
 							txIn.RecoverPubKeyType = byte(0x48 | (int(bCompressed) << 2) | recid);
 							return;
 						}
@@ -724,15 +732,16 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 #endif
 }
 
-void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKey) {
-	if (!IsPubKey(pubKey))
+void CConnectJob::PrepareTask(const HashValue160& hash160, const CanonicalPubKey& pubKey) {
+	if (!pubKey.IsValid())
 		return;
 	Blob compressed;
 	try {
-		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
-		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
-		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
-		compressed = ToCompressedKey(pubKey);
+		DBG_LOCAL_IGNORE_CONDITION(ExtErr::Crypto);
+//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
+//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
+//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
+		compressed = pubKey.ToCompressed();
 	} catch (RCExc) {
 		return;
 	}
@@ -744,7 +753,7 @@ void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKe
 				pkd.Update = !pkd.Insert;
 				pkd.PubKey = compressed;
 
-				ASSERT(Hash160(ToUncompressedKey(compressed)) == hash160);
+				ASSERT(CanonicalPubKey::FromCompressed(compressed).get_Hash160() == hash160);
 			} else {
 				pkd.IsTask = false;
 				if (pkd.PubKey != compressed)
@@ -762,8 +771,8 @@ void CConnectJob::PrepareTask(const HashValue160& hash160, const ConstBuf& pubKe
 				PubKeyHash160& pkh = j->second.first;
 				if (pkh.Hash160 != hash160)
 					return;
-				ASSERT(!pkh.PubKey || ConstBuf(pkh.PubKey)==pubKey);
-				if (pkd.Update = !pkh.PubKey)
+				ASSERT(!pkh.PubKey.Data || pkh.PubKey.Data==pubKey.Data);
+				if (pkd.Update = !pkh.PubKey.Data)
 					pkh.PubKey = pubKey;
 				goto LAB_SAVE;
 			}
@@ -808,7 +817,7 @@ void CConnectJob::Prepare(const Block& block) {
 					break;
 				case 33:
 				case 65:
-					PrepareTask(hash160, pk);
+					PrepareTask(hash160, CanonicalPubKey(pk));
 					break;
 				}
 			}
@@ -843,7 +852,7 @@ void CConnectJob::Calculate() {
 
 void Block::Connect() const {
 	CoinEng& eng = Eng();
-	TRC(3, " " << Hash(_self) << " Height: " << Height << (eng.Mode==EngMode::Lite ? String() : EXT_STR(" " << setw(4) << get_Txes().size() << " Txes")));
+	TRC(3, "           Height: " << Height << "   " << Hash(_self) <<  (eng.Mode==EngMode::Lite ? String() : EXT_STR(" " << setw(4) << get_Txes().size() << " Txes")));
 
 	Check(false);		// Check Again without bCheckMerkleRoot
 	int64_t nFees = 0;
@@ -886,10 +895,10 @@ void Block::Connect() const {
 			for (CConnectJob::CMap::iterator it=job.Map.begin(), e=job.Map.end(); it!=e; ++it) {				//!!!? necessary to sync cache
 				if (it->second.Update) {
 					int64_t id = CIdPk(it->first);
-					eng.Caches.m_cachePkIdToPubKey.erase(id);													// faster than call ToUncompressedKey()
+					eng.Caches.m_cachePkIdToPubKey.erase(id);													// faster than call CanonicalPubKey::FromCompressed()
 /*!!!R 				ChainCaches::CCachePkIdToPubKey::iterator j = eng.Caches.m_cachePkIdToPubKey.find(id);	
 					if (j != eng.Caches.m_cachePkIdToPubKey.end())
-						j->second.first.PubKey = ToUncompressedKey(it->second.PubKey);					*/
+						j->second.first.PubKey = CanonicalPubKey::FromCompressed(it->second.PubKey);					*/
 				}
 			}
 		}
@@ -968,7 +977,7 @@ void Block::Connect() const {
 			eng.Db->InsertBlock(_self, ms, EXT_BIN(txHashOutNums));
 		}
 		eng.OnConnectBlock(_self);
-		eng.Caches.DtBestReceived = DateTime::UtcNow();
+		eng.Caches.DtBestReceived = Clock::now();
 
 		EXT_LOCK (eng.Caches.Mtx) {
 			eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)Height, hashBlock));
@@ -1024,7 +1033,7 @@ bool Block::HasBestChainWork() const {
 void Block::Accept() {
 	CoinEng& eng = Eng();
 
-	if (PrevBlockHash == HashValue())
+	if (!PrevBlockHash)
 		m_pimpl->Height = 0;	
 	else {
 		Block blockPrev = eng.LookupBlock(PrevBlockHash);
@@ -1110,6 +1119,8 @@ void Block::Accept() {
 				eng.m_iiEngEvents->OnProcessBlock(_self);
 		}
 	}
+	eng.Tree.RemovePersistentBlock(hash);
+
 	if (eng.m_iiEngEvents)
 		eng.m_iiEngEvents->OnBlockchainChanged();
 }
@@ -1117,6 +1128,7 @@ void Block::Accept() {
 void Block::Process(P2P::Link *link) {
 	CoinEng& eng = Eng();
 	HashValue hash = Hash(_self);	
+
 	bool bHave = eng.HaveBlock(hash);
 
 	TRC(8, (bHave ? "Have " : "") << hash << "  Prev: " << PrevBlockHash);		//!!!D was 8
@@ -1172,10 +1184,10 @@ LAB_FOUND_ORPHAN:
 			if (link)
 				orphanRoot = GetOrphanRoot();
 		}
-		if (orphanRoot)
-			link->Send(new GetBlocksMessage(eng.BestBlock(), Hash(orphanRoot)));
+//!!!R		if (orphanRoot)
+//!!!R			link->Send(new GetBlocksMessage(eng.BestBlock(), Hash(orphanRoot)));
 
-		TRC(4, "B " << hash << " added to OrphanBlocks, size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
+		TRC(4, "B " << eng.Tree.Find(hash).Height << " " << hash << " added to OrphanBlocks.size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
 	}
 }
 

@@ -45,7 +45,7 @@ public:
 		,	SigopLimit(UINT_MAX)
 		,	CoinbaseTxn(nullptr)
 		,	NonceRange(0, 0xFFFFFFFF)
-		,	MyExpireTime(DateTime::UtcNow() + TimeSpan::FromSeconds(1000))
+		,	MyExpireTime(Clock::now() + TimeSpan::FromSeconds(1000))
 		,	Algo(HashAlgo::Sha256)
 	{}
 
@@ -60,7 +60,7 @@ public:
 	void AssemblyCoinbaseTx(RCString address);
 
 	void SetTimestamps(const DateTime& dt) {
-		ServerTimeOffset = (Timestamp = dt) - DateTime::UtcNow();
+		ServerTimeOffset = (Timestamp = dt) - Clock::now();
 	}
 protected:
 	void ReadJson(const VarValue& json);

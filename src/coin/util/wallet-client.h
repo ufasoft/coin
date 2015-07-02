@@ -93,7 +93,7 @@ public:
 	virtual BlockInfo GetBlock(const HashValue& hashBlock)			{ Throw(E_NOTIMPL); }
 	virtual double GetDifficulty() 									{ Throw(E_NOTIMPL); }
 	virtual TxInfo GetTransaction(const HashValue& hashTx)			{ Throw(E_NOTIMPL); }
-	virtual SinceBlockInfo ListSinceBlock(const HashValue& hashBlock = HashValue())							{ Throw(E_NOTIMPL); }
+	virtual SinceBlockInfo ListSinceBlock(const HashValue& hashBlock = HashValue::Null())							{ Throw(E_NOTIMPL); }
 //!!!R	virtual ptr<PoolWorkData> GetWork() 													{ Throw(E_NOTIMPL); }
 	virtual String GetAccountAddress(RCString account = "")										{ Throw(E_NOTIMPL); }
 	virtual HashValue SendToAddress(RCString address, decimal64 amount, RCString comment = "") 	{ Throw(E_NOTIMPL); }

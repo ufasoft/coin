@@ -65,7 +65,7 @@ HashAlgo StringToAlgo(RCString s) {
    	else if (ua == "METIS")
    		return HashAlgo::Metis;
    	else
-   		throw Exception(E_INVALIDARG, "Unknown hashing algorithm "+s);
+   		throw Exception(make_error_code(errc::invalid_argument), "Unknown hashing algorithm " + s);
 }
 
 String AlgoToString(HashAlgo algo) {
@@ -80,7 +80,7 @@ String AlgoToString(HashAlgo algo) {
 	case HashAlgo::Solid:		return "Solid";
 	case HashAlgo::Metis:		return "Metis";
 	default:
-		throw Exception(E_INVALIDARG, "Unknown hashing algorithm " + Convert::ToString((int)algo));
+		throw Exception(make_error_code(errc::invalid_argument), "Unknown hashing algorithm " + Convert::ToString((int)algo));
 	}
 }
 
@@ -99,13 +99,13 @@ static const HashValue s_NullHashValue;
 
 HashValue::HashValue(const hashval& hv) {
 	if (hv.size() != 32)
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	memcpy(data(), hv.data(), hv.size());
 }
 
 HashValue::HashValue(const ConstBuf& mb) {
 	if (mb.Size != 32)
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	memcpy(data(), mb.P, mb.Size);
 }
 
@@ -301,7 +301,7 @@ void MerkleBranch::Read(const BinaryReader& rd) {
 
 HashValue MerkleBranch::Apply(HashValue hash) const {
 	if (-1 == Index)
-		return HashValue();
+		return HashValue::Null();
 	int idx = Index;
 	EXT_FOR (const HashValue& other, Vec) {
 		byte buf[32*2];

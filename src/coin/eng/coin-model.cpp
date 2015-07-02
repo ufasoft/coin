@@ -55,7 +55,7 @@ HashValue Hash(const CPersistent& pers) {
 
 HashValue Hash(const Tx& tx) {
 #ifdef X_DEBUG//!!!D
-	if (tx.m_pimpl->m_hash != HashValue() && tx.m_pimpl->m_hash != Hash(EXT_BIN(tx))) {
+	if (tx.m_pimpl->m_hash && tx.m_pimpl->m_hash != Hash(EXT_BIN(tx))) {
 		HashValue hv = Hash(EXT_BIN(tx));
 		MemoryStream ms;
 		BinaryWriter wr(ms);
@@ -126,14 +126,14 @@ void AuxPow::Check(const Block& blockAux) {
 		Throw(CoinErr::AUXPOW_ChainMerkleBranchTooLong);
 
 	HashValue rootHash = ChainMerkleBranch.Apply(Hash(blockAux));
-	std::reverse(rootHash.begin(), rootHash.end());						// correct endian
+	std::reverse(rootHash.data(), rootHash.data()+32);						// correct endian
 
 	if (MerkleBranch.Apply(Hash(Tx(_self))) != ParentBlock.get_MerkleRoot())
 		Throw(CoinErr::AUXPOW_MerkleRootIncorrect);
 
 	Blob script = TxIns().at(0).Script();
 	const byte *pcHead = Search(ConstBuf(script), ConstBuf(s_mergedMiningHeader, sizeof s_mergedMiningHeader)),
-		       *pc = Search(ConstBuf(script), ConstBuf(rootHash));
+		       *pc = Search(ConstBuf(script), rootHash.ToConstBuf());
 	if (pc == script.end())
 		Throw(CoinErr::AUXPOW_MissingMerkleRootInParentCoinbase);
 	if (pcHead != script.end()) {
@@ -143,7 +143,7 @@ void AuxPow::Check(const Block& blockAux) {
 			Throw(CoinErr::AUXPOW_MergedMinignHeaderiNotJustBeforeMerkleRoot);		
 	} else if (pc-script.begin() > 20)
 		Throw(CoinErr::AUXPOW_MerkleRootMustStartInFirstFewBytes);
-	CMemReadStream stm(ConstBuf(pc + rootHash.size(), script.end()-pc-rootHash.size()));
+	CMemReadStream stm(ConstBuf(pc + 32, script.end()-pc-32));
 	int32_t size, nonce;
 	BinaryReader(stm) >> size >> nonce;
 	if (size != (1 << ChainMerkleBranch.Vec.size()))
@@ -152,56 +152,6 @@ void AuxPow::Check(const Block& blockAux) {
 		Throw(CoinErr::AUXPOW_WrongIndex);
 }
 
-Address::Address(CoinEng& eng)
-	:	Eng(eng)
-{
-	Ver = eng.ChainParams.AddressVersion;
-	memset(data(), 0, size());
-}
-
-Address::Address(CoinEng& eng, const HashValue160& hash, RCString comment)
-	:	Eng(eng)
-	,	Comment(comment)
-{
-	Ver = eng.ChainParams.AddressVersion;
-	HashValue160::operator=(hash);
-}
-
-Address::Address(CoinEng& eng, const HashValue160& hash, byte ver)
-	:	Eng(eng)
-	,	Ver(ver)
-{
-	HashValue160::operator=(hash);
-}
-
-Address::Address(CoinEng& eng, RCString s) 
-	:	Eng(eng)
-{
-	try {
-		Blob blob = ConvertFromBase58(s.Trim());
-		if (blob.Size < 21)
-			Throw(CoinErr::InvalidAddress);
-		Ver = blob.constData()[0];
-		memcpy(data(), blob.constData()+1, 20);
-	} catch (RCExc) {
-		Throw(CoinErr::InvalidAddress);
-	}
-	CheckVer(eng);
-}
-
-void Address::CheckVer(CoinEng& eng) const {
-	if (&Eng != &eng || Ver != eng.ChainParams.AddressVersion && Ver != eng.ChainParams.ScriptAddressVersion)
-		Throw(CoinErr::InvalidAddress);
-}
-
-String Address::ToString() const {
-	CCoinEngThreadKeeper engKeeper(&Eng);
-
-	vector<byte> v(21);
-	v[0] = Ver;
-	memcpy(&v[1], data(), 20);
-	return ConvertToBase58(ConstBuf(&v[0], v.size()));
-}
 
 PrivateKey::PrivateKey(RCString s) {
 	try {
@@ -226,10 +176,6 @@ PrivateKey::PrivateKey(const ConstBuf& cbuf, bool bCompressed) {
 	}
 }
 
-pair<Blob, bool> PrivateKey::GetPrivdataCompressed() const {
-	return pair<Blob, bool>(ConstBuf(m_blob.constData(), 32), m_blob.Size == 33);
-}
-
 String PrivateKey::ToString() const {
 	byte ver = 128;		//!!!  for all nets, because Private Keys are common // Eng().ChainParams.AddressVersion+128;
 	Blob blob = ConstBuf(&ver, 1)+m_blob;
@@ -243,7 +189,7 @@ ChainCaches::ChainCaches()
 	,	HashToTxCache(1024)					// Number of Txes in the block usually >256
 	,	m_cachePkIdToPubKey(4096)			// should be more than usual value (Txes per Block)
 	,	PubkeyCacheEnabled(true)
-	,	OrphanBlocks(1024)					// some bootstrap.dat files are not sorted
+	,	OrphanBlocks(BLOCK_DOWNLOAD_WINDOW)	
 {
 }
 
