@@ -37,12 +37,12 @@ protected:
 		return SHA256().ComputeHash(cbuf);
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
-		if (blockLast.Height < 199)
-			return base::GetNextTargetRequired(blockLast, block);
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
+		if (headerLast.Height < 199)
+			return base::GetNextTargetRequired(headerLast, block);
 		seconds minPast = seconds(hours(24)) / 100,
 			maxPast = seconds(hours(1)) / 100 * 14;
-		return KimotoGravityWell(blockLast, block, int(minPast / ChainParams.BlockSpan), int(maxPast / ChainParams.BlockSpan));
+		return KimotoGravityWell(headerLast, block, int(minPast / ChainParams.BlockSpan), int(maxPast / ChainParams.BlockSpan));
 	}
 };
 

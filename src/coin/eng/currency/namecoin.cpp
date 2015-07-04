@@ -435,7 +435,7 @@ void NamecoinEng::OnDisconnectInputs(const Tx& tx) {
 		if (!ResolverMode) {
 			for (int i=0; i<tx.TxIns().size(); ++i) {
 				const TxIn& txIn = tx.TxIns()[i];
-				if (txIn.PrevOutPoint.TxHash != HashValue()) {
+				if (txIn.PrevOutPoint.TxHash) {
 					Tx txPrev = Tx::FromDb(txIn.PrevOutPoint.TxHash);
 					const TxOut& txOut = txPrev.TxOuts()[txIn.PrevOutPoint.Index];
 					auto pp = DecodeNameScript(txOut.get_PkScript());

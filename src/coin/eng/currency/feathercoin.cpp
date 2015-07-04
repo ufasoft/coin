@@ -39,8 +39,8 @@ protected:
 			>> ((height - 306960)/ChainParams.HalfLife);
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
-		int h = blockLast.Height+1;
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
+		int h = headerLast.Height+1;
 		
 		if (h == 432000)
 			return FEATHER_NEO_SCRYPT_LIMIT;
@@ -51,38 +51,38 @@ protected:
 			: 2016;
 		
 		if (h % nInterval && h != 33000 && h != 87948)
-			return blockLast.DifficultyTarget;
+			return headerLast.DifficultyTarget;
 		
-		Block prev = blockLast;
+		BlockHeader prev = headerLast;
 		for (int goback = nInterval - int(h==nInterval); goback--;)
-			prev = prev.GetPrevBlock();
+			prev = prev.GetPrevHeader();
 		int targetSpan = (int)duration_cast<seconds>(((h >= 204639 ? ChainParams.BlockSpan : TimeSpan::FromSeconds(150)) * nInterval)).count(),
-			spanActual = (int)duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()).count();
+			spanActual = (int)duration_cast<seconds>(headerLast.get_Timestamp() - prev.get_Timestamp()).count();
 		if (h >= 204639) {
-			prev = blockLast;
+			prev = headerLast;
 			DateTime dtShortTime, dtMediumTime;
 			for (int goback=nInterval*480, i=0; i<goback && i<h-1; ++i) {
-				prev = prev.GetPrevBlock();
+				prev = prev.GetPrevHeader();
 				if (i == 14)
 					dtShortTime = prev.Timestamp;
 				else if (i == 119)
 					dtMediumTime = prev.Timestamp;
 			}
-			int spanShort = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - dtShortTime) / 15).count(),
-				spanMedium = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - dtMediumTime) / 120).count(),
-				spanLong = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()) / 480).count();
+			int spanShort = (int)(duration_cast<seconds>(headerLast.get_Timestamp() - dtShortTime) / 15).count(),
+				spanMedium = (int)(duration_cast<seconds>(headerLast.get_Timestamp() - dtMediumTime) / 120).count(),
+				spanLong = (int)(duration_cast<seconds>(headerLast.get_Timestamp() - prev.get_Timestamp()) / 480).count();
 			spanActual = ((spanShort + spanMedium + spanLong)/3 + 3*targetSpan) / 4;
 		} else if (h >= 87948) {																					// Additional averaging over 4x nInterval window
-			prev = blockLast;
+			prev = headerLast;
 			for (int goback = nInterval*4; goback--;)
-				prev = prev.GetPrevBlock();
-			int spanActualLong = (int)(duration_cast<seconds>(blockLast.get_Timestamp() - prev.get_Timestamp()) / 4).count();
+				prev = prev.GetPrevHeader();
+			int spanActualLong = (int)(duration_cast<seconds>(headerLast.get_Timestamp() - prev.get_Timestamp()) / 4).count();
 	        spanActual = ((spanActual + spanActualLong)/2 + 3*targetSpan) / 4;
 		}
 		pair<int, int> md = h >= 87948 ? make_pair(453, 494)
 			: h >= 33000 ? make_pair(70, 99)
 			: make_pair(1, 4);
-		return Target(BigInteger(blockLast.get_DifficultyTarget()) * clamp(spanActual, targetSpan*md.first/md.second, targetSpan*md.second/md.first) / targetSpan);
+		return Target(BigInteger(headerLast.get_DifficultyTarget()) * clamp(spanActual, targetSpan*md.first/md.second, targetSpan*md.second/md.first) / targetSpan);
 	}
 };
 

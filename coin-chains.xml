@@ -25,9 +25,6 @@
 		<AlertPubKey Key='040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9' />
 
 		<Checkpoint Block='1' 		Hash='80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f' />
-		<Checkpoint Block='2' 		Hash='13957807cdd1d02f993909fa59510e318763f99a506c4c426e3b254af09f40d7' />
-		<Checkpoint Block='1500' 	Hash='841a2965955dd288cfa707a755d05a54e45f8bd476835ec9af4402a2b59a2967' />
-		<Checkpoint Block='50000' 	Hash='69dc37eb029b68f075a5012dcc0419c127672adb4f3a32882b2b3e71d07a20a6' />
 		<Checkpoint Block='80000' 	Hash='4fcb7c02f676a300503f49c764a89955a8f920b46a8cbecb4867182ecdb2e90a' />
 		<Checkpoint Block='240000' 	Hash='7140d1c4b4c2157ca217ee7636f24c9c73db39c4590c4e6eab2e3ea1555088aa' />
 		<Checkpoint Block='456000' 	Hash='bf34f71cc6366cd487930d06be22f897e34ca6a40501ac7d401be32456372004' />
@@ -208,13 +205,9 @@
 			PowOfDifficultyToHalfSubsidy='6'
 			InitBlockValue='100' MaxTargetHex='1E0FFFFF' InitTargetHex='1E0FFFFF'
 			ProtocolVersion='60016'  ProtocolMagicHex='E5E9E8E4' DefaultPort='7777'
-			BootUrls='irc://92.243.23.21/novacoin' IrcRange='1'>
+			BootUrls='dns://dnsseed.novacoin.ru dns://dnsseed.novaco.in irc://92.243.23.21/novacoin' IrcRange='1'>
 
-		<Checkpoint Block='8700' 	Hash='00000000014270724837789c9a69859290f6bdee38556bc4561c21f17935a178' /> 
-		<Checkpoint Block='44200' 	Hash='c9bda7232a18b9c1f5ff974a9e5566b2d1879ceb8fc0e9e61fba9038a25b8447' /> 
-		<Checkpoint Block='143990' 	Hash='00000000001ff5c3940a9f73ad4a990f64955179bde0f743c76dbf0031429efc' /> 
-		<Checkpoint Block='168452' 	Hash='982241f07202411a710e91e1bf2c94c84ab277181b14914ea055027c208c96bf' /> 
-
+		<Checkpoint Block='184376' 	Hash='0000000000289471a0014d1aa76bf886df165fedbeda7c8b9b09c5fcb9642498' /> 
 
 		<AlertPubKey Key='043fa441fd4203d03f5df2b75ea14e36f20d39f43e7a61aa7552ab9bcd7ecb0e77a3be4585b13fcdaa22ef6e51f1ff6f2929bec2494385b086fb86610e33193195' />
 		<CheckpointMasterPubKey Key='04a51b735f816de4ec3f891d5b38bbc91e1f7245c7c08d17990760b86b4d8fc3910a850ffecf73bfa8886f01739a0c4c4322201282d07b6e48ce931cc92af94850' />

@@ -62,19 +62,19 @@ protected:
 		return GroestlHash(cbuf);
 	}
 
-	Target DarkGravityWave(const Block& blockLast, const Block& block, bool bWave3) {
+	Target DarkGravityWave(const BlockHeader& headerLast, const Block& block, bool bWave3) {
 		const int minBlocks = bWave3 ? 24 : 12,
 			maxBlocks = bWave3 ? 24 : 120;
 
-		if (blockLast.Height < minBlocks)
+		if (headerLast.Height < minBlocks)
 			return ChainParams.MaxTarget;
 		int actualSeconds = 0;
 		BigInteger average;
-		Block b = blockLast;
+		BlockHeader b = headerLast;
 		int64_t secAvg = 0, sum2 = 0;
 		int mass = 1;
 		DateTime dtPrev = b.Timestamp;
-		for (; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=GetPrevBlockPrefixSuffixFromMainTree(b)) {
+		for (; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevHeader()) {
 			DateTime dt = b.Timestamp;
 			if (bWave3) {
 				if (mass <= minBlocks) {
@@ -98,7 +98,7 @@ protected:
 		bool bAdjustAverage = bWave3;
 
 		if (bWave3)
-			actualSeconds = int(duration_cast<seconds>(blockLast.Timestamp - dtPrev).count());
+			actualSeconds = int(duration_cast<seconds>(headerLast.Timestamp - dtPrev).count());
 		else if (min(minBlocks+2, count)!=0 && count2!=0) {
 			bAdjustAverage = true;
 			double shift = ChainParams.BlockSpan.count() / (max)(1., secAvg * 0.7 + sum2/count2 * 0.3);
@@ -110,8 +110,8 @@ protected:
 		return Target(average);
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
-		return DarkGravityWave(blockLast, block, blockLast.Height >= 99999);
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
+		return DarkGravityWave(headerLast, block, headerLast.Height >= 99999);
 	}
 
 };

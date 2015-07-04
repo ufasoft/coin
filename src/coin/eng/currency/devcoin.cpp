@@ -24,21 +24,21 @@ protected:
 		minFee += baseFee / 10 * tx.TxOuts().size();
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block)  override {
-		seconds targetSpan = hours(24 * (blockLast.Height < 10700 ? 14 : 1));
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block)  override {
+		seconds targetSpan = hours(24 * (headerLast.Height < 10700 ? 14 : 1));
 		int nInterval = int(targetSpan / ChainParams.BlockSpan);
-		if (blockLast.Height < 10 || blockLast.Height < 10700 && ((blockLast.Height+1) % nInterval != 0))
-			return blockLast.DifficultyTarget;
+		if (headerLast.Height < 10 || headerLast.Height < 10700 && ((headerLast.Height+1) % nInterval != 0))
+			return headerLast.DifficultyTarget;
 		BigInteger avg;
 		vector<DateTime> vTimes;
-		Block prev = blockLast;
-		for (int i=0; i<nInterval-1; ++i, prev=prev.GetPrevBlock()) {
+		BlockHeader prev = headerLast;
+		for (int i=0; i<nInterval-1; ++i, prev=prev.GetPrevHeader()) {
 			avg += BigInteger(prev.get_DifficultyTarget());
 			vTimes.push_back(prev.Timestamp);
 		}
-		TimeSpan spanActual = blockLast.get_Timestamp() - prev.get_Timestamp();
-		if (blockLast.Height <= 10800)
-			avg = blockLast.get_DifficultyTarget();
+		TimeSpan spanActual = headerLast.get_Timestamp() - prev.get_Timestamp();
+		if (headerLast.Height <= 10800)
+			avg = headerLast.get_DifficultyTarget();
 		else {
 			avg /= (nInterval-1);
 			sort(vTimes.begin(), vTimes.end());

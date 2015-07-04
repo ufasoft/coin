@@ -76,7 +76,7 @@ protected:
 		BigInteger bnHash = HashValueToBigInteger(hashPow);
 		BigInteger origin = bnHash * PrimeChainMultiplier;
 
-		if (hashPow[31]<0x80 || origin>GetPrimeMax())
+		if (hashPow.ToConstBuf().P[31]<0x80 || origin>GetPrimeMax())
 			Throw(CoinErr::ProofOfWorkFailed);
 
 		double targ = GetTargetLength();
@@ -123,12 +123,12 @@ protected:
 		return cents * (ChainParams.CoinValue/100);
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
 		double r = 7;
-		if (blockLast.Height > 1) {
+		if (headerLast.Height > 1) {
 			const int INTERVAL = 7*24*60;
-			seconds nActualSpacing = duration_cast<seconds>(blockLast.get_Timestamp() - blockLast.GetPrevBlock().get_Timestamp());
-			double targ = ((PrimeCoinBlockObj*)blockLast.m_pimpl.get())->GetTargetLength();
+			seconds nActualSpacing = duration_cast<seconds>(headerLast.get_Timestamp() - headerLast.GetPrevHeader().get_Timestamp());
+			double targ = ((PrimeCoinBlockObj*)headerLast.m_pimpl.get())->GetTargetLength();
 			double d = GetFractionalDifficulty(targ);
 			const seconds nTargetSpacing = ChainParams.BlockSpan;
 			
@@ -147,8 +147,8 @@ protected:
 		return Target((uint32_t)ceil(r * 0x1000000));
 	}
 
-	Target GetNextTarget(const Block& blockLast, const Block& block) override {
-		return GetNextTargetRequired(blockLast, block);
+	Target GetNextTarget(const BlockHeader& headerLast, const Block& block) override {
+		return GetNextTargetRequired(headerLast, block);
 	}
 };
 

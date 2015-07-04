@@ -12,15 +12,15 @@ namespace Coin {
 const Version VER_NOVACOIN_STAKE_MODIFIER(0, 53);
 
 const Target NOVACOIN_2013_PROOF_OF_STAKE_LIMIT(0x1D1FFFFF),
-			NOVACOIN_PROOF_OF_STAKE_LIMIT(0x1E00FFFF),
-			NOVACOIN_PROOF_OF_STAKE_HARD_LIMIT(0x1D03FFFF);
+NOVACOIN_PROOF_OF_STAKE_LIMIT(0x1E00FFFF),
+NOVACOIN_PROOF_OF_STAKE_HARD_LIMIT(0x1D03FFFF);
 
 const DateTime DATE_CHECK_BLOCK_SIGNATURE_OUTS(2013, 2, 24),
-			DATE_ENTROPY_SWITCH_TIME(2013, 3, 9),
-			DATE_STAKE_SWITCH(2013, 6, 20),
-			DATE_2013_PROOF_OF_STAKE_SWITCH(2013, 7, 20),
-			DATE_STAKECURVE_SWITCH(2013, 10, 20),
-			DtV04Switch(2014, 10, 20);
+DATE_ENTROPY_SWITCH_TIME(2013, 3, 9),
+DATE_STAKE_SWITCH(2013, 6, 20),
+DATE_2013_PROOF_OF_STAKE_SWITCH(2013, 7, 20),
+DATE_STAKECURVE_SWITCH(2013, 10, 20),
+DtV04Switch(2014, 10, 20);
 
 class NovaCoinBlockObj : public PosBlockObj {
 	typedef PosBlockObj base;
@@ -43,8 +43,10 @@ protected:
 
 	bool StakeEntropyBit() const override {
 		return Height >= 9689 ? base::StakeEntropyBit()
-			:	Hash160(Signature)[19] & 0x80;
+			: Hash160(Signature)[19] & 0x80;
 	}
+
+	void CheckCoinbaseTimestamp() override {}
 
 	void CheckSignature() override {
 		if (Timestamp < DATE_ENTROPY_SWITCH_TIME) {

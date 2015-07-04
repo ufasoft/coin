@@ -75,12 +75,12 @@ protected:
 		return std::max(ChainParams.CoinValue, r >> (height / ChainParams.HalfLife));
 	}
 
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
-		if (blockLast.Height < 2)
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
+		if (headerLast.Height < 2)
 			return ChainParams.MaxTarget;
-		seconds secs = duration_cast<seconds>(blockLast.get_Timestamp() - blockLast.GetPrevBlock().get_Timestamp());
+		seconds secs = duration_cast<seconds>(headerLast.get_Timestamp() - headerLast.GetPrevHeader().get_Timestamp());
 		TimeSpan span = clamp(secs, ChainParams.BlockSpan/16, ChainParams.BlockSpan*16);
-		return Target(BigInteger(blockLast.get_DifficultyTarget()) * ((ChainParams.TargetInterval - 1) * TimeSpan(ChainParams.BlockSpan).count() + 2 * span.count()) / ((ChainParams.TargetInterval + 1) * TimeSpan(ChainParams.BlockSpan).count()));
+		return Target(BigInteger(headerLast.get_DifficultyTarget()) * ((ChainParams.TargetInterval - 1) * TimeSpan(ChainParams.BlockSpan).count() + 2 * span.count()) / ((ChainParams.TargetInterval + 1) * TimeSpan(ChainParams.BlockSpan).count()));
 	}
 
 	BlockObj *CreateBlockObj() override { return new EarthBlockObj; }
