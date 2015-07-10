@@ -13,13 +13,10 @@ namespace Coin {
 
 void Block::Disconnect() const {
 	CoinEng& eng = Eng();
-	TRC(3, " " << Hash(_self) << " Height: " << Height);
+	TRC(3,  Height << " " << Hash(_self));
 
 	vector<int64_t> txids;
 	txids.reserve(get_Txes().size());
-
-	eng.EnsureTransactionStarted();
-	CoinEngTransactionScope scopeBlockSavepoint(eng);
 
 	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
 		for (size_t i=get_Txes().size(); i--;) {		// reverse order is important
@@ -37,46 +34,65 @@ void Block::Disconnect() const {
 		}
 	}
 
-	eng.Db->DeleteBlock(Height, txids);
+	eng.Db->DeleteBlock(Height, &txids);
 }
 
-void Block::Reorganize() {
+void CoinEng::Reorganize(const BlockHeader& header) {
 	TRC(1, "");
 
-	CoinEng& eng = Eng();
-	Block prevBlock = _self;
-	Block curBest = eng.BestBlock(),
+	BlockHeader prevBlock = header;
+	Block curBest = BestBlock(),
 		forkBlock = curBest;
-	vector<Block> vConnect, vDisconnect;
-
+	vector<BlockHeader> vConnect;
+	vector<ptr<BlockObj>> vDisconnect;
 	unordered_set<HashValue> spentTxes;
 
-	for (;; forkBlock = forkBlock.GetPrevBlock()) {
-		while (prevBlock.Height > forkBlock.Height)
-			vConnect.push_back(exchange(prevBlock, prevBlock.GetPrevBlock()));
-		if (Hash(forkBlock) == Hash(prevBlock))
-			break;
-		forkBlock.LoadToMemory();
-		vDisconnect.push_back(forkBlock);
-		if (eng.Mode == EngMode::Bootstrap) {
-			EXT_FOR (const Tx& tx, forkBlock.get_Txes()) {
+	int hMaxHeader = Db->GetMaxHeaderHeight(),
+		hMaxBlock = Db->GetMaxHeight();
+
+	Tree.Add(header);
+	BlockHeader lastCommon = Tree.LastCommonAncestor(Hash(header), Hash(BestHeader()));
+	TRC(1, "Last Common Block: " << lastCommon.Height << " " << Hash(lastCommon));
+
+	for (BlockHeader h=header; h.Height>lastCommon.Height; h=h.GetPrevHeader())
+		vConnect.push_back(h);
+
+	for (int h=hMaxHeader; h>hMaxBlock && h>lastCommon.Height; --h) {
+		vDisconnect.push_back(Db->FindHeader(h).m_pimpl);
+	}
+	for (int h=hMaxBlock; h>lastCommon.Height; --h) {
+		Block b = Db->FindBlock(h);
+		b.LoadToMemory();
+		Tree.Add(b);
+		vDisconnect.push_back(b.m_pimpl);
+		if (Mode == EngMode::Bootstrap) {
+			EXT_FOR(const Tx& tx, b.get_Txes()) {
 				if (!tx.IsCoinBase()) {
-					EXT_FOR (const TxIn& txIn, tx.TxIns()) {
+					EXT_FOR(const TxIn& txIn, tx.TxIns()) {
 						Tx tx;													// necessary, because without it FindTx() returns 'False Positive' (checks only 6 bytes of hash)
-						if (!eng.Db->FindTxById(ConstBuf(txIn.PrevOutPoint.TxHash.data(), 8), &tx) || Hash(tx) != txIn.PrevOutPoint.TxHash)
+						if (!Db->FindTxById(ConstBuf(txIn.PrevOutPoint.TxHash.data(), 8), &tx) || Hash(tx) != txIn.PrevOutPoint.TxHash)
 							spentTxes.insert(txIn.PrevOutPoint.TxHash);
 					}
 				}
 			}
 		}
 	}
-	TRC(1, "Fork Block: " << Hash(forkBlock) << "  H: " << forkBlock.Height);
+	
+
+	/*!!!R
+	for (;; forkBlock = forkBlock.GetPrevBlock()) {
+		if (Hash(forkBlock) == Hash(prevBlock))
+			break;
+		forkBlock.LoadToMemory();
+		vDisconnect.push_back(forkBlock);
+	} */
+	
 
 	if (!spentTxes.empty()) {
 		unordered_map<HashValue, pair<uint32_t, uint32_t>> spentTxOffsets;
 
-		EXT_LOCK (eng.Caches.Mtx) {
-			for (const auto& stx : eng.Caches.m_cacheSpentTxes) {
+		EXT_LOCK (Caches.Mtx) {
+			for (const auto& stx : Caches.m_cacheSpentTxes) {
 				unordered_set<HashValue>::iterator it = spentTxes.find(stx.HashTx);
 				if (it != spentTxes.end()) {
 					spentTxOffsets[stx.HashTx] = make_pair(stx.Height, stx.Offset);
@@ -85,8 +101,8 @@ void Block::Reorganize() {
 			}
 		}
 
-		for (Block b=curBest; ; b=b.GetPrevBlock()) {												//!!!L   Long-time operation
-			if (!eng.Runned)
+		for (Block b=curBest; ; b=Tree.GetBlock(b.PrevBlockHash)) {												//!!!L   Long-time operation
+			if (!Runned)
 				Throw(ExtErr::ThreadInterrupted);
 			EXT_FOR (const Tx& tx, b.get_Txes()) {
 				unordered_set<HashValue>::iterator it = spentTxes.find(Hash(tx));
@@ -100,35 +116,45 @@ void Block::Reorganize() {
 				break;
 		}
 		ASSERT(spentTxes.empty());
-		CoinEngTransactionScope scopeBlockSavepoint(eng);
-		eng.Db->InsertSpentTxOffsets(spentTxOffsets);
+		CoinEngTransactionScope scopeBlockSavepoint(_self);
+		Db->InsertSpentTxOffsets(spentTxOffsets);
 	}
 
 	list<Tx> vResurrect;
-	for (size_t i=0; i<vDisconnect.size(); ++i) {
-		forkBlock = vDisconnect[i];
-		forkBlock.Disconnect();
-		const CTxes& txes = forkBlock.get_Txes();
-		for (CTxes::const_reverse_iterator it=txes.rbegin(); it!=txes.rend(); ++it) {
-			if (!it->IsCoinBase())
-				vResurrect.push_front(*it);
+	{
+		EnsureTransactionStarted();
+		CoinEngTransactionScope scopeBlockSavepoint(_self);
+
+		for (size_t i=0; i<vDisconnect.size(); ++i) {
+			ptr<BlockObj>& bo = vDisconnect[i];
+			if (bo->IsHeaderOnly()) {
+				Db->DeleteBlock(bo->Height, nullptr);
+			} else {
+				Block b(bo.get());
+				b.Disconnect();
+				const CTxes& txes = b.get_Txes();
+				for (CTxes::const_reverse_iterator it=txes.rbegin(); it!=txes.rend(); ++it) {
+					if (!it->IsCoinBase())
+						vResurrect.push_front(*it);
+				}
+			}
 		}
-		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.insert(make_pair(Hash(forkBlock), forkBlock)));
 	}
 
+	ClearByHeightCaches();
 
-	EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HeightToHashCache.clear());
-
+	bool bNextAreHeaders = false;
 	for (size_t i=vConnect.size(); i--;) {
-		Block& block = vConnect[i];
-		block.Connect();
-		eng.Caches.m_bestBlock = block;
-		EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.erase(Hash(block)));
-		EXT_FOR (const Tx& tx, block.get_Txes()) {
-			eng.RemoveFromMemory(tx);
+		BlockHeader& headerToConnect = vConnect[i];
+		if (bNextAreHeaders || (bNextAreHeaders = headerToConnect.IsHeaderOnly)) {
+			headerToConnect.Connect();
+		} else {
+			Block block(headerToConnect.m_pimpl);
+			block.Connect();
+			SetBestHeader(block);
 		}
 	}
-
+	
 	vector<HashValue> vQueue;
 	EXT_FOR (const Tx& tx, vResurrect) {
 		try {
@@ -136,7 +162,7 @@ void Block::Reorganize() {
 			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
 			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxFeeIsLow);	//!!!TODO Fee calculated as Relay during Reorganize(). Should be MinFee
 
-			eng.AddToPool(tx, vQueue);
+			AddToPool(tx, vQueue);
 		} catch (system_error& ex) {
 			if (ex.code() != CoinErr::InputsAlreadySpent
 				&& ex.code() != CoinErr::TxNotFound

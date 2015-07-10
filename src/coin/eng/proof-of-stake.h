@@ -17,7 +17,7 @@ public:
 	DateTime Timestamp;
 
 	PosTxObj()
-		:	Timestamp(DateTime::UtcNow())
+		:	Timestamp(Clock::now())
 		,	m_coinAge(numeric_limits<uint64_t>::max())
 	{}
 
@@ -64,6 +64,16 @@ public:
 		Signature = CoinSerialized::ReadBlob(rd);
 	}
 
+	void WriteHeaderInMessage(BinaryWriter& wr) const override {
+		base::WriteHeaderInMessage(wr);
+		CoinSerialized::WriteVarInt(wr, 0);				// signature
+	}
+
+	void ReadHeaderInMessage(const BinaryReader& rd) override {
+		base::ReadHeaderInMessage(rd);
+		CoinSerialized::ReadVarInt(rd);					// signature unused
+	}
+
 	void WriteDbSuffix(BinaryWriter& wr) const override;
 	void ReadDbSuffix(const BinaryReader& rd) override;
 
@@ -96,6 +106,7 @@ public:
 	HashValue HashProofOfStake() const;
 	bool VerifySignatureByTxOut(const TxOut& txOut);
 	void CheckSignature() override;
+	virtual void CheckCoinbaseTimestamp();
 	void Check(bool bCheckMerkleRoot) override;
 
 	void CheckProofOfStake() const {
@@ -120,20 +131,37 @@ private:
 class PosEng : public CoinEng {
 	typedef CoinEng base;
 public:
+	mutex MtxStakeModifierCache;
+	struct StakeModifierItem {
+		DateTime Timestamp;
+		optional<uint64_t> StakeModifier;
+
+		StakeModifierItem() {}
+
+		StakeModifierItem(const DateTime& ts, const optional<uint64_t>& modifier)
+			: Timestamp(ts)
+			, StakeModifier(modifier)
+		{}
+	};
+	LruMap<int, StakeModifierItem> StakeModifierCache;
+
 	PosEng(CoinDb& cdb);
 
+	StakeModifierItem GetStakeModifierItem(int height);
+	StakeModifierItem GetLastStakeModifier(const HashValue& hashBlock, int height);
 	virtual int64_t GetProofOfStakeReward(int64_t coinAge, const Target& target, const DateTime& dt);
 protected:
+	void ClearByHeightCaches() override;
 	int64_t GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
 	int64_t GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
 
 	TxObj *CreateTxObj() override { return new PosTxObj; }
 	virtual TimeSpan GetTargetSpacingWorkMax(const DateTime& dt) { return TimeSpan::FromHours(2); }
-	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override;
+	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override;
 	
-	Target GetNextTarget(const Block& blockLast, const Block& block) override {
-		return GetNextTargetRequired(blockLast, block);
+	Target GetNextTarget(const BlockHeader& headerLast, const Block& block) override {
+		return GetNextTargetRequired(headerLast, block);
 	}
 
 	CoinMessage *CreateCheckPointMessage() override;

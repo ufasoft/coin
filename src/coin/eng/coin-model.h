@@ -46,6 +46,13 @@ using P2P::Peer;
 
 namespace Coin {
 
+ENUM_CLASS(NodeServices) {
+	NODE_NETWORK = 1,
+	NODE_GETUTXO = 2
+} END_ENUM_CLASS(NodeServices)
+
+
+
 const int BLOCK_VERSION_AUXPOW = 256;
 
 enum {
@@ -86,10 +93,12 @@ public:
 	observer_ptr<const Block> PCurBlock;
 	observer_ptr<CConnectJob> ConnectJob;
 	bool BlockchainDb;
+	bool ForHeader;
 
 	DbWriter(Stream& stm)
 		:	base(stm)
 		,	BlockchainDb(true)
+		,	ForHeader(false)
 	{
 	}
 };
@@ -99,6 +108,7 @@ class DbReader : public BinaryReader {
 public:
 	CoinEng *Eng;
 	bool BlockchainDb;
+	bool ForHeader;
 	bool ReadTxHashes;
 	observer_ptr<const Block> PCurBlock;
 
@@ -106,6 +116,7 @@ public:
 		:	base(stm)
 		,	Eng(eng)
 		,	BlockchainDb(true)
+		,	ForHeader(false)
 		,	ReadTxHashes(true)
 	{
 	}
@@ -115,7 +126,7 @@ struct OutPoint {
 	HashValue TxHash;
 	int32_t Index;
 
-	OutPoint(const HashValue& txHash = HashValue(), int32_t idx = -1)
+	OutPoint(const HashValue& txHash = HashValue::Null(), int32_t idx = -1)
 		:	TxHash(txHash)
 		,	Index(idx)
 	{}
@@ -129,7 +140,7 @@ struct OutPoint {
 	}
 
 	bool IsNull() const {
-		return TxHash==HashValue() && -1==Index;
+		return TxHash==HashValue::Null() && -1==Index;
 	}
 
 	void Write(BinaryWriter& wr) const {
@@ -367,7 +378,7 @@ public:
 
 	void SetHash(const HashValue& hash) const {
 		m_pimpl->m_hash = hash;
-		m_pimpl->m_nBytesOfHash = (byte)hash.size();
+		m_pimpl->m_nBytesOfHash = 32;
 	}
 
 	void SetReducedHash(const ConstBuf& txid8) const {
@@ -375,7 +386,6 @@ public:
 	}
 private:
 
-	friend class Txes;
 	friend interface WalletBase;
 	friend class Wallet;
 	friend class CoinDb;
@@ -474,12 +484,18 @@ public:
 	virtual ProofOf ProofType() const { return ProofOf::Work; }
 	const Coin::CTxes& get_Txes() const;
 	virtual HashValue HashFromTx(const Tx& tx, int n) const;
-	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
+
 	void WriteHeader(BinaryWriter& wr) const override;
+	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
+	virtual void WriteHeaderInMessage(BinaryWriter& wr) const;
+	virtual void ReadHeaderInMessage(const BinaryReader& rd);
+
 	virtual void WriteSuffix(BinaryWriter& wr) const {}
 	virtual void WriteDbSuffix(BinaryWriter& wr) const {}
 	virtual void ReadDbSuffix(const BinaryReader& rd) {}
-protected:	
+	bool IsHeaderOnly() const { return !m_bTxesLoaded && m_txHashesOutNums.empty(); }
+	virtual void CheckHeader();
+protected:
 	mutable mutex m_mtx;
 	mutable CTxes m_txes;
 
@@ -509,37 +525,21 @@ private:
 	mutable CCoinMerkleTree m_merkleTree;
 
 	friend class Block;
+	friend class BlockHeader;
 	friend class TxMessage;
 	friend class MerkleBlockMessage;
 };
 
-class COIN_CLASS Block : public Pimpl<BlockObj>, public CPersistent {
+class COIN_CLASS BlockHeader : public Pimpl<BlockObj>, public CPersistent {
 	typedef Pimpl<BlockObj> base;
-	typedef Block class_type;
+	typedef BlockHeader class_type;
 public:
-	Block();
-
-	Block(std::nullptr_t) {
-	}
-
-	Block(BlockObj *pimpl) {
+	BlockHeader(BlockObj *pimpl = nullptr) {
 		m_pimpl = pimpl;
 	}
 
-	Block GetPrevBlock() const;
-	
 	void WriteHeader(BinaryWriter& wr) const { m_pimpl->WriteHeader(wr); }
 	void ReadHeader(const BinaryReader& rd, bool bParent = false, const HashValue *pMerkleRoot = 0) { m_pimpl->ReadHeader(rd, bParent, pMerkleRoot); }
-
-	void Write(BinaryWriter& wr) const override { m_pimpl->Write(wr); }
-	void Read(const BinaryReader& rd) override { m_pimpl->Read(rd); }
-	uint32_t OffsetOfTx(const HashValue& hashTx) const;
-
-	void LoadToMemory();
-
-	uint32_t GetSerializeSize() const {
-		return (uint32_t)EXT_BIN(_self).Size;
-	}
 
 	int get_Height() const {
 		return m_pimpl->Height;
@@ -550,6 +550,14 @@ public:
 		return m_pimpl ? m_pimpl->Height : -1;
 	}
 	DEFPROP_GET(int, SafeHeight);
+
+	uint32_t get_Ver() const { return m_pimpl->Ver; }
+	void put_Ver(uint32_t v) { m_pimpl->Ver = v; }
+	DEFPROP(uint32_t, Ver);
+
+	int get_ChainId() const { return Ver >> 16; }
+	void put_ChainId(int v) { Ver = (Ver & 0xFFFF) | (v << 16); }
+	DEFPROP(int, ChainId);
 
 	DateTime get_Timestamp() const {
 		return m_pimpl->Timestamp;
@@ -576,6 +584,45 @@ public:
 	}
 	DEFPROP_GET(Target, DifficultyTarget);
 
+	BigInteger GetWork() const { return m_pimpl->GetWork(); }
+
+	bool get_IsHeaderOnly() const { return m_pimpl->IsHeaderOnly(); }
+	DEFPROP_GET(bool, IsHeaderOnly);
+
+	bool IsInMainChain() const;
+	DateTime GetMedianTimePast() const;
+	BlockHeader GetPrevHeader() const;
+	bool IsSuperMajority(int minVersion, int nRequired, int nToCheck) const;
+	void CheckAgainstCheckpoint() const;
+	void UpdateLastCheckpointed() const;
+	bool HasBestChainWork() const;
+	virtual void Connect() const;
+	virtual void Accept();
+};
+
+class COIN_CLASS Block : public BlockHeader {
+	typedef BlockHeader base;
+	typedef Block class_type;
+public:
+	Block();
+
+	Block(std::nullptr_t) {
+	}
+
+	Block(BlockObj *pimpl)
+		: base(pimpl) {
+	}
+
+	void Write(BinaryWriter& wr) const override { m_pimpl->Write(wr); }
+	void Read(const BinaryReader& rd) override { m_pimpl->Read(rd); }
+	uint32_t OffsetOfTx(const HashValue& hashTx) const;
+
+	void LoadToMemory();
+
+	uint32_t GetSerializeSize() const {
+		return (uint32_t)EXT_BIN(_self).Size;
+	}
+	
 	ProofOf get_ProofType() const { return m_pimpl->ProofType(); }
 	DEFPROP_GET(ProofOf, ProofType);
 
@@ -594,30 +641,14 @@ public:
 		
 	Tx& GetFirstTxRef() { return m_pimpl->m_txes[0]; }
 	void CheckPow(const Target& target) const { return m_pimpl->CheckPow(target); }
-	BigInteger GetWork() const { return m_pimpl->GetWork(); }
 		
 	Block GetOrphanRoot() const;
 	void Check(bool bCheckMerkleRoot) const;
 	void Check() const;
-	void Connect() const;
+	void Connect() const override;
 	void Disconnect() const;
-	void Reorganize();	
-	bool HasBestChainWork() const;
-	void Accept();	
-	void Process(Link *link = 0);
-
-	bool IsInMainChain() const;
-	bool IsSuperMajority(int minVersion, int nRequired, int nToCheck);
-
-	uint32_t get_Ver() const { return m_pimpl->Ver; }
-	void put_Ver(uint32_t v) { m_pimpl->Ver = v; }
-	DEFPROP(uint32_t, Ver);
-
-	int get_ChainId() const { return Ver >> 16; }
-	void put_ChainId(int v) { Ver = (Ver & 0xFFFF) | (v << 16); }
-	DEFPROP(int, ChainId);
-
-	DateTime GetMedianTimePast();
+	void Accept() override;
+	void Process(Link *link = 0, bool bRequested = true);
 
 	Block Clone() const {
 		return Block(m_pimpl->Clone());
@@ -628,7 +659,7 @@ protected:
 	friend class MerkleBlockMessage;
 };
 
-inline HashValue Hash(const Block& block) {
+inline HashValue Hash(const BlockHeader& block) {
 	return block.m_pimpl->Hash();
 }
 
@@ -675,19 +706,19 @@ public:
 };
 
 struct PubKeyHash160 {
-	Blob PubKey;
+	CanonicalPubKey PubKey;
 	HashValue160 Hash160;
 
 	PubKeyHash160()
 		:	PubKey(nullptr)
 	{}
 
-	explicit PubKeyHash160(const Blob& pubKey)
+	explicit PubKeyHash160(const CanonicalPubKey& pubKey)
 		:	PubKey(pubKey)
-		,	Hash160(Coin::Hash160(pubKey))
+		,	Hash160(pubKey.Hash160)
 	{}
 
-	PubKeyHash160(const Blob& pubKey, const HashValue160& hash160)
+	PubKeyHash160(const CanonicalPubKey& pubKey, const HashValue160& hash160)
 		:	PubKey(pubKey)
 		,	Hash160(hash160)
 	{}
@@ -699,7 +730,7 @@ class ChainCaches {
 public:
 	mutex Mtx;
 
-	unordered_map<HashValue, Block> HashToAlternativeChain;		//!!! can grow to huge size
+//!!!R	unordered_map<HashValue, Block> HashToAlternativeChain;		//!!! can grow to huge size
 
 	LruMap<HashValue, Block> HashToBlockCache;
 	
@@ -721,6 +752,7 @@ public:
 	CCachePkIdToPubKey m_cachePkIdToPubKey;
 	bool PubkeyCacheEnabled;
 
+	BlockHeader m_bestHeader;
 	Block m_bestBlock;
 
 	struct SpentTx {
@@ -742,11 +774,6 @@ extern const byte s_mergedMiningHeader[4];
 int CalcMerkleIndex(int merkleSize, int chainId, uint32_t nonce);
 ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf);
 
-
-inline bool IsPubKey(const ConstBuf& cbuf) {
-	return (cbuf.Size == 33 && (cbuf.P[0]==2 || cbuf.P[0]==3)) ||
-		(cbuf.Size == 65 || cbuf.P[0]==4);
-}
 
 class ConnectTask : public Object {
 public:
@@ -816,7 +843,7 @@ public:
 	void AsynchCheckAll(const vector<Tx>& txes);
 	void Prepare(const Block& block);
 	void Calculate();
-	void PrepareTask(const HashValue160& hash160, const ConstBuf& pubKey);
+	void PrepareTask(const HashValue160& hash160, const CanonicalPubKey& pubKey);
 };
 
 

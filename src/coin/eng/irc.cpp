@@ -11,13 +11,45 @@
 
 namespace Coin {
 
+static regex s_reIrc("irc://([^:/]+)(:(\\d+))?/(.+)");
+
+void CoinEng::StartIrc() {
+	if (!ChannelClient) {
+		vector<String> ar = ChainParams.BootUrls;
+		random_shuffle(ar.begin(), ar.end());
+		IPEndPoint epServer;
+		String channel;
+		for (int i=0; i<ar.size(); ++i) {
+			String url = ar[i];
+			cmatch m;
+			if (regex_match(url.c_str(), m, s_reIrc)) {
+				if (channel.empty()) {
+					String host = m[1];
+					uint16_t port = uint16_t(m[2].matched ? atoi(String(m[3])) : 6667);
+					epServer = IPEndPoint(host, port);
+					ostringstream os;
+					os << m[4].str();
+					if (!ChainParams.IsTestNet && ChainParams.IrcRange > 0)
+						os << std::setw(2) << std::setfill('0') << Ext::Random().Next(ChainParams.IrcRange);
+					channel = os.str();
+				}
+			}
+		}
+		if (!channel.empty()) {
+			ChannelClient = new Coin::ChannelClient(_self);
+			//!!!			ChannelClient->ListeningPort = ListeningPort;
+			m_cdb.IrcManager.AttachChannelClient(epServer, channel, ChannelClient);
+		}
+	}
+}
+
 void ChannelClient::ProcessNick(RCString nick, const DateTime& now) {
 	if (nick[0] == 'u') {
 		Blob blob;
 		try {
-			DBG_LOCAL_IGNORE_WIN32(ERROR_CRC);
+			DBG_LOCAL_IGNORE_CONDITION(ExtErr::Checksum);
 //!!!R				DBG_LOCAL_IGNORE(E_FAIL);
-			DBG_LOCAL_IGNORE(E_INVALIDARG);
+			DBG_LOCAL_IGNORE_CONDITION(errc::invalid_argument);
 			blob = ConvertFromBase58ShaSquare(nick.substr(1));
 		} catch (RCExc) {
 		}
@@ -30,7 +62,7 @@ void ChannelClient::ProcessNick(RCString nick, const DateTime& now) {
 
 			TRC(7, ep);
 
-			Eng.Add(ep, NODE_NETWORK, now, TimeSpan::FromMinutes(51));
+			Eng.Add(ep, uint64_t(NodeServices::NODE_NETWORK), now, TimeSpan::FromMinutes(51));
 		} else {
 			TRC(2, "Nick decode error: " << nick);
 		}
@@ -38,7 +70,7 @@ void ChannelClient::ProcessNick(RCString nick, const DateTime& now) {
 }
 
 void ChannelClient::OnNickNamesComplete(RCString channel, const unordered_set<String>& nicks) {
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	EXT_FOR (const String& nick, nicks) {
 		if (nick != IrcThread->Nick)
 			ProcessNick(nick, now);
@@ -46,7 +78,7 @@ void ChannelClient::OnNickNamesComplete(RCString channel, const unordered_set<St
 }
 
 void ChannelClient::OnUserListComplete(RCString channel, const vector<IrcUserInfo>& userList) {
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	for (int i=0; i<userList.size(); ++i) {
 		const IrcUserInfo& ui = userList[i];
 		TRC(2, "IRC-client Host: " << ui.Host);

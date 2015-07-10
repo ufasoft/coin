@@ -9,82 +9,95 @@
 
 namespace Coin {
 
-BlockTreeItem BlockTree::Find(const HashValue& hashBlock) const {
+BlockTreeItem::BlockTreeItem(const BlockHeader& header)
+	: base(header)
+{
+}
+
+BlockTreeItem BlockTree::FindInMap(const HashValue& hashBlock) const {
 	BlockTreeItem item;
-	if (EXT_LOCKED(Mtx, Lookup(Map, hashBlock, item)))
-		return item;
-	if (Block b = Eng().LookupBlock(hashBlock))
-		return BlockTreeItem(b.PrevBlockHash, b.Height);
+	EXT_LOCKED(Mtx, Lookup(Map, hashBlock, item));
 	return item;
 }
 
-BlockTreeItem BlockTree::GetItem(const HashValue& hashBlock) const {
-	if (BlockTreeItem item = Find(hashBlock))
+BlockHeader BlockTree::FindHeader(const HashValue& hashBlock) const {
+	if (BlockTreeItem item = FindInMap(hashBlock))
 		return item;
-	Throw(E_FAIL);	
+	return Eng().Db->FindHeader(hashBlock);
 }
 
-HashValue BlockTree::GetBestHeaderHash() const {		//!!!TODO  should calculate best PoW instead of max Height
-	CoinEng& eng = Eng();
-
-	HashValue r;
-	int h = -1;
-	if (Block best = eng.BestBlock()) {
-		r = Hash(best);
-		h = best.Height;
-	}
-	EXT_LOCK(Mtx) {
-		EXT_FOR(const CMap::value_type& pp, Map) {
-			if (pp.second.Height > h) {
-				h = pp.second.Height;
-				r = pp.first;
-			}
-		}
-	}
-	return r;
+BlockTreeItem BlockTree::GetHeader(const HashValue& hashBlock) const {
+	if (BlockTreeItem item = FindHeader(hashBlock))
+		return item;
+	Throw(E_FAIL);
 }
 
-HashValue BlockTree::GetAncestor(const HashValue& hashBlock, int height) const {
+Block BlockTree::FindBlock(const HashValue& hashBlock) const {
+	if (BlockTreeItem item = FindInMap(hashBlock)) {
+		if (!item.IsHeaderOnly)
+			return Block(item.m_pimpl);
+	}
+	return Eng().LookupBlock(hashBlock);
+}
+
+Block BlockTree::GetBlock(const HashValue& hashBlock) const {
+	if (Block b = FindBlock(hashBlock))
+		return b;
+	Throw(E_FAIL);
+}
+
+BlockHeader BlockTree::GetAncestor(const HashValue& hashBlock, int height) const {
 	CoinEng& eng = Eng();
-	BlockTreeItem item = GetItem(hashBlock);
+	BlockTreeItem item = GetHeader(hashBlock);
 	if (height == item.Height)
-		return hashBlock;
+		return item;
 	if (height > item.Height)
-		return HashValue::Null();
+		return BlockHeader(nullptr);
 	EXT_LOCK(Mtx) {
 		while (height < item.Height-1) {
 			if (!Lookup(Map, item.PrevBlockHash, item))
 				goto LAB_TRY_MAIN_CHAIN;
 		}
-		return item.PrevBlockHash;
 	}
+	return GetHeader(item.PrevBlockHash);
 LAB_TRY_MAIN_CHAIN:
-	return Hash(eng.Db->FindBlockPrefixSuffix(height));
+	return eng.Db->FindHeader(height);
 }
 
-HashValue BlockTree::LastCommonAncestor(const HashValue& ha, const HashValue& hb) const {
-	int h = (min)(GetItem(ha).Height, GetItem(hb).Height);
+BlockHeader BlockTree::LastCommonAncestor(const HashValue& ha, const HashValue& hb) const {
+	int h = (min)(GetHeader(ha).Height, GetHeader(hb).Height);
 	ASSERT(h >= 0);
-	HashValue a = GetAncestor(ha, h), b = GetAncestor(hb, h);
-	while (a != b) {
-		a = GetItem(a).PrevBlockHash;
-		b = GetItem(b).PrevBlockHash;
+	BlockHeader a = GetAncestor(ha, h), b = GetAncestor(hb, h);
+	while (Hash(a) != Hash(b)) {
+		a = a.GetPrevHeader();
+		b = b.GetPrevHeader();
 	}
 	return a;
 }
 
+vector<Block> BlockTree::FindNextBlocks(const HashValue& hashBlock) const {
+	vector<Block> r;
+	EXT_LOCK(Mtx) {
+		EXT_FOR(CMap::value_type pp, Map) {
+			if (pp.second.PrevBlockHash == hashBlock && !pp.second.IsHeaderOnly)
+				r.push_back(Block(pp.second.m_pimpl));
+		}
+	}
+	return r;
+}
+
 void BlockTree::Add(const BlockHeader& header) {	
 	ASSERT(header.Height >= 0);
-	EXT_LOCKED(Mtx, Map[Hash(header)] = BlockTreeItem(header.PrevBlockHash, header.Height));
+	EXT_LOCKED(Mtx, Map[Hash(header)] = BlockTreeItem(header));
 }
 
 void BlockTree::RemovePersistentBlock(const HashValue& hashBlock) {
 	EXT_LOCKED(Mtx, Map.erase(hashBlock));
 }
 
-bool CoinEng::HaveBlockInMainTree(const HashValue& hash) {
+bool CoinEng::HaveAllBlocksUntil(const HashValue& hash) {
 	EXT_LOCK(Caches.Mtx) {
-		if (Caches.HashToBlockCache.count(hash) || Caches.HashToAlternativeChain.count(hash))
+		if (Caches.HashToBlockCache.count(hash))
 			return true;
 	}
 	return Db->HaveBlock(hash);
@@ -95,7 +108,10 @@ bool CoinEng::HaveBlock(const HashValue& hash) {
 		if (Caches.OrphanBlocks.count(hash))
 			return true;
 	}
-	return HaveBlockInMainTree(hash);
+	BlockTreeItem bti = Tree.FindInMap(hash);
+	if (bti && !bti.IsHeaderOnly)
+		return true;
+	return HaveAllBlocksUntil(hash);
 }
 
 bool CoinEng::HaveTxInDb(const HashValue& hashTx) {
@@ -106,7 +122,7 @@ bool CoinEng::AlreadyHave(const Inventory& inv) {
 	switch (inv.Type) {
 	case InventoryType::MSG_BLOCK:
 	case InventoryType::MSG_FILTERED_BLOCK:
-		return (bool)Tree.Find(inv.HashValue);	//!!!?    HaveBlock(inv.HashValue);
+		return HaveBlock(inv.HashValue);
 	case InventoryType::MSG_TX:
 		if (EXT_LOCKED(TxPool.Mtx, TxPool.m_hashToTx.count(inv.HashValue)))			// don't combine with next expr, because lock's scope will be wider
 			return true;
@@ -114,23 +130,6 @@ bool CoinEng::AlreadyHave(const Inventory& inv) {
 	default:
 		return false; //!!!TODO
 	}
-}
-
-void BlockHeader::Accept() {
-	CoinEng& eng = Eng();
-	HashValue hashBlock = Hash(_self);
-	if (eng.Tree.Find(hashBlock))
-		return;
-	m_pimpl->CheckHeader();
-	if (!PrevBlockHash)
-		m_pimpl->Height = 0;
-	else if (BlockTreeItem btiPrev = eng.Tree.Find(PrevBlockHash))
-		m_pimpl->Height = btiPrev.Height + 1;
-	else {
-		TRC(4, "BadPrevBlock: " <<  PrevBlockHash);
-		Throw(CoinErr::BadPrevBlock);
-	}
-	eng.Tree.Add(_self);
 }
 
 bool CoinEng::IsInitialBlockDownload() {
@@ -146,18 +145,21 @@ bool CoinEng::IsInitialBlockDownload() {
 			m_hashPrevBestUpdate = hash;
 			m_dtPrevBestUpdate = now;
 		}
-		return now-m_dtPrevBestUpdate < TimeSpan::FromSeconds(20) && bestBlock.Timestamp < now-TimeSpan::FromHours(24);
+		return now-m_dtPrevBestUpdate < TimeSpan::FromSeconds(20) && bestBlock.Timestamp < now-hours(24);
 	}
 }
 
-void CoinEng::MarkBlockAsReceived(const HashValue& hashBlock) {
+bool CoinEng::MarkBlockAsReceived(const HashValue& hashBlock) {
 	EXT_LOCK(Mtx) {
 		auto it = MapBlocksInFlight.find(hashBlock);
 		if (it != MapBlocksInFlight.end()) {
 			it->second->Link.BlocksInFlight.erase(it->second);
+			it->second->Link.DtStallingSince = DateTime();
 			MapBlocksInFlight.erase(it);
+			return true;
 		}
 	}
+	return false;
 }
 
 // GetDataMessage defined after CoinEng. So this function cannot be member of class CoinEng
@@ -172,14 +174,14 @@ static void MarkBlockAsInFlight(CoinEng& eng, ptr<GetDataMessage>& mGetData, Coi
 void CoinLink::UpdateBlockAvailability(const HashValue& hashBlock) {
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
-	if (eng.Tree.Find(HashBlockLastUnknown)) {
+	if (eng.Tree.FindHeader(HashBlockLastUnknown)) {
 		if (!HashBlockBestKnown)
 			HashBlockBestKnown = HashBlockLastUnknown;
 		HashBlockLastUnknown = HashValue::Null();
 	}
 
-	if (BlockTreeItem bti = eng.Tree.Find(hashBlock)) {
-		BlockTreeItem btiPrevBest = eng.Tree.Find(HashBlockBestKnown);
+	if (BlockTreeItem bti = eng.Tree.FindHeader(hashBlock)) {
+		BlockTreeItem btiPrevBest = eng.Tree.FindHeader(HashBlockBestKnown);
 		if (!btiPrevBest || btiPrevBest.Height < bti.Height)
 			HashBlockBestKnown = hashBlock;
 	} else
@@ -196,25 +198,17 @@ void InvMessage::Process(P2P::Link& link) {
 	if (!eng.BestBlock()) {
 		TRC(1, "Requesting for block " << eng.ChainParams.Genesis);
 
-		m->Invs.push_back(Inventory(eng.Mode==EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
+		m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK, eng.ChainParams.Genesis));
 	}
 
 	bool bCloseToBeSync = false;
 	if (Block bestBlock = eng.BestBlock())
 		bCloseToBeSync = Clock::now() < bestBlock.Timestamp + eng.ChainParams.BlockSpan*20;
 
-	HashValue hashBestHeader;
+	HashValue hashLastInvBlock;
+	
 
-//!!!R	Inventory invLastBlock;
 	EXT_FOR(const Inventory& inv, Invs) {
-#ifdef X_DEBUG//!!!D
-		if (inv.Type==InventoryType::MSG_BLOCK) {
-			String s = " ";
-			if (Block block = eng.LookupBlock(inv.HashValue))
-				s += Convert::ToString(block.Height);
-			TRC(3, "Inv block " << inv.HashValue << s);
-		}
-#endif
 
 		bool bIsBlockInv = inv.Type==InventoryType::MSG_BLOCK || eng.Mode==EngMode::Lite && inv.Type==InventoryType::MSG_FILTERED_BLOCK;
 		if (bIsBlockInv)
@@ -239,9 +233,7 @@ void InvMessage::Process(P2P::Link& link) {
 		} else {
 			if (bIsBlockInv) {
 				if (!EXT_LOCKED(eng.Mtx, eng.MapBlocksInFlight.count(inv.HashValue))) {
-					if (!hashBestHeader)
-						hashBestHeader = eng.Tree.GetBestHeaderHash();
-					link.Send(new GetHeadersMessage(hashBestHeader, inv.HashValue));
+					hashLastInvBlock = inv.HashValue;
 
 					if (bCloseToBeSync && clink.BlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
 						MarkBlockAsInFlight(eng, m, clink, inv);
@@ -257,14 +249,14 @@ void InvMessage::Process(P2P::Link& link) {
 			}
 		}
 	}
-	/*!!!R
-	if (invLastBlock.HashValue) {
-		TRC(2, "InvLastBlock: " << invLastBlock.HashValue);
 
-		m->Invs.push_back(invLastBlock);
-//!!!R		link.Send(new GetBlocksMessage(eng.LookupBlock(invLastBlock.HashValue), HashValue::Null()));
+	if (hashLastInvBlock) {
+		HashValue hashBest;
+		if (BlockHeader bh = eng.BestHeader())
+			hashBest = Hash(bh);
+		link.Send(new GetHeadersMessage(hashBest, hashLastInvBlock));
 	}
-	*/
+
 	if (!m->Invs.empty()) {
 		m->Invs.resize(std::min(m->Invs.size(), MAX_INV_SZ));
 		link.Send(m);
@@ -307,7 +299,11 @@ void CoinLink::RequestHeaders() {
 			IsSyncStarted = eng.aSyncStartedPeers.load()==0 && bFetch || bestBlock.Timestamp > Clock::now()-TimeSpan::FromHours(24);
 			if (IsSyncStarted) {
 				++eng.aSyncStartedPeers;
-				Send(new GetHeadersMessage(eng.Tree.GetBestHeaderHash()));
+
+				HashValue hashBest;
+				if (BlockHeader bh = eng.BestHeader())
+					hashBest = Hash(bh);
+				Send(new GetHeadersMessage(hashBest));
 			}
 		} else {
 			InventoryType invType = eng.Mode==EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK;
@@ -328,18 +324,18 @@ void CoinLink::RequestBlocks() {
 		return;
 
 	if (!HashBlockLastCommon) {
-		BlockTreeItem btiBestKnown = eng.Tree.GetItem(HashBlockBestKnown);
+		BlockTreeItem btiBestKnown = eng.Tree.GetHeader(HashBlockBestKnown);
 		int h = (min)(eng.BestBlockHeight(), btiBestKnown.Height);
 		ASSERT(h >= 0);
-		HashBlockLastCommon = eng.Tree.GetAncestor(HashBlockBestKnown, h);
+		HashBlockLastCommon = Hash(eng.Tree.GetAncestor(HashBlockBestKnown, h));
 	}
-	HashBlockLastCommon = eng.Tree.LastCommonAncestor(HashBlockLastCommon, HashBlockBestKnown);
+	HashBlockLastCommon = Hash(eng.Tree.LastCommonAncestor(HashBlockLastCommon, HashBlockBestKnown));
 
 	if (HashBlockLastCommon == HashBlockBestKnown)
 		return;
 	
-	BlockTreeItem bti = eng.Tree.GetItem(HashBlockLastCommon),
-		btiBestKnown = eng.Tree.GetItem(HashBlockBestKnown);
+	BlockTreeItem bti = eng.Tree.GetHeader(HashBlockLastCommon),
+		btiBestKnown = eng.Tree.GetHeader(HashBlockBestKnown);
 	HashValue prevHashBlockLastCommon = HashBlockLastCommon;
 	TRC(4, "HashBlockLastCommon: " << bti.Height << " " << HashBlockLastCommon << "     HashBlockBestKnown: " << btiBestKnown.Height << " " << HashBlockBestKnown);
 
@@ -353,24 +349,25 @@ void CoinLink::RequestBlocks() {
 		CHeight2Value height2hash;
 
 		int nToFetch = (min)(nMaxHeight-bti.Height, (max)(128, count - (mGetData ? (int)mGetData->Invs.size() : 0) ));
-		HashValue h = eng.Tree.GetAncestor(HashBlockBestKnown, bti.Height+nToFetch);
-		BlockTreeItem cur = bti = eng.Tree.GetItem(h);
-		height2hash.insert(make_pair(cur.Height, h));
+		BlockHeader cur = bti = eng.Tree.GetAncestor(HashBlockBestKnown, bti.Height+nToFetch);
+		height2hash.insert(make_pair(cur.Height, Hash(cur)));
 		for (int i=1; i<nToFetch; ++i) {
 			height2hash.insert(make_pair(cur.Height-1, cur.PrevBlockHash));
-			cur = eng.Tree.GetItem(cur.PrevBlockHash);
+			cur = cur.GetPrevHeader();
 		}
 
 		EXT_FOR(const CHeight2Value::value_type& pp, height2hash) {
 			if (eng.HaveBlock(pp.second)) {
-				if (eng.HaveBlockInMainTree(pp.second))
+				if (eng.HaveAllBlocksUntil(pp.second))
 					HashBlockLastCommon = pp.second;
 			} else {
 				EXT_LOCK(eng.Mtx) {
 					CoinEng::CMapBlocksInFlight::iterator it = eng.MapBlocksInFlight.find(pp.second);
 					if (it != eng.MapBlocksInFlight.end()) {
-						if (!waitingFor)
+						if (!waitingFor) {
 							waitingFor = &it->second->Link;
+							TRC(4, "Stall waiting for " << pp.first << " " << pp.second << " from " << waitingFor->Peer->EndPoint.Address);
+						}
 					} else if (pp.first > nWindowEnd) {
 						if (!mGetData && waitingFor != this)
 							staller = waitingFor;
@@ -405,20 +402,20 @@ LAB_OUT_LOOP:
 	}
 }
 
-void BlockMessage::ProcessContent(P2P::Link& link) {
-	Block.Process(&link);
+void BlockMessage::ProcessContent(P2P::Link& link, bool bRequested) {
+	Block.Process(&link, bRequested);
 }
 
 void BlockMessage::Process(P2P::Link& link) {
 	CoinEng& eng = Eng();
-	eng.MarkBlockAsReceived(Hash(Block));
+	bool bRequested = eng.MarkBlockAsReceived(Hash(Block));
 
 	CoinLink& clink = static_cast<CoinLink&>(link);
 	HashValue hash = Hash(Block);
 	EXT_LOCKED(clink.Mtx, clink.KnownInvertorySet.insert(Inventory(InventoryType::MSG_BLOCK, hash)));
 	if (eng.UpgradingDatabaseHeight)
 		return;
-	ProcessContent(link);
+	ProcessContent(link, bRequested);
 
 	if (Eng().Mode!=EngMode::Lite) {																	// for LiteMode we wait until txes downloaded
 		if (EXT_LOCKED(eng.Mtx, clink.BlocksInFlight.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER/2))
@@ -426,12 +423,12 @@ void BlockMessage::Process(P2P::Link& link) {
 	}
 }
 
-void MerkleBlockMessage::ProcessContent(P2P::Link& link) {
+void MerkleBlockMessage::ProcessContent(P2P::Link& link, bool bRequested) {
 	pair<HashValue, vector<HashValue>> pp = PartialMT.ExtractMatches();
 	if (pp.first != Block.get_MerkleRoot())
 		Throw(CoinErr::MerkleRootMismatch);
 	if (pp.second.empty())
-		Block.Process(&link);
+		Block.Process(&link, bRequested);
 	else {
 		CoinLink& clink = static_cast<CoinLink&>(link);
 		clink.m_curMerkleBlock = Block;					// Defer processing until all txes will be received

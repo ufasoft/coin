@@ -154,7 +154,7 @@ public:
 	bool Listen;
 	size_t MedianTimeSpan;
 	
-	typedef unordered_map<int, HashValue> CCheckpoints;
+	typedef vector<pair<int, HashValue>> CCheckpoints;
 	CCheckpoints Checkpoints;
 
 	unordered_set<IPEndPoint> Seeds;
@@ -428,10 +428,11 @@ COIN_EXPORT CoinEng& ExternalEng();
 class LocatorHashes : public vector<HashValue> {
 	typedef LocatorHashes class_type;
 public:
-	int FindHeightInMainChain() const;
+	int FindHeightInMainChain(bool bFullBlocks = false) const;
 
-	int get_DistanceBack() const;
+/*!!!R	int get_DistanceBack() const;
 	DEFPROP_GET(int, DistanceBack);
+	*/
 };
 
 class IBlockChainDb : public Object, public ITransactionable  {
@@ -455,14 +456,19 @@ public:
 	virtual void UpgradeTo(const Version& ver)													=0;
 	virtual void TryUpgradeDb(const Version& verApp) {}
 
+	virtual bool HaveHeader(const HashValue& hash)												=0;
 	virtual bool HaveBlock(const HashValue& hash)												=0;
+	virtual BlockHeader FindHeader(int height)													=0;
+	virtual BlockHeader FindHeader(const HashValue& hash)										=0;
 	virtual Block FindBlock(const HashValue& hash)												=0;
 	virtual Block FindBlock(int height)															=0;
 	virtual Block FindBlockPrefixSuffix(int height) { return FindBlock(height); }
 	virtual int GetMaxHeight()																	=0;
+	virtual int GetMaxHeaderHeight()															=0;
 	virtual TxHashesOutNums GetTxHashesOutNums(int height)										=0;
 	virtual vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) =0;
-	virtual void DeleteBlock(int height, const vector<int64_t>& txids)							=0;
+	virtual void InsertHeader(const BlockHeader& header) 										=0;
+	virtual void DeleteBlock(int height, const vector<int64_t> *txids)							=0;
 
 	virtual bool FindTx(const HashValue& hash, Tx *ptx)											=0;
 	virtual bool FindTxById(const ConstBuf& txid8, Tx *ptx)										=0;
@@ -496,16 +502,20 @@ public:
 ptr<IBlockChainDb> CreateBlockChainDb();
 ptr<IBlockChainDb> CreateSqliteBlockChainDb();
 
-struct BlockTreeItem {
-	HashValue PrevBlockHash;
-	int Height;
+struct BlockTreeItem : public BlockHeader {			// may be full block too
+	typedef BlockHeader base;
+	
+	BlockTreeItem() {}
+	BlockTreeItem(const BlockHeader& header);
 
+	/*!!!R
 	BlockTreeItem(const HashValue& hashPrev = HashValue::Null(), int height = -1)
 		: PrevBlockHash(hashPrev)
 		, Height(height)
 	{}
 
-	EXPLICIT_OPERATOR_BOOL() const { return Height == -1 ? 0 : EXT_CONVERTIBLE_TO_TRUE; }
+	EXPLICIT_OPERATOR_BOOL() const { return !Header ? 0 : EXT_CONVERTIBLE_TO_TRUE; }
+	*/
 };
 
 class BlockTree {
@@ -513,12 +523,20 @@ public:
 	mutable mutex Mtx;
 	typedef unordered_map<HashValue, BlockTreeItem> CMap;				//!!!TODO change to unordered_set<BlockTreeItem> to save space
 	CMap Map;
+	int HeightLastCheckpointed;
 
-	BlockTreeItem Find(const HashValue& hashBlock) const;
-	BlockTreeItem GetItem(const HashValue& hashBlock) const;
-	HashValue GetBestHeaderHash() const;
-	HashValue GetAncestor(const HashValue& hashBlock, int height) const;
-	HashValue LastCommonAncestor(const HashValue& ha, const HashValue& hb) const;
+	BlockTree()
+		: HeightLastCheckpointed(-1) {
+	}
+
+	BlockTreeItem FindInMap(const HashValue& hashBlock) const;
+	BlockHeader FindHeader(const HashValue& hashBlock) const;
+	BlockTreeItem GetHeader(const HashValue& hashBlock) const;
+	Block FindBlock(const HashValue& hashBlock) const;
+	Block GetBlock(const HashValue& hashBlock) const;
+	BlockHeader GetAncestor(const HashValue& hashBlock, int height) const;
+	BlockHeader LastCommonAncestor(const HashValue& ha, const HashValue& hb) const;
+	vector<Block> FindNextBlocks(const HashValue& hashBlock) const;
 	void Add(const BlockHeader& header);
 	void RemovePersistentBlock(const HashValue& hashBlock);
 };
@@ -542,7 +560,6 @@ public:
 	typedef unordered_map<HashValue, BlocksInFlightList::iterator> CMapBlocksInFlight;
 	CMapBlocksInFlight MapBlocksInFlight;
 
-	int m_idPeersNet;
 	std::exception_ptr CriticalException;
 	
 	ChainCaches Caches;
@@ -574,9 +591,10 @@ public:
 	set<String> m_setStates;
 	
 	ptr<Coin::ChannelClient> ChannelClient;
-	int CommitPeriod;	
-
 	ptr<CoinFilter> Filter;
+
+	int CommitPeriod;
+	int m_idPeersNet;
 
 	atomic<int> aPreferredDownloadPeers;
 	atomic<int> aSyncStartedPeers;
@@ -606,6 +624,10 @@ public:
 	void SignalStop();
 	void Stop();
 
+	BlockHeader BestHeader();
+	void SetBestHeader(const BlockHeader& bh);
+	int BestHeaderHeight();
+	
 	Block BestBlock();
 	void SetBestBlock(const Block& b);
 	int BestBlockHeight();
@@ -618,7 +640,7 @@ public:
 
 	virtual void SetChainParams(const Coin::ChainParams& p);
 	void SendVersionMessage(Link& link);	
-	bool HaveBlockInMainTree(const HashValue& hash);
+	bool HaveAllBlocksUntil(const HashValue& hash);
 	bool HaveBlock(const HashValue& hash);
 	bool HaveTxInDb(const HashValue& hashTx);
 	bool AlreadyHave(const Inventory& inv);
@@ -632,10 +654,12 @@ public:
 	void ExportToBootstrapDat(const path& pathBoostrap);
 	virtual void ClearByHeightCaches();
 	Block GetBlockByHeight(uint32_t height);
+	BlockHeader FindHeader(const HashValue& hash);
 	Block LookupBlock(const HashValue& hash);
 	static Blob SpendVectorToBlob(const vector<bool>& vec);
 	void EnsureTransactionStarted();
 	void CommitTransactionIfStarted();
+	void Reorganize(const BlockHeader& header);
 
 	virtual HashValue HashMessage(const ConstBuf& cbuf);
 	virtual HashValue HashForSignature(const ConstBuf& cbuf);
@@ -658,7 +682,7 @@ public:
 	void Relay(const Tx& tx);
 
 	bool IsInitialBlockDownload();
-	void MarkBlockAsReceived(const HashValue& hashBlock);
+	bool MarkBlockAsReceived(const HashValue& hashBlock);
 	void OnPeriodicMsgLoop() override;
 	CoinPeer *CreatePeer() override;
 
@@ -674,7 +698,7 @@ public:
 		return ChainParams.CoinValue/10000;
 	}
 
-	virtual Target GetNextTarget(const Block& blockLast, const Block& block);
+	virtual Target GetNextTarget(const BlockHeader& headerLast, const Block& block);
 
 //!!!?	bool GetPkId(const HashValue160& hash160, CIdPk& id);
 //!!!?	bool GetPkId(const ConstBuf& cbuf, CIdPk& id);
@@ -719,6 +743,7 @@ public:
 	void Commit() override {}
 	void Rollback() override {}
 protected:
+	void StartDns();
 	void StartIrc();
 
 	size_t GetMessageHeaderSize() override;
@@ -743,10 +768,10 @@ protected:
 	virtual void TryUpgradeDb();
 	virtual int GetIntervalForModDivision(int height);
 	virtual int GetIntervalForCalculatingTarget(int height);
-	Target KimotoGravityWell(const Block& blockLast, const Block& block, int minBlocks, int maxBlocks);
+	Target KimotoGravityWell(const BlockHeader& headerLast, const Block& block, int minBlocks, int maxBlocks);
 	virtual TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan);
 	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval);
-	virtual Target GetNextTargetRequired(const Block& blockLast, const Block& block);
+	virtual Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block);
 	virtual void UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx);
 	virtual path VGetDbFilePath();
 private:

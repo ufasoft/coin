@@ -52,7 +52,6 @@ pair<int, OutPoint> CTxes::OutPointByIdx(int idx) const {
 }
 
 pair<int, int> TxHashesOutNums::StartingTxOutIdx(const HashValue& hashTx) const {
-	pair<int, int> r(-1, -1);
 	for (int i=0, n=0; i<size(); ++i) {
 		const TxHashOutNum& hom = _self[i];
 		if (hom.HashTx == hashTx)
@@ -82,7 +81,7 @@ BinaryWriter& operator<<(BinaryWriter& wr, const TxHashesOutNums& hons) {
 
 const BinaryReader& operator>>(const BinaryReader& rd, TxHashesOutNums& hons) {
 	hons.clear();
-	hons.reserve(size_t(rd.BaseStream.Length / (32+1)));				// heuristic upper bound
+	hons.reserve(size_t(rd.BaseStream.Length / 33));				// upper bound
 	while  (!rd.BaseStream.Eof()) {
 		TxHashOutNum hon;
 		hon.NOuts = (uint32_t)(rd >> hon.HashTx).Read7BitEncoded();
@@ -91,16 +90,18 @@ const BinaryReader& operator>>(const BinaryReader& rd, TxHashesOutNums& hons) {
 	return rd;
 }
 
-TxHashesOutNums::TxHashesOutNums(const ConstBuf& buf) {
-	reserve(buf.Size / (32+1));					// heuristic upper bound
+TxHashesOutNums::TxHashesOutNums(const ConstBuf& buf)
+	: base(buf.Size / 33)											// upper bound
+{
 	CMemReadStream stm(buf);
 	BinaryReader rd(stm);
-	while (!rd.BaseStream.Eof()) {
-		TxHashOutNum hon;
+	int i = 0;
+	for (; !rd.BaseStream.Eof(); ++i) {
+		TxHashOutNum& hon = _self[i];
 		stm.ReadBuffer(hon.HashTx.data(), 32);
 		hon.NOuts = (uint32_t)rd.Read7BitEncoded();
-		push_back(hon);
 	}
+	resize(i);
 }
 
 Target::Target(uint32_t v) {
@@ -131,6 +132,9 @@ bool Target::operator<(const Target& t) const {
 	return BigInteger(_self) < BigInteger(t);
 }
 
+bool BlockHeader::IsInMainChain() const {
+	return Eng().Db->HaveHeader(Hash(_self));
+}
 
 BlockObj::~BlockObj() {
 }
@@ -251,12 +255,6 @@ Block::Block() {
 	m_pimpl = Eng().CreateBlockObj();
 }
 
-Block Block::GetPrevBlock() const {
-	if (Block r = Eng().LookupBlock(PrevBlockHash))
-		return r;
-	Throw(CoinErr::OrphanedChain);
-}
-
 void BlockObj::WriteHeader(BinaryWriter& wr) const {
 	base::WriteHeader(wr);
 	CoinEng& eng = Eng();
@@ -334,7 +332,7 @@ void BlockObj::Write(DbWriter& wr) const {
 
 	CoinSerialized::WriteVarInt(wr, Ver);
 	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
-	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser || wr.ForHeader)
 		wr << MerkleRoot();
 	if (eng.Mode!=EngMode::BlockParser) {
 		if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
@@ -349,7 +347,7 @@ void BlockObj::Read(const DbReader& rd) {
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
-	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser) {
+	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser || rd.ForHeader) {
 		HashValue merkleRoot;
 		rd >> merkleRoot;
 		m_merkleRoot = merkleRoot;
@@ -384,15 +382,15 @@ int CoinEng::GetIntervalForCalculatingTarget(int height) {
 	return ChainParams.TargetInterval;
 }
 
-Target CoinEng::KimotoGravityWell(const Block& blockLast, const Block& block, int minBlocks, int maxBlocks) {
-	if (blockLast.Height < minBlocks)
+Target CoinEng::KimotoGravityWell(const BlockHeader& headerLast, const Block& block, int minBlocks, int maxBlocks) {
+	if (headerLast.Height < minBlocks)
 		return ChainParams.MaxTarget;
 	int actualSeconds = 0, targetSeconds = 0;
 	BigInteger average;
-	Block b = blockLast;
-	for (int mass=1; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevBlock()) {
+	BlockHeader b = headerLast;
+	for (int mass=1; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevHeader()) {
 		average += (BigInteger(b.get_DifficultyTarget()) - average)/mass;
-		actualSeconds = max(0, (int)duration_cast<seconds>(blockLast.get_Timestamp() - b.get_Timestamp()).count());
+		actualSeconds = max(0, (int)duration_cast<seconds>(headerLast.get_Timestamp() - b.get_Timestamp()).count());
 		targetSeconds = (int)duration_cast<seconds>(ChainParams.BlockSpan * (double)mass).count();
 		if (mass >= minBlocks) {
 			double eventHorizonDeviation = 1 + 0.7084 * pow(mass / 28.2, -1.228);
@@ -408,10 +406,10 @@ TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInt
 	int r = bo.Height - nInterval + 1;
 	if (bo.Height >= ChainParams.AuxPowStartBlock || (ChainParams.FullPeriod && r>0))
 		--r;
-	Block b = LookupBlock(bo.PrevBlockHash);
+	BlockHeader b = Tree.FindHeader(bo.PrevBlockHash);
 	ASSERT(b.Height >= r);
 	while (b.Height > r)
-		b = b.IsInMainChain() ? GetBlockByHeight(r) : b.GetPrevBlock();
+		b = b.IsInMainChain() ? Db->FindHeader(r) : b.GetPrevHeader();
 	return bo.Timestamp - b.Timestamp;
 }
 
@@ -422,24 +420,24 @@ TimeSpan CoinEng::AdjustSpan(int height, const TimeSpan& span, const TimeSpan& t
 static DateTime s_dt15Feb2012(2012, 2, 15);
 static Target s_minTestnetTarget(0x1D0FFFFF);
 
-Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block) {
-	int nIntervalForMod = GetIntervalForModDivision(blockLast.Height);
+Target CoinEng::GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) {
+	int nIntervalForMod = GetIntervalForModDivision(headerLast.Height);
 
-	if ((blockLast.Height+1) % nIntervalForMod) {
+	if ((headerLast.Height+1) % nIntervalForMod) {
 		if (ChainParams.IsTestNet) {
-			if (block.get_Timestamp()-blockLast.Timestamp > ChainParams.BlockSpan*2)			// negative block timestamp delta allowed
+			if (block.get_Timestamp()-headerLast.Timestamp > ChainParams.BlockSpan*2)			// negative block timestamp delta allowed
 				return ChainParams.MaxTarget;
 			else {
-				for (Block prev(blockLast);; prev = prev.GetPrevBlock())
+				for (BlockHeader prev(headerLast);; prev = prev.GetPrevHeader())
 					if (prev.Height % nIntervalForMod == 0 || prev.get_DifficultyTarget() != ChainParams.MaxTarget)
 						return prev.DifficultyTarget;
 			}
 		}
-		return blockLast.DifficultyTarget;
+		return headerLast.DifficultyTarget;
 	}
-	int nInterval = GetIntervalForCalculatingTarget(blockLast.Height);
+	int nInterval = GetIntervalForCalculatingTarget(headerLast.Height);
 	TimeSpan targetSpan = ChainParams.BlockSpan * nInterval,
-		span = AdjustSpan(blockLast.Height, GetActualSpanForCalculatingTarget(*blockLast.m_pimpl, nInterval), targetSpan);
+		span = AdjustSpan(headerLast.Height, GetActualSpanForCalculatingTarget(*headerLast.m_pimpl, nInterval), targetSpan);
 
 #ifdef X_DEBUG//!!!D
 	{
@@ -461,11 +459,11 @@ Target CoinEng::GetNextTargetRequired(const Block& blockLast, const Block& block
 	int len = strlen(shex);
 #endif
 
-	return Target(BigInteger(blockLast.get_DifficultyTarget()) * span.count() / targetSpan.count());
+	return Target(BigInteger(headerLast.get_DifficultyTarget()) * span.count() / targetSpan.count());
 }
 
-Target CoinEng::GetNextTarget(const Block& blockLast, const Block& block) {
-	return std::min(ChainParams.MaxTarget, GetNextTargetRequired(blockLast, block));
+Target CoinEng::GetNextTarget(const BlockHeader& headerLast, const Block& block) {
+	return std::min(ChainParams.MaxTarget, GetNextTargetRequired(headerLast, block));
 }
 
 static const TimeSpan s_spanFuture = seconds(MAX_FUTURE_SECONDS);
@@ -738,9 +736,6 @@ void CConnectJob::PrepareTask(const HashValue160& hash160, const CanonicalPubKey
 	Blob compressed;
 	try {
 		DBG_LOCAL_IGNORE_CONDITION(ExtErr::Crypto);
-//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
-//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
-//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
 		compressed = pubKey.ToCompressed();
 	} catch (RCExc) {
 		return;
@@ -850,9 +845,28 @@ void CConnectJob::Calculate() {
 #endif
 }
 
+void BlockHeader::Connect() const {
+	CoinEng& eng = Eng();
+	HashValue hashBlock = Hash(_self);
+#if UCFG_TRC
+	if (!(Height & 0x1FF)) {
+		TRC(4, "                \t" << Height << "\t" << hashBlock);
+	}
+#endif
+
+	{
+		CoinEngTransactionScope scopeBlockSavepoint(eng);
+		eng.Db->InsertHeader(_self);
+	}
+	eng.SetBestHeader(_self);
+	eng.Tree.RemovePersistentBlock(hashBlock);
+	UpdateLastCheckpointed();
+}
+
 void Block::Connect() const {
 	CoinEng& eng = Eng();
-	TRC(3, "           Height: " << Height << "   " << Hash(_self) <<  (eng.Mode==EngMode::Lite ? String() : EXT_STR(" " << setw(4) << get_Txes().size() << " Txes")));
+	HashValue hashBlock = Hash(_self);
+	TRC(3, "               \t" << Height << "\t" << hashBlock <<  (eng.Mode==EngMode::Lite ? String() : EXT_STR(" " << setw(4) << get_Txes().size() << " Txes")));
 
 	Check(false);		// Check Again without bCheckMerkleRoot
 	int64_t nFees = 0;
@@ -926,7 +940,6 @@ void Block::Connect() const {
 		m_pimpl->Write(wr);
 //!!!?			wr << byte(0);
 
-		HashValue hashBlock = Hash(_self);
 		Coin::TxHashesOutNums txHashOutNums;
 
 		switch (eng.Mode) {
@@ -996,38 +1009,161 @@ void Block::Connect() const {
 			eng.m_iiEngEvents->OnBlockConnectDbtx(_self);
 	}
 	eng.SetBestBlock(_self);
+	eng.Tree.RemovePersistentBlock(Hash(_self));
+	
+	Inventory inv(eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, hashBlock);
+
+	EXT_LOCK(eng.MtxPeers) {
+		for (CoinEng::CLinks::iterator it=begin(eng.Links); it!=end(eng.Links); ++it) {
+			CoinLink& link = static_cast<CoinLink&>(**it);
+			if (Height > link.LastReceivedBlock-2000)
+				link.Push(inv);
+		}
+	}
+
+	EXT_LOCK(eng.Caches.Mtx) {
+		eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)Height, hashBlock));
+		eng.Caches.HashToBlockCache.insert(make_pair(hashBlock, _self));
+	}
 
 	if (eng.m_iiEngEvents) {
 		EXT_FOR (const Tx& tx, get_Txes()) {
 			eng.m_iiEngEvents->OnProcessTx(tx);
 		}
 	}
+	
+	if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
+		EXT_FOR(const Tx& tx, get_Txes()) {
+			eng.RemoveFromMemory(tx);
+		}
+	}
+
+	UpdateLastCheckpointed();
 }
 
-DateTime Block::GetMedianTimePast() {
+DateTime BlockHeader::GetMedianTimePast() const {
 	CoinEng& eng = Eng();
 
 	vector<DateTime> ar(eng.ChainParams.MedianTimeSpan);
 	vector<DateTime>::iterator beg = ar.end(), end = beg;
-	Block block = _self;
-	for (int i=Height; block && i>=std::max(0, int(Height - ar.size()+1)); --i, block=eng.LookupBlock(block.PrevBlockHash))
+	BlockHeader block = _self;
+	for (int i=Height; block && i>=std::max(0, int(Height - ar.size()+1)); --i, block=eng.Tree.FindHeader(block.PrevBlockHash))
 		*--beg = block.Timestamp;
 	sort(beg, end);
 	return *(beg + (end-beg)/2);
 }
 
-bool Block::HasBestChainWork() const {
+BlockHeader BlockHeader::GetPrevHeader() const {
+	if (BlockHeader r = Eng().Tree.FindHeader(PrevBlockHash))
+		return r;
+	Throw(CoinErr::OrphanedChain);
+}
+
+bool BlockHeader::IsSuperMajority(int minVersion, int nRequired, int nToCheck) const {
+	int n = 0;
+	BlockHeader block = _self;
+	for (int i=0; i<nToCheck && n<nRequired; ++i, block = block.GetPrevHeader()) {
+		n += int(block.Ver >= minVersion);
+		if (block.Height == 0)
+			break;
+	}
+	return n >= nRequired;
+}
+
+void BlockHeader::CheckAgainstCheckpoint() const {
 	CoinEng& eng = Eng();
 
-	if (!eng.BestBlock())
+	int h = Height;
+	if (h > eng.Tree.HeightLastCheckpointed) {
+		for (size_t i=eng.ChainParams.Checkpoints.size(); i--;) {
+			const pair<int, HashValue>& cp = eng.ChainParams.Checkpoints[i];
+			if (cp.first == h) {
+				if (Hash(_self) == cp.second)
+					return;
+				goto LAB_THROW;
+			}
+		}
+		return;
+	}
+LAB_THROW:
+	TRC(3, "Checkpoint failed for block: " << h << " " << Hash(_self));
+	Throw(CoinErr::RejectedByCheckpoint);
+}
+
+void BlockHeader::UpdateLastCheckpointed() const {
+	CoinEng& eng = Eng();
+
+	HashValue hash = Hash(_self);
+
+	for (size_t i=eng.ChainParams.Checkpoints.size(); i--;) {
+		const pair<int, HashValue>& cp = eng.ChainParams.Checkpoints[i];
+		if (cp.second == hash) {
+			eng.Tree.HeightLastCheckpointed = cp.first;
+			break;
+		}
+	}
+}
+
+bool BlockHeader::HasBestChainWork() const {
+	CoinEng& eng = Eng();
+
+	BlockHeader bestHeader = eng.BestHeader();
+	if (!bestHeader)
 		return true;
 	BigInteger work = 0, forkWork = 0;
-	Block blockRoot;
-	for (blockRoot=_self; !blockRoot.IsInMainChain();)
-		forkWork += exchange(blockRoot, blockRoot.GetPrevBlock()).GetWork();
-	for (Block b=eng.BestBlock(); Hash(b)!=Hash(blockRoot) && forkWork>work;)
-		work += exchange(b, b.GetPrevBlock()).GetWork();
+	
+	BlockTreeItem btiRoot(_self);
+	HashValue hash = Hash(_self);
+	while (!eng.Db->HaveHeader(hash)) {
+		hash = btiRoot.PrevBlockHash;
+		forkWork += eng.ChainParams.MaxTarget / exchange(btiRoot, eng.Tree.GetHeader(btiRoot.PrevBlockHash)).DifficultyTarget;
+	}
+
+	HashValue hashB = Hash(bestHeader);
+	for (BlockTreeItem bti=bestHeader; hashB!=hash && forkWork>work;) {
+		hashB = bti.PrevBlockHash;
+		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti.PrevBlockHash)).DifficultyTarget;
+	}
+
 	return forkWork > work;
+}
+
+void BlockHeader::Accept() {
+	CoinEng& eng = Eng();
+
+	HashValue hash = Hash(_self);
+	if (eng.Tree.FindHeader(hash))
+		return;
+	m_pimpl->CheckHeader();
+	if (!PrevBlockHash)
+		m_pimpl->Height = 0;
+	else if (BlockTreeItem btiPrev = eng.Tree.FindHeader(PrevBlockHash))
+		m_pimpl->Height = btiPrev.Height + 1;
+	else {
+		TRC(4, "BadPrevBlock: " <<  PrevBlockHash);
+		Throw(CoinErr::BadPrevBlock);
+	}
+	CheckAgainstCheckpoint();
+
+	EXT_LOCK(eng.Mtx) {
+		if (!eng.Runned)
+			Throw(ExtErr::ThreadInterrupted);
+		if (Height <= eng.BestHeaderHeight() && eng.Tree.FindHeader(hash))
+			return;																	// RaceCondition check, header already accepted by parallel thread.
+		if (!HasBestChainWork()) {
+			TRC(2, "Fork detected: " << Height << " " << hash);
+			eng.Tree.Add(_self);
+		} else {
+			if (eng.BestBlock() && Hash(eng.BestHeader()) != get_PrevBlockHash())
+				eng.Reorganize(_self);
+			else {
+				Connect();
+			}
+		}
+//!!!?	
+		
+
+	}
 }
 
 void Block::Accept() {
@@ -1036,7 +1172,7 @@ void Block::Accept() {
 	if (!PrevBlockHash)
 		m_pimpl->Height = 0;	
 	else {
-		Block blockPrev = eng.LookupBlock(PrevBlockHash);
+		BlockHeader blockPrev = eng.Tree.FindHeader(PrevBlockHash);
 		
 		Target targetNext = eng.GetNextTarget(blockPrev, _self);
 		if (get_DifficultyTarget() != targetNext) {
@@ -1064,13 +1200,8 @@ void Block::Accept() {
 	HashValue hash = Hash(_self);
 	m_pimpl->ComputeAttributes();
 
-	ChainParams::CCheckpoints::iterator itCheckPoint = eng.ChainParams.Checkpoints.find(Height);
-	if (itCheckPoint != eng.ChainParams.Checkpoints.end() && itCheckPoint->second != hash) {
-		TRC(3, "Checkpoint failed for block: " << hash << "  H: " << Height);
-		Throw(CoinErr::RejectedByCheckpoint);
-	}
-
-//!!!T	if (Ver >= 2 && IsSuperMajority(2, 750, 1000) && Height != m_pimpl->GetBlockHeightFromCoinbase())				// very expensive check
+//!!! valid only starting from some block
+//	if (Ver >= 2 && Height != m_pimpl->GetBlockHeightFromCoinbase())				//!!! && IsSuperMajority(2, 750, 1000)    very expensive check
 //		Throw(CoinErr::BlockHeightMismatchInCoinbase);
 
 	EXT_LOCK (eng.Mtx) {
@@ -1078,54 +1209,35 @@ void Block::Accept() {
 			Throw(ExtErr::ThreadInterrupted);
 		if (Height <= eng.BestBlockHeight() && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
-		if (!HasBestChainWork()) {
-			TRC(2, "Fork detected: " << hash << "  Height: " << Height);
-			EXT_LOCKED(eng.Caches.Mtx, eng.Caches.HashToAlternativeChain.insert(make_pair(hash, _self)));
-		} else {
-			if (eng.BestBlock() && Hash(eng.BestBlock()) != get_PrevBlockHash())
-				Reorganize();
-			else {
-				Connect();
-				EXT_LOCK (eng.Caches.Mtx) {
-					eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)Height, hash));
-					eng.Caches.HashToBlockCache.insert(make_pair(hash, _self));
-#ifdef X_DEBUG//!!!D
-		TRC(1, "Before LogObjectCounters");
-		LogObjectCounters();
-#endif
-				}
-
-				if (eng.Mode!=EngMode::Lite && eng.Mode!=EngMode::BlockParser) {
-					EXT_FOR (const Tx& tx, get_Txes()) {
-						eng.RemoveFromMemory(tx);
-					}
-				}
-			}
-		
-			Inventory inv(eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK, hash);
-
-			EXT_LOCK (eng.MtxPeers) {
-				for (CoinEng::CLinks::iterator it=begin(eng.Links); it!=end(eng.Links); ++it) {
-					CoinLink& link = static_cast<CoinLink&>(**it);
-					if (Height > link.LastReceivedBlock-2000)
-						link.Push(inv);	
-				}
-			}
-
-			bool bNotifyWallet = eng.m_iiEngEvents && !eng.IsInitialBlockDownload();
-			if (bNotifyWallet || !(Height % eng.CommitPeriod))
-				eng.CommitTransactionIfStarted();
-			if (bNotifyWallet)
-				eng.m_iiEngEvents->OnProcessBlock(_self);
+		bool bConnectToMainChain = IsInMainChain();
+		if (!bConnectToMainChain) {
+			CheckAgainstCheckpoint();
+			if (BlockTreeItem bti = eng.Tree.FindInMap(hash)) {
+				eng.Tree.Add(_self);
+				return;
+			} else if (!(bConnectToMainChain = HasBestChainWork())) {
+				TRC(2, "Fork detected: " << Height << " " << hash);
+				eng.Tree.Add(_self);
+				return;
+			}	
 		}
+		if (eng.BestBlock() && Hash(eng.BestBlock()) != get_PrevBlockHash())
+			eng.Reorganize(_self);
+		else
+			Connect();
+
+		bool bNotifyWallet = eng.m_iiEngEvents && !eng.IsInitialBlockDownload();
+		if (bNotifyWallet || !(Height % eng.CommitPeriod))
+			eng.CommitTransactionIfStarted();
+		if (bNotifyWallet)
+			eng.m_iiEngEvents->OnProcessBlock(_self);		
 	}
-	eng.Tree.RemovePersistentBlock(hash);
 
 	if (eng.m_iiEngEvents)
 		eng.m_iiEngEvents->OnBlockchainChanged();
 }
 
-void Block::Process(P2P::Link *link) {
+void Block::Process(P2P::Link *link, bool bRequested) {
 	CoinEng& eng = Eng();
 	HashValue hash = Hash(_self);	
 
@@ -1146,7 +1258,7 @@ void Block::Process(P2P::Link *link) {
 			return;
 		throw;
 	}
-	if (hash==eng.ChainParams.Genesis || eng.HaveBlockInMainTree(PrevBlockHash)) {
+	if (hash==eng.ChainParams.Genesis || eng.HaveAllBlocksUntil(PrevBlockHash)) {
 		Accept();
 
 		vector<HashValue> vec;
@@ -1167,7 +1279,7 @@ LAB_AGAIN:
 					}
 				}
 			}
-LAB_FOUND_ORPHAN:
+		LAB_FOUND_ORPHAN:
 			if (blk) {
 				try {
 					blk.Accept();
@@ -1175,36 +1287,34 @@ LAB_FOUND_ORPHAN:
 				} catch (RCExc) {
 					goto LAB_AGAIN;
 				}
+			} else {
+				vector<Block> nexts = eng.Tree.FindNextBlocks(h);
+				EXT_FOR(Block& blk, nexts) {
+					try {
+						blk.Accept();
+						vec.push_back(Hash(blk));
+					} catch (RCExc) {
+					}
+				}
+			}
+		}
+	} else if (bRequested) {
+		if (BlockTreeItem bti = eng.Tree.FindHeader(hash)) {
+			m_pimpl->Height = bti.Height;			
+			eng.Tree.Add(_self);
+			TRC(4, "requested    \t" << bti.Height << "\t" << hash << " added to Tree");
+		} else {
+			EXT_LOCK(eng.Caches.Mtx) {
+				eng.Caches.OrphanBlocks.insert(make_pair(hash, _self));
+
+				TRC(4, "B \t" << hash << " added to OrphanBlocks.size= " << eng.Caches.OrphanBlocks.size());
 			}
 		}
 	} else {
-		Block orphanRoot(nullptr);
-		EXT_LOCK (eng.Caches.Mtx) {
-			eng.Caches.OrphanBlocks.insert(make_pair(hash, _self));
-			if (link)
-				orphanRoot = GetOrphanRoot();
-		}
-//!!!R		if (orphanRoot)
-//!!!R			link->Send(new GetBlocksMessage(eng.BestBlock(), Hash(orphanRoot)));
-
-		TRC(4, "B " << eng.Tree.Find(hash).Height << " " << hash << " added to OrphanBlocks.size()= " << EXT_LOCKED(eng.Caches.Mtx, eng.Caches.OrphanBlocks.size()));
+		TRC(3, "B " << "Not-requested Orphan " << hash << " discarded");
 	}
 }
 
-bool Block::IsInMainChain() const {
-	return Eng().Db->HaveBlock(Hash(_self));
-}
-
-bool Block::IsSuperMajority(int minVersion, int nRequired, int nToCheck) {
-	int n = 0;
-	Block block = _self;
-	for (int i=0; i<nToCheck && n<nRequired; ++i, block = block.GetPrevBlock()) {
-		n += int(block.Ver >= minVersion);
-		if (block.Height == 0)
-			break;
-	}
-	return n >= nRequired;
-}
 
 
 } // Coin::

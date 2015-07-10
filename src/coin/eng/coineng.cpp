@@ -221,111 +221,22 @@ Block CoinEng::GetBlockByHeight(uint32_t height) {
 	return block;
 }
 
-CoinMessage *CoinEng::CreateVersionMessage() {
-	return new VersionMessage;
+BlockHeader CoinEng::FindHeader(const HashValue& hash) {
+	EXT_LOCK(Caches.Mtx) {
+		Block b(nullptr);
+		if (Lookup(Caches.HashToBlockCache, hash, b))
+			return b;
+		ChainCaches::COrphanMap::iterator it = Caches.OrphanBlocks.find(hash);
+		if (it != Caches.OrphanBlocks.end())
+			return it->second.first;
+	}
+	return Tree.FindHeader(hash);
 }
-
-CoinMessage *CoinEng::CreateVerackMessage() {
-	return new VerackMessage;
-}
-
-CoinMessage *CoinEng::CreateAddrMessage() {
-	return new AddrMessage;
-}
-
-CoinMessage *CoinEng::CreateInvMessage() {
-	return new InvMessage;
-}
-
-CoinMessage *CoinEng::CreateGetDataMessage() {
-	return new GetDataMessage;
-}
-
-CoinMessage *CoinEng::CreateNotFoundMessage() {
-	return new NotFoundMessage;
-}
-
-CoinMessage *CoinEng::CreateGetBlocksMessage() {
-	return new GetBlocksMessage;
-}
-
-CoinMessage *CoinEng::CreateGetHeadersMessage() {
-	return new GetHeadersMessage;
-}
-
-CoinMessage *CoinEng::CreateTxMessage() {
-	return new TxMessage;
-}
-
-CoinMessage *CoinEng::CreateBlockMessage() {
-	return new BlockMessage;
-}
-
-CoinMessage *CoinEng::CreateHeadersMessage() {
-	return new HeadersMessage;
-}
-
-CoinMessage *CoinEng::CreateGetAddrMessage() {
-	return new GetAddrMessage;
-}
-
-CoinMessage *CoinEng::CreateCheckOrderMessage() {
-	return new CheckOrderMessage;
-}
-
-CoinMessage *CoinEng::CreateSubmitOrderMessage() {
-	return new SubmitOrderMessage;
-}
-
-CoinMessage *CoinEng::CreateReplyMessage() {
-	return new ReplyMessage;
-}
-
-CoinMessage *CoinEng::CreatePingMessage() {
-	return new PingMessage;
-}
-
-CoinMessage *CoinEng::CreatePongMessage() {
-	return new PongMessage;
-}
-
-CoinMessage *CoinEng::CreateMemPoolMessage() {
-	return new MemPoolMessage;
-}
-
-CoinMessage *CoinEng::CreateAlertMessage() {
-	return new AlertMessage;
-}
-
-CoinMessage *CoinEng::CreateMerkleBlockMessage() {
-	return new MerkleBlockMessage;
-}
-
-CoinMessage *CoinEng::CreateFilterLoadMessage() {
-	return new FilterLoadMessage;
-}
-
-CoinMessage *CoinEng::CreateFilterAddMessage() {
-	return new FilterAddMessage;
-}
-
-CoinMessage *CoinEng::CreateFilterClearMessage() {
-	return new FilterClearMessage;
-}
-
-CoinMessage *CoinEng::CreateRejectMessage() {
-	return new RejectMessage;
-}
-
-CoinMessage *CoinEng::CreateCheckPointMessage() {
-	return new CoinMessage("checkpoint");
-}
-
-
+ 
 Block CoinEng::LookupBlock(const HashValue& hash) {
 	Block r(nullptr);
 	EXT_LOCK (Caches.Mtx) {
-		if (Lookup(Caches.HashToBlockCache, hash, r) || Lookup(Caches.HashToAlternativeChain, hash, r))
+		if (Lookup(Caches.HashToBlockCache, hash, r))
 			return r;
 	}
 	if (r = Db->FindBlock(hash)) {
@@ -335,16 +246,6 @@ Block CoinEng::LookupBlock(const HashValue& hash) {
 		}
 	}
 	return r;
-}
-
-void CoinEng::LoadLastBlockInfo() {
-	int heightMax = Db->GetMaxHeight();
-	if (heightMax >= 0) {
-		SetBestBlock(GetBlockByHeight(heightMax));
-		Caches.DtBestReceived = BestBlock().Timestamp;
-
-		TRC(2, Hash(BestBlock()) << "  Height: " << heightMax);
-	}
 }
 
 bool CoinEng::CreateDb() {
@@ -508,7 +409,7 @@ ptr<CoinEng> CoinEng::CreateObject(CoinDb& cdb, RCString name) {
 							if (elName == "Checkpoint") {
 								int height = stoi(rd.GetAttribute("Block"));
 								params.LastCheckpointHeight = std::max(height, params.LastCheckpointHeight);
-								params.Checkpoints.insert(make_pair(height, HashValue(rd.GetAttribute("Hash"))));
+								params.Checkpoints.push_back(make_pair(height, HashValue(rd.GetAttribute("Hash"))));
 							} else if (elName == "Seed") {
 								vector<String> ss = rd.GetAttribute("EndPoint").Trim().Split();
 								EXT_FOR (const String& seed, ss)
@@ -579,55 +480,51 @@ protected:
 
 
 static regex s_reDns("dns://(.+)");
-static regex s_reIrc("irc://([^:/]+)(:(\\d+))?/(.+)");
 
-void CoinEng::StartIrc() {
-	if (!ChannelClient) {
-		vector<String> ar = ChainParams.BootUrls;
-		random_shuffle(ar.begin(), ar.end());
-		IPEndPoint epServer;
-		String channel;
-		vector<String> dnsServers;
-		for (int i=0; i<ar.size(); ++i) {
-			String url = ar[i];
-			cmatch m;
-			if (regex_match(url.c_str(), m, s_reDns)) {
-				dnsServers.push_back(m[1]);
-			} else if (regex_match(url.c_str(), m, s_reIrc)) {
-				if (channel.empty()) {
-					String host = m[1];
-					uint16_t port = uint16_t(m[2].matched ? atoi(String(m[3])) : 6667);
-					epServer = IPEndPoint(host, port);
-					ostringstream os;
-					os << m[4].str();
-					if (!ChainParams.IsTestNet && ChainParams.IrcRange > 0)
-						os << std::setw(2) << std::setfill('0') << Ext::Random().Next(ChainParams.IrcRange);
-					channel = os.str();
-				}
-			}
-		}
-		if (!dnsServers.empty())
-			(new DnsThread(_self, dnsServers))->Start();
-		if (!channel.empty()) {
-			ChannelClient = new Coin::ChannelClient(_self);
-//!!!			ChannelClient->ListeningPort = ListeningPort;
-			m_cdb.IrcManager.AttachChannelClient(epServer, channel, ChannelClient);
-		}
+void CoinEng::StartDns() {
+	vector<String> dnsServers;
+	vector<String> ar = ChainParams.BootUrls;
+	random_shuffle(ar.begin(), ar.end());
+	for (int i=0; i<ar.size(); ++i) {
+		String url = ar[i];
+		cmatch m;
+		if (regex_match(url.c_str(), m, s_reDns))
+			dnsServers.push_back(m[1]);
+	}
+	if (!dnsServers.empty())
+		(new DnsThread(_self, dnsServers))->Start();
+}
+
+BlockHeader CoinEng::BestHeader() {
+	EXT_LOCK(Caches.Mtx) {
+		return Caches.m_bestHeader;
 	}
 }
 
+int CoinEng::BestHeaderHeight() {
+	return EXT_LOCKED(Caches.Mtx, Caches.m_bestHeader.SafeHeight);
+}
+
+void CoinEng::SetBestHeader(const BlockHeader& bh) {
+	EXT_LOCKED(Caches.Mtx, Caches.m_bestHeader = bh);
+}
+
 Block CoinEng::BestBlock() {
-	EXT_LOCK (Caches.Mtx) {
+	EXT_LOCK(Caches.Mtx) {
 		return Caches.m_bestBlock;
 	}
 }
 
-void CoinEng::SetBestBlock(const Block& b) {
-	EXT_LOCKED(Caches.Mtx, Caches.m_bestBlock = b);
-}
-
 int CoinEng::BestBlockHeight() {
 	return EXT_LOCKED(Caches.Mtx, Caches.m_bestBlock.SafeHeight);
+}
+
+void CoinEng::SetBestBlock(const Block& b) {
+	EXT_LOCK(Caches.Mtx) {
+		Caches.m_bestBlock = b;
+		if (b.SafeHeight > Caches.m_bestHeader.SafeHeight)
+			Caches.m_bestHeader = b;
+	}
 }
 
 void CoinEng::put_Mode(EngMode mode) {
@@ -637,6 +534,7 @@ void CoinEng::put_Mode(EngMode mode) {
 	bool bRunned = Runned;
 	if (bRunned)
 		Stop();
+	SetBestHeader(nullptr);
 	SetBestBlock(nullptr);
 	m_mode = mode;
 	Filter = nullptr;
@@ -652,6 +550,7 @@ void CoinEng::PurgeDatabase() {
 	if (bRunned)
 		Stop();
 	Db->Close(false);
+	SetBestHeader(nullptr);
 	SetBestBlock(nullptr);
 	sys::remove(GetDbFilePath());
 	Filter = nullptr;
@@ -893,7 +792,7 @@ ptr<P2P::Message> CoinEng::RecvMessage(Link& link, const BinaryReader& rd) {
 
 Block CoinEng::GetPrevBlockPrefixSuffixFromMainTree(const Block& block) {
 	Block r(nullptr);
-	if (EXT_LOCKED(Caches.Mtx, Lookup(Caches.HashToBlockCache, block.PrevBlockHash, r) || Lookup(Caches.HashToAlternativeChain, block.PrevBlockHash, r)))
+	if (EXT_LOCKED(Caches.Mtx, Lookup(Caches.HashToBlockCache, block.PrevBlockHash, r)))
 		return r;
 	return Db->FindBlockPrefixSuffix(block.Height-1);
 }
@@ -987,12 +886,6 @@ const Version
 
 
 void CoinEng::UpgradeDb(const Version& ver) {
-/*!!!R	if (ver == VER_DUPLICATED_TX) {
-		if (ChainParams.IsTestNet) {
-			m_db.ExecuteNonQuery("DELETE FROM txes");
-			m_db.ExecuteNonQuery("DELETE FROM blocks");
-		}
-	}*/
 }
 
 void CoinEng::UpgradeTo(const Version& ver) {
@@ -1069,6 +962,31 @@ void CoinEng::ContinueLoad0() {
 	//!!!	ListeningPort = ChainParams.DefaultPort;
 }
 
+void CoinEng::LoadLastBlockInfo() {
+	int hMax = Db->GetMaxHeight(),
+		hHeaderMax = Db->GetMaxHeaderHeight();
+	if (hMax >= 0) {
+		SetBestBlock(GetBlockByHeight(hMax));
+		Caches.DtBestReceived = BestBlock().Timestamp;
+
+		TRC(2, "BestBlock : " << hMax << " " << Hash(BestBlock()));
+	}
+	if (hHeaderMax >= 0) {
+		SetBestHeader(Db->FindHeader(hHeaderMax));
+
+		for (size_t i=ChainParams.Checkpoints.size(); i--;) {
+			const pair<int, HashValue>& cp = ChainParams.Checkpoints[i];
+			if (cp.first <= hHeaderMax) {
+				ASSERT(Hash(Db->FindHeader(cp.first)) == cp.second);		//!!! rare case when checkpoint set of new client contraverses saved fork. TODO solution: clear DB here
+				Tree.HeightLastCheckpointed = cp.first;
+				break;
+			}
+		}
+
+		TRC(2, "BestHeader: " << hHeaderMax << " " << Hash(BestHeader()));
+	}
+}
+
 void CoinEng::ContinueLoad() {
 	LoadLastBlockInfo();
 }
@@ -1108,11 +1026,16 @@ void CoinEng::Start() {
 			(new BootstrapDbThread(_self, pathBootstrap))->Start();							// uses field CoinEng.Runned. Must be called after base::Start()
 	}
 
+	StartDns();
+
 	if (m_cdb.ProxyString.ToUpper() != "TOR")
 		StartIrc();
 
 	DateTime now = Clock::now();
 	Ext::Random rng;
+#ifdef X_DEBUG//!!!T
+	ChainParams.AddSeedEndpoint("192.168.0.2");
+#endif
 	EXT_FOR(const IPEndPoint& ep, ChainParams.Seeds) {
 		Add(ep, uint64_t(NodeServices::NODE_NETWORK), now-TimeSpan::FromDays(7 + rng.Next(7)));
 	}
@@ -1159,7 +1082,7 @@ void GetDataMessage::Process(P2P::Link& link) {
 				break;
 
 			{
-				if (Block block = eng.LookupBlock(inv.HashValue)) {
+				if (Block block = eng.Tree.FindBlock(inv.HashValue)) {
 			//		ASSERT(EXT_LOCKED(eng.Mtx, (block.m_pimpl->m_hash.reset(), Hash(block)==inv.HashValue)));
 
 					if (InventoryType::MSG_BLOCK == inv.Type) {

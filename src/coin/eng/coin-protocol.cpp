@@ -74,21 +74,120 @@ static MessageClassFactoryBase
 
 	s_factoryCheckPoint	("checkpoint"	, &CoinEng::CreateCheckPointMessage	);		// PPCoin
 
+CoinMessage *CoinEng::CreateVersionMessage() {
+	return new VersionMessage;
+}
+
+CoinMessage *CoinEng::CreateVerackMessage() {
+	return new VerackMessage;
+}
+
+CoinMessage *CoinEng::CreateAddrMessage() {
+	return new AddrMessage;
+}
+
+CoinMessage *CoinEng::CreateInvMessage() {
+	return new InvMessage;
+}
+
+CoinMessage *CoinEng::CreateGetDataMessage() {
+	return new GetDataMessage;
+}
+
+CoinMessage *CoinEng::CreateNotFoundMessage() {
+	return new NotFoundMessage;
+}
+
+CoinMessage *CoinEng::CreateGetBlocksMessage() {
+	return new GetBlocksMessage;
+}
+
+CoinMessage *CoinEng::CreateGetHeadersMessage() {
+	return new GetHeadersMessage;
+}
+
+CoinMessage *CoinEng::CreateTxMessage() {
+	return new TxMessage;
+}
+
+CoinMessage *CoinEng::CreateBlockMessage() {
+	return new BlockMessage;
+}
+
+CoinMessage *CoinEng::CreateHeadersMessage() {
+	return new HeadersMessage;
+}
+
+CoinMessage *CoinEng::CreateGetAddrMessage() {
+	return new GetAddrMessage;
+}
+
+CoinMessage *CoinEng::CreateCheckOrderMessage() {
+	return new CheckOrderMessage;
+}
+
+CoinMessage *CoinEng::CreateSubmitOrderMessage() {
+	return new SubmitOrderMessage;
+}
+
+CoinMessage *CoinEng::CreateReplyMessage() {
+	return new ReplyMessage;
+}
+
+CoinMessage *CoinEng::CreatePingMessage() {
+	return new PingMessage;
+}
+
+CoinMessage *CoinEng::CreatePongMessage() {
+	return new PongMessage;
+}
+
+CoinMessage *CoinEng::CreateMemPoolMessage() {
+	return new MemPoolMessage;
+}
+
+CoinMessage *CoinEng::CreateAlertMessage() {
+	return new AlertMessage;
+}
+
+CoinMessage *CoinEng::CreateMerkleBlockMessage() {
+	return new MerkleBlockMessage;
+}
+
+CoinMessage *CoinEng::CreateFilterLoadMessage() {
+	return new FilterLoadMessage;
+}
+
+CoinMessage *CoinEng::CreateFilterAddMessage() {
+	return new FilterAddMessage;
+}
+
+CoinMessage *CoinEng::CreateFilterClearMessage() {
+	return new FilterClearMessage;
+}
+
+CoinMessage *CoinEng::CreateRejectMessage() {
+	return new RejectMessage;
+}
+
+CoinMessage *CoinEng::CreateCheckPointMessage() {
+	return new CoinMessage("checkpoint");
+}
+
 ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader& rd) {
-	uint32_t checksum = 0;
+	CoinEng& eng = Eng();
+
 	ptr<CoinMessage> r;
 	Blob payload(nullptr);
 	{
-		CoinEng& eng = Eng();
-
 		DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
 
 		char cmd[12];
 		rd.Read(cmd, sizeof cmd);
+		uint32_t len = rd.ReadUInt32(),
+			checksum = rd.ReadUInt32();
 
-		uint32_t len = rd.ReadUInt32();
-		checksum = rd.ReadUInt32();
-		if (0 != cmd[sizeof(cmd)-1] || len > MAX_PAYLOAD)
+		if (0 != cmd[sizeof(cmd)-1] || len > MAX_PROTOCOL_MESSAGE_LENGTH)
 			Throw(ExtErr::Protocol_Violation);
 
 		MFN_CreateMessage mfn;
@@ -98,14 +197,12 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(P2P::Link& link, const BinaryReader
 			TRC(2, "Unknown command: " << cmd);
 //!!!R			r = new CoinMessage(cmd);
 		}
-		payload.Size = len;
-		rd.Read(payload.data(), payload.Size);
+		payload = rd.ReadBytes(len);
+		HashValue h = eng.HashMessage(payload);
+		if (letoh(*(uint32_t*)h.data()) != checksum)
+			Throw(ExtErr::Protocol_Violation);
 	}
 	CMemReadStream ms(payload);
-	HashValue h = Eng().HashMessage(payload);
-	if (letoh(*(uint32_t*)h.data()) != checksum)
-		Throw(ExtErr::Protocol_Violation);
-	ms.Position = 0;
 	if (r) {
 		r->Link = &link;
 		try {
@@ -126,7 +223,7 @@ void CoinMessage::Read(const BinaryReader& rd) {
 }
 
 void CoinMessage::Print(ostream& os) const {
-	os << Cmd << " ";
+	os << Cmd << "\t";
 }
 
 VersionMessage::VersionMessage()
@@ -232,37 +329,32 @@ void AddrMessage::Process(P2P::Link& link) {
 	}
 }
 
-int LocatorHashes::FindHeightInMainChain() const {
+int LocatorHashes::FindHeightInMainChain(bool bFullBlocks) const {
 	CoinEng& eng = Eng();
 	
 	EXT_FOR (const HashValue& hash, _self) {
-		if (Block block = eng.LookupBlock(hash))
-			if (block.IsInMainChain())
-				return block.Height;
+		if (BlockHeader header = eng.Db->FindHeader(hash)) {
+			if (bFullBlocks && header.Height <= eng.Db->GetMaxHeight() || !bFullBlocks)
+				return header.Height;
+		}
 	}
 	return 0;
 }
 
-int LocatorHashes::get_DistanceBack() const {
-	CoinEng& eng = Eng();
+void BlockObj::WriteHeaderInMessage(BinaryWriter& wr) const {
+	WriteHeader(wr);
+	CoinSerialized::WriteVarInt(wr, 0);
+}
 
-	int r = 0,
-		step = 1;
-	EXT_FOR (const HashValue& hash, _self) {
-		if (Block block = eng.LookupBlock(hash))
-			if (block.IsInMainChain())
-				break;
-		if ((r += step) > 10)
-			step *= 2;
-	}
-	return r;
+void BlockObj::ReadHeaderInMessage(const BinaryReader& rd) {
+	ReadHeader(rd, false, 0);
+	CoinSerialized::ReadVarInt(rd);		// tx count unused
 }
 
 void HeadersMessage::Write(BinaryWriter& wr) const {
 	CoinSerialized::WriteVarInt(wr, Headers.size());
 	EXT_FOR (const BlockHeader& header, Headers) {
-		header.WriteHeader(wr);
-		CoinSerialized::WriteVarInt(wr, 0);
+		header.m_pimpl->WriteHeaderInMessage(wr);
 	}
 }
 
@@ -271,8 +363,7 @@ void HeadersMessage::Read(const BinaryReader& rd) {
 
 	Headers.resize((size_t)CoinSerialized::ReadVarInt(rd));
 	for (int i=0; i<Headers.size(); ++i) {
-		(Headers[i] = BlockHeader(eng.CreateBlockObj())).ReadHeader(rd);
-		CoinSerialized::ReadVarInt(rd);		// tx count unused
+		(Headers[i] = BlockHeader(eng.CreateBlockObj())).m_pimpl->ReadHeaderInMessage(rd);
 	}
 }
 
@@ -318,9 +409,9 @@ void GetHeadersGetBlocksMessage::Set(const HashValue& hashLast, const HashValue&
 	if (!hashLast)
 		HashStop = eng.ChainParams.Genesis;
 	else {
-		BlockTreeItem bti = eng.Tree.GetItem(hashLast);
+		BlockTreeItem bti = eng.Tree.GetHeader(hashLast);
 		int step = 1, h = bti.Height;
-		for (HashValue hash=hashLast; hash; hash=eng.Tree.GetAncestor(hash, h)) {	//!!!? bool
+		for (HashValue hash=hashLast; hash; hash=Hash(eng.Tree.GetAncestor(hash, h))) {	//!!!? bool
 			Locators.push_back(hash);
 			if ((h -= step) <= 0)
 				break;
@@ -344,9 +435,9 @@ void GetHeadersMessage::Process(P2P::Link& link) {
 	ptr<HeadersMessage> m = new HeadersMessage;
 	if (!Locators.empty())
 		m->Headers = eng.Db->GetBlockHeaders(Locators, HashStop);
-	else if (Block block = eng.LookupBlock(HashStop)) {
-		if (block.IsInMainChain())
-			m->Headers.push_back(block);
+	else if (BlockHeader header = eng.Tree.FindHeader(HashStop)) {
+		if (header.IsInMainChain())
+			m->Headers.push_back(header);
 	}
 	if (!m->Headers.empty())
 		link.Send(m);
@@ -374,8 +465,8 @@ void GetBlocksMessage::Process(P2P::Link& link) {
 	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser)
 		return;
 
-	int idx = Locators.FindHeightInMainChain();
-	int limit = 500 + Locators.DistanceBack;
+	int idx = Locators.FindHeightInMainChain(true);
+	int limit = 500; //!!!R +Locators.DistanceBack;
 	for (int i=idx+1; i<limit+idx; ++i) {
 		if (i > eng.BestBlockHeight())
 			break;
@@ -684,8 +775,8 @@ void BlockMessage::Read(const BinaryReader& rd) {
 void BlockMessage::Print(ostream& os) const {
 	base::Print(os);
 	if (Block.Height >= 0)
-		os << Block.Height;
-	os << " " << Hash(Block);
+		os << Block.Height << "\t";
+	os << Hash(Block);
 }
 
 bool CoinEng::CheckSelfVerNonce(uint64_t nonce) {
