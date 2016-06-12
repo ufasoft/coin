@@ -37,6 +37,7 @@ Build for Windows by VS 2012 instructions
 1. Download 3rd-party Libraries:
 
 	OpenSSL			http://www.openssl.org/source/openssl-1.0.1e.tar.gz
+	MPIR			http://www.mpir.org/mpir-2.6.0.tar.bz2
 	SQLite			http://sqlite.org/sqlite-amalgamation-3071502.zip
 	Jansson			http://www.digip.org/jansson/releases/jansson-2.4.tar.bz2
 
@@ -60,5 +61,5 @@ To run the entire application all .exe/.dll files of used libs should be in the 
 
 ========================
 This software is free.
-Bitcoin address for donations: 16kfodhAckE8FZQpNcDwzG3tDGxypGTdwm
+Bitcoin address for donations: 18X598V8rVdjy3Yg1cjZmnnv4SpPthuBeT
 Donating will help to improve this project.
