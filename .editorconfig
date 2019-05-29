@@ -1,0 +1,24 @@
+root = true
+
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+end_of_line = lf
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+[*.asm]
+indent_style = tab
+indent_size = 8
+tab_width = 8
+
+[*.cpp]
+cxx_new_line_before_catch = true
+
+[*.cs]
+csharp_new_line_before_else = false
+csharp_new_line_before_open_brace = true
+
+
+

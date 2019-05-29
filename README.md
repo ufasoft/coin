@@ -31,8 +31,8 @@ coin-miner {-options}
 
 
 
-
-Build for Windows by VS 2012 instructions
+Windows build
+Instruction for Visual Studio 2017..2019
 ===========================================
 1. Download 3rd-party Libraries:
 
@@ -56,7 +56,7 @@ Build for Windows by VS 2012 instructions
 
 To run the entire application all .exe/.dll files of used libs should be in the same directory.
 
-	
+
 
 
 ========================
