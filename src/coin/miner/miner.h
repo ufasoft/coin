@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -7,7 +7,7 @@
 
 #include EXT_HEADER_CONDITION_VARIABLE
 
-#include <el/libext/ext-http.h>
+#include <el/inet/http.h>
 #include <el/inet/async-text-client.h>
 #include <el/inet/json-rpc.h>
 using namespace Ext::Inet;
@@ -64,11 +64,11 @@ public:
 	Coin::HashAlgo HashAlgo;
 
 	BitcoinWorkData()
-		:	FirstNonce(0)
-		,	LastNonce(uint32_t(-1))
-		,	RollNTime(0)
-		,	HashAlgo(Coin::HashAlgo::Sha256)
-		,	Height(uint32_t(-1))
+		: FirstNonce(0)
+		, LastNonce(uint32_t(-1))
+		, Height(uint32_t(-1))
+		, RollNTime(0)
+		, HashAlgo(Coin::HashAlgo::Sha256)
 	{}
 
 	bool IsFull() const {
@@ -171,12 +171,12 @@ public:
 	ptr<ComputationDevice> Device;
 
 	WorkerThreadBase(BitcoinMiner& miner, thread_group *tr)
-		:	base(tr)
-		,	Miner(miner)
-		,	CurrentWebClient(0)
-		,	m_nHashes(0)
-		,	m_prevTsc(0)
-		,	DevicePortion(128)
+		: base(tr)
+		, Miner(miner)
+		, m_prevTsc(0)
+		, DevicePortion(128)
+		, CurrentWebClient(0)
+		, m_nHashes(0)
 	{
 	}
 
@@ -186,7 +186,7 @@ public:
 	void CompleteRound(uint64_t nHashes);
 
 	void StartRound() {
-		m_dtStartRound = DateTime::UtcNow();
+		m_dtStartRound = Clock::now();
 	}
 protected:
 	WebClient *CurrentWebClient;
@@ -354,7 +354,7 @@ public:
 
 	int GpuIdleMilliseconds;
 	CBool m_bTryGpu, m_bTryFpga, m_bLongPolling;
-	
+
 	HashValue HashBest;
 
 	mutex MtxDevices;
@@ -366,7 +366,7 @@ public:
 
 	int m_msWait;
 	int NPAR;
-	
+
 	atomic<int32_t> aHashCount;
 	volatile float ChainsExpectedCount;
 	atomic<int> aSubmittedCount, aAcceptedCount;
@@ -380,7 +380,7 @@ public:
 
 	ptr<IWalletClient> WalletClient;
 	String DestinationAddress;
-	
+
 	mutex m_csCurrentData;
 	ptr<Coin::MinerBlock> MinerBlock;
 
@@ -401,7 +401,7 @@ public:
 	vector<ptr<Thread> > Threads;
 	ptr<Thread> GetWorkThread;
 	ptr<Thread> GpuThread;
-	int m_minGetworkQueue; 
+	int m_minGetworkQueue;
 	Temperature MaxGpuTemperature, MaxFpgaTemperature;
 
 //!!!R	typedef LruMap<HashValue, Coin::MinerBlock> CLastBlockCache;
@@ -414,7 +414,7 @@ public:
 
 	BitcoinMiner();
 	virtual ~BitcoinMiner() {}
-		
+
 
 	void Release() override { delete this; }
 
@@ -429,14 +429,14 @@ public:
 	//!!!	void SetNewData(const BitcoinWorkData& wd);
 	void SetNewData(const BitcoinWorkData& wd, bool bClearOld = false);
 	void SetWebInfo(const WebHeaderCollection& headers);
-	void CheckLongPolling(WebClient& wc, RCString longPollUri = nullptr, RCString longPollId = nullptr);
-	void CallNotifyRequest(WorkerThreadBase& wt, RCString url, RCString longPollId);	
-	
+	void CheckLongPolling(const WebHeaderCollection& respHeaders, RCString longPollUri = nullptr, RCString longPollId = nullptr);
+	void CallNotifyRequest(WorkerThreadBase& wt, RCString url, RCString longPollId);
+
 	String GetMethodName(bool bSubmit);
 	ptr<BitcoinWorkData> GetWorkFromMinerBlock(const DateTime& now, Coin::MinerBlock *minerBlock);
 	virtual ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient);
 	virtual void SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd);
-	
+
 	void SetIntensity(int v) override {
 		Intensity = v;
 	}
@@ -450,7 +450,7 @@ public:
 
 	bool UseSse2() {
 #if UCFG_CPU_X86_X64
-		return CpuInfo().HasSse2;
+		return CpuInfo().Features.SSE2;
 #endif
 		return false;
 	}
@@ -532,7 +532,7 @@ public:
 	}
 };
 
-ptr<GpuMiner> CreateOpenclMiner(BitcoinMiner& miner, cl::Device& dev, const ConstBuf& binary);
+ptr<GpuMiner> CreateOpenclMiner(BitcoinMiner& miner, cl::Device& dev, RCSpan binary);
 
 #if UCFG_BITCOIN_USE_CAL
 bool StartCal();
@@ -545,7 +545,7 @@ struct CalEngineWrap {
 	static mutex s_cs;
 	static atomic<int> aRefCount;
 	static CalEngineWrap *I;
-	
+
 	static CalEngineWrap *Get() {
 		EXT_LOCK (s_cs) {
 			if (!I)
@@ -586,7 +586,7 @@ public:
 	static MINER_CLASS Hasher *GetRoot();
 	static Hasher& Find(HashAlgo algo);
 
-	virtual HashValue CalcHash(const ConstBuf& cbuf) { Throw(E_NOTIMPL); }
+	virtual HashValue CalcHash(RCSpan cbuf) { Throw(E_NOTIMPL); }
 	virtual HashValue CalcWorkDataHash(const BitcoinWorkData& wd);
 	virtual uint32_t MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd);
 protected:

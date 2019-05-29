@@ -82,7 +82,7 @@ private:
 	void TouchPage(Page& pageData, PagedPath& path);
 	uint32_t RemoveRange(int level, Page& page, uint32_t first, uint32_t last);
 	Page FindPath(uint64_t offset, PathVisitor& visitor) const;
-	byte *FindPathFlat(uint64_t offset, PathVisitor& visitor) const;
+	uint8_t *FindPathFlat(uint64_t offset, PathVisitor& visitor) const;
 	Page GetPageToModify(uint64_t offset, bool bOptional);
 
 //	friend class HashTable;

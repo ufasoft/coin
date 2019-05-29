@@ -14,7 +14,7 @@
 
 namespace Coin {
 
-const byte XPT_OPC_C_AUTH_REQ 	= 1,
+const uint8_t XPT_OPC_C_AUTH_REQ 	= 1,
 	XPT_OPC_S_AUTH_ACK			= 2,
 	XPT_OPC_S_WORKDATA1			= 3,
 	XPT_OPC_C_SUBMIT_SHARE		= 4,
@@ -51,8 +51,8 @@ public:
 
 class XptMessage : public P2P::Message {
 public:
-	byte Opcode;
-    
+	uint8_t Opcode;
+
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
 
@@ -61,7 +61,7 @@ public:
 	static String ReadString8(const BinaryReader& rd);
 	static String ReadString16(const BinaryReader& rd);
 	static Blob ReadBlob16(const BinaryReader& rd);
-	static void WriteBlob16(BinaryWriter& wr, const ConstBuf& cbuf);
+	static void WriteBlob16(BinaryWriter& wr, RCSpan cbuf);
 
 	static void WriteBigInteger(BinaryWriter& wr, const BigInteger& bi);
 	static BigInteger ReadBigInteger(const BinaryReader& rd);
@@ -73,7 +73,7 @@ public:
 	uint32_t ProtocolVersion;
 	String Username, Password, ClientVersion;
 	uint32_t PayloadNum;
-	
+
 	vector<pair<uint16_t, HashValue160>> DevFees;
 
 	AuthXptMessage()
@@ -85,7 +85,7 @@ public:
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
-	void Process(P2P::Link& link)  override;
+	void ProcessMsg(P2P::Link& link)  override;
 };
 
 class AuthAckXptMessage : public XptMessage {
@@ -117,9 +117,9 @@ public:
 		uint32_t FixedPrimorialMultiplier, FixedHashFactor;
 		uint32_t SieveSizeMin, SieveSizeMax;
 		uint32_t PrimesToSieveMin, PrimesToSieveMax;
-		uint32_t NonceMin, NonceMax;		
-		byte BundleFlags;
-		byte SieveChainLength;
+		uint32_t NonceMin, NonceMax;
+		uint8_t BundleFlags;
+		uint8_t SieveChainLength;
 
 		ShareBundle()
 			:	BundleFlags(2)						// Interruptible
@@ -153,7 +153,7 @@ public:
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
-	void Process(P2P::Link& link) override;
+	void ProcessMsg(P2P::Link& link) override;
 };
 
 class XptWorkData : public BitcoinWorkData {
@@ -177,7 +177,7 @@ public:
 };
 
 ptr<XptMessage> CreateSubmitShareXptMessage();
-	
+
 class ShareAckXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
@@ -192,15 +192,15 @@ public:
 	}
 
 	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;	
-	void Process(P2P::Link& link) override;
-};   
+	void Read(const BinaryReader& rd) override;
+	void ProcessMsg(P2P::Link& link) override;
+};
 
 struct NonceRange {
 	uint32_t ChainLength;
 	uint32_t Multiplier;
 	uint32_t Nonce, NonceEnd;
-	byte Depth;
+	uint8_t Depth;
 	PrimeChainType ChainType;
 
 	NonceRange() {
@@ -232,13 +232,13 @@ public:
 	}
 
 	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;	
+	void Read(const BinaryReader& rd) override;
 };
 
 class MessageXptMessage : public XptMessage {
 	typedef XptMessage base;
 public:
-	byte Type;
+	uint8_t Type;
 	String Message;
 
 	MessageXptMessage()
@@ -248,8 +248,8 @@ public:
 	}
 
 	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;	
-	void Process(P2P::Link& link) override;
+	void Read(const BinaryReader& rd) override;
+	void ProcessMsg(P2P::Link& link) override;
 };
 
 class PingXptMessage : public XptMessage {
@@ -266,8 +266,8 @@ public:
 	}
 
 	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;	
-	void Process(P2P::Link& link) override;
+	void Read(const BinaryReader& rd) override;
+	void ProcessMsg(P2P::Link& link) override;
 };
 
 class XptPeer : public P2P::Link {
@@ -283,7 +283,7 @@ public:
 protected:
 	mutex MtxSend;
 
-	virtual void SendBuf(const ConstBuf& cbuf);
+	virtual void SendBuf(RCSpan cbuf);
 };
 
 class XptClient : public SocketThreadWrap<XptPeer>, public ConnectionClient {
@@ -301,7 +301,7 @@ public:
 	//----------------------------------------------------------------
 
 	array<atomic<int>, 20> aLenStats;
-	CBool ConnectionEstablished;	
+	CBool ConnectionEstablished;
 
 	XptClient(Coin::BitcoinMiner& miner);
 	ptr<XptMessage> Recv();

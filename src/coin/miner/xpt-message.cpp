@@ -33,7 +33,7 @@ HashAlgo XptAlgoToHashAlgo(XptAlgo algo) {
 	case XptAlgo::Metis: return HashAlgo::Metis;
 	case XptAlgo::Sha3: return HashAlgo::Sha3;
 	default:
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	}
 }
 
@@ -46,7 +46,7 @@ XptAlgo HashAlgoToXptAlgo(HashAlgo algo) {
 	case HashAlgo::Metis: return XptAlgo::Metis;
 	case HashAlgo::Sha3: return XptAlgo::Sha3;
 	default:
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	}
 }
 
@@ -58,7 +58,7 @@ void XptMessage::Read(const BinaryReader& rd) {
 
 void XptMessage::WriteString8(BinaryWriter& wr, RCString s) {
 	Blob blob = Encoding::UTF8.GetBytes(s);
-	byte len = (byte)blob.Size;
+	uint8_t len = (uint8_t)blob.Size;
 	(wr << len).BaseStream.WriteBuffer(blob.constData(), len);
 }
 
@@ -69,7 +69,7 @@ void XptMessage::WriteString16(BinaryWriter& wr, RCString s) {
 }
 
 String XptMessage::ReadString8(const BinaryReader& rd) {
-	byte len = rd.ReadByte();
+	uint8_t len = rd.ReadByte();
 	return Encoding::UTF8.GetChars(rd.ReadBytes(len));
 }
 
@@ -82,7 +82,7 @@ Blob XptMessage::ReadBlob16(const BinaryReader& rd) {
 	return rd.ReadBytes(rd.ReadUInt16());
 }
 
-void XptMessage::WriteBlob16(BinaryWriter& wr, const ConstBuf& cbuf) {
+void XptMessage::WriteBlob16(BinaryWriter& wr, RCSpan cbuf) {
 	uint16_t len = (uint16_t)cbuf.Size;
 	(wr << len).BaseStream.WriteBuffer(cbuf.P, len);
 }
@@ -106,7 +106,7 @@ void AuthXptMessage::Write(BinaryWriter& wr) const {
 	if (ProtocolVersion >= 4)
 		WriteString8(wr, ClientVersion);
 	if (ProtocolVersion >= 6) {
-		wr << byte(DevFees.size());
+		wr << uint8_t(DevFees.size());
 		for (const auto& pp : DevFees) {
 			wr << pp.first;
 			wr.BaseStream.WriteBuffer(pp.second.data(), 20);
@@ -135,7 +135,7 @@ void AuthAckXptMessage::Write(BinaryWriter& wr) const {
 	wr << ErrorCode;
 	WriteString16(wr, Reason);
 	if (Xpt().ProtocolVersion >= 5)
-		wr << (byte)HashAlgoToXptAlgo(Algo);
+		wr << (uint8_t)HashAlgoToXptAlgo(Algo);
 }
 
 void AuthAckXptMessage::Read(const BinaryReader& rd) {
@@ -323,10 +323,10 @@ void ShareAckXptMessage::Read(const BinaryReader& rd) {
 }
 
 void NonceRange::Write(BinaryWriter& wr) const {
-	wr << ChainLength << Multiplier << Nonce << Depth << byte(ChainType);
+	wr << ChainLength << Multiplier << Nonce << Depth << uint8_t(ChainType);
 }
 
-void NonceRange::Read(const BinaryReader& rd) {	
+void NonceRange::Read(const BinaryReader& rd) {
 	rd >> ChainLength >> Multiplier >> Nonce >> Depth;
 	ChainType = (PrimeChainType)rd.ReadByte();
 }
@@ -343,7 +343,7 @@ void Pow::Read(const BinaryReader& rd) {
 	DtStart = DateTime::from_time_t(rd.ReadUInt32());
 	rd >> SieveSize >> PrimesToSieve >> Ranges.back().NonceEnd;
 	for (size_t i=0; i<Ranges.size(); ++i)
-		Ranges[i].Read(rd);	
+		Ranges[i].Read(rd);
 }
 
 void SubmitPowXptMessage::Write(BinaryWriter& wr) const {
@@ -390,9 +390,9 @@ XptPeer::XptPeer(thread_group *tr)
 }
 
 
-void XptPeer::SendBuf(const ConstBuf& cbuf) {
+void XptPeer::SendBuf(RCSpan cbuf) {
 	EXT_LOCK (MtxSend) {
-		W.BaseStream.WriteBuf(cbuf);
+		W.BaseStream.WriteSpan(cbuf);
 	}
 }
 

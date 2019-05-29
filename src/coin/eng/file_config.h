@@ -5,7 +5,9 @@
 #define UCFG_TRC 1
 #define UCFG_USE_LIBXML 0
 
-#define UCFG_USE_TOR 0
+#ifndef UCFG_USE_TOR
+#	define UCFG_USE_TOR 0 // UCFG_WIN32_FULL
+#endif
 
 #define UCFG_EXPORT_COIN
 
@@ -17,4 +19,7 @@
 #define VER_INTERNALNAME_STR "Coin"
 #define VER_ORIGINALFILENAME_STR "coineng.dll"
 
+#ifdef _DEBUG//!!!T
+//#	define UCFG_COIN_USE_FUTURES 0
+#endif
 

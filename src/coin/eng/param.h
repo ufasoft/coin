@@ -1,30 +1,21 @@
-/*######   Copyright (c) 2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2015-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
 
 #pragma once
 
+#include "consensus.h"
+
 namespace Coin {
 
-const uint32_t PROTOCOL_VERSION = 70002,
-	MIN_PEER_PROTO_VERSION = 31800;				//  getheaders message
 
 const uint64_t SEND_FEE_THOUSANDTH = 4;		// 0.4%
 
-const int MAX_BLOCK_SIZE = 1000000;
-const int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
-const int MAX_STANDARD_TX_SIZE = 100000;
-const int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
-const uint32_t MAX_PROTOCOL_MESSAGE_LENGTH = 2*1024*1024;
-const int MAX_FUTURE_SECONDS = 7200;
-const size_t MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
-const size_t MAX_SCRIPT_ELEMENT_SIZE = 520;
 
 const size_t MAX_BLOOM_FILTER_SIZE = 36000; // bytes
 const int MAX_HASH_FUNCS = 50;
 
-static const int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
 
 const int MAX_SEND_SIZE = 1000000;
 
@@ -40,8 +31,8 @@ static const int KEYPOOL_SIZE = 100;
 
 const int INITIAL_BLOCK_THRESHOLD = 120;
 
+const int SECONDS_RESEND_PERIODICITY = 15 * 60;
 
-const size_t MAX_INV_SZ = 50000;
 
 } // Coin::
 
@@ -76,4 +67,13 @@ const size_t MAX_INV_SZ = 50000;
 #	define UCFG_COIN_COMPACT_AUX 0					// incompatible space optimization
 #endif
 
+#ifndef UCFG_COIN_USE_IRC
+#	define UCFG_COIN_USE_IRC 0
+#endif
+
+#define UCFG_COIN_TXES_IN_BLOCKTABLE 1
+
+#ifndef UCFG_COIN_CONF_FILENAME
+#	define UCFG_COIN_CONF_FILENAME "coin.conf"
+#endif
 

@@ -11,7 +11,7 @@
 
 namespace Coin {
 
-void MinerShare::WriteHeader(BinaryWriter& wr) const {
+void MinerShare::WriteHeader(ProtocolWriter& wr) const {
 	base::WriteHeader(wr);
 	switch (Algo) {
 	case HashAlgo::Momentum:
@@ -27,20 +27,20 @@ HashValue MinerShare::GetHash() const {
 	case HashAlgo::Sha3:
 	{
 		MemoryStream ms;
-		base::WriteHeader(BinaryWriter(ms).Ref());
-		return HashValue(SHA3<256>().ComputeHash(ConstBuf(ms)));
+		base::WriteHeader(ProtocolWriter(ms).Ref());
+		return HashValue(SHA3<256>().ComputeHash(ms));
 	}
 	case HashAlgo::Metis:
 	{
 		MemoryStream ms;
-		base::WriteHeader(BinaryWriter(ms).Ref());
+		base::WriteHeader(ProtocolWriter(ms).Ref());
 		return MetisHash(ms);
 	}
 #if UCFG_COIN_MOMENTUM
 	case HashAlgo::Momentum:
 	{
 		MemoryStream ms;
-		base::WriteHeader(BinaryWriter(ms).Ref());
+		base::WriteHeader(ProtocolWriter(ms).Ref());
 		if (!MomentumVerify(Coin::Hash(ms), BirthdayA, BirthdayB))
 			return s_hashMax;
 	}
@@ -55,14 +55,14 @@ HashValue MinerShare::GetHashPow() const {
 	case HashAlgo::SCrypt:
 	{
 		MemoryStream ms;
-		WriteHeader(BinaryWriter(ms).Ref());
+		WriteHeader(ProtocolWriter(ms).Ref());
 		return ScryptHash(ms);
 	}
 	break;
 	case HashAlgo::NeoSCrypt:
 	{
 		MemoryStream ms;
-		WriteHeader(BinaryWriter(ms).Ref());
+		WriteHeader(ProtocolWriter(ms).Ref());
 		return NeoSCryptHash(ms, 0);
 	}
 	break;
@@ -72,16 +72,16 @@ HashValue MinerShare::GetHashPow() const {
 }
 
 #if UCFG_COIN_PRIME
-void PrimeMinerShare::WriteHeader(BinaryWriter& wr) const {
+void PrimeMinerShare::WriteHeader(ProtocolWriter& wr) const {
 	base::WriteHeader(wr);
-	CoinSerialized::WriteBlob(wr, PrimeChainMultiplier.ToBytes());
+	CoinSerialized::WriteSpan(wr, PrimeChainMultiplier.ToBytes());
 }
 
 uint32_t PrimeMinerShare::GetDifficulty() const {
 	MemoryStream ms;
-	base::WriteHeader(BinaryWriter(ms).Ref());
+	base::WriteHeader(ProtocolWriter(ms).Ref());
 	HashValue h = Hash(ms);
-	if (h[31] < 0x80)
+	if (h.data()[31] < 0x80)
 		Throw(CoinErr::MINER_REJECTED);
 	BigInteger origin = HashValueToBigInteger(h) * PrimeChainMultiplier;
 	PrimeTester tester;				//!!!TODO move to some long-time scope

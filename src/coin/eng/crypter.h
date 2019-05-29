@@ -59,78 +59,62 @@ public:
 	void Read(const BinaryReader& rd) override;
 };
 
-
-class COIN_CLASS Address : public HashValue160, public CPrintable {
-public:
-	CoinEng& Eng;
-	String Comment;
-	byte Ver;
-
-	Address(CoinEng& eng);
-	explicit Address(CoinEng& eng, const HashValue160& hash, RCString comment = "");
-	explicit Address(CoinEng& eng, const HashValue160& hash, byte ver);
-	explicit Address(CoinEng& eng, RCString s);
-
-	Address& operator=(const Address& a) {
-		if (&Eng != &a.Eng)
-			Throw(E_INVALIDARG);
-		HashValue160::operator=(a);
-		Comment = a.Comment;
-		Ver = a.Ver;
-		return *this;
-	}
-
-	void CheckVer(CoinEng& eng) const;
-	String ToString() const override;
-
-	bool operator<(const Address& a) const {
-		return Ver < a.Ver ||
-			(Ver == a.Ver && memcmp(data(), a.data(), 20) < 0);
-	}
-};
-
-class PrivateKey : public CPrintable {
-public:
-	PrivateKey() {}
-	PrivateKey(const ConstBuf& cbuf, bool bCompressed);
-	explicit PrivateKey(RCString s);
-	pair<Blob, bool> GetPrivdataCompressed() const;
-	String ToString() const override;
-private:
-	Blob m_blob;
-};
-
-class MyKeyInfo {
-	typedef MyKeyInfo class_type;
+class KeyInfoObj : public KeyInfoBase {
+	typedef KeyInfoBase base;
 public:
 	int64_t KeyRowid;
-	Blob PubKey;
 
-	CngKey Key;
-	DateTime Timestamp;
-	String Comment;
-
-	~MyKeyInfo();
-	Address ToAddress() const;
-	Blob PlainPrivKey() const;
-	Blob EncryptedPrivKey(BuggyAes& aes) const;
-
-	Blob get_PrivKey() const { return m_privKey; }
-	//	void put_PrivKey(const Blob& v);
-	DEFPROP_GET(Blob, PrivKey);
-
-	HashValue160 get_Hash160() const {
-		return Coin::Hash160(PubKey);
+	KeyInfoObj()
+		: KeyRowid(-1) {
 	}
-	DEFPROP_GET(HashValue160, Hash160);
 
-	void SetPrivData(const ConstBuf& cbuf, bool bCompressed);
-	void SetPrivData(const PrivateKey& privKey);
-
-	bool IsCompressed() const { return PubKey.Size == 33; }
-private:
-	Blob m_privKey;
+	KeyInfoObj(const base& ki)
+		: base(ki)
+		, KeyRowid(-1)
+	{}
 };
+
+class KeyInfo : public Pimpl<KeyInfoObj> {
+	typedef KeyInfo class_type;
+	typedef Pimpl<KeyInfoObj> base;
+public:
+	KeyInfo() {
+		m_pimpl = new KeyInfoObj;
+	}
+
+	KeyInfo(nullptr_t) {
+	}
+
+	int64_t get_KeyRowId() const { return m_pimpl->KeyRowid; }
+	void put_KeyRowId(int64_t v) { m_pimpl->KeyRowid = v; }
+	DEFPROP(int64_t, KeyRowId);
+
+	DateTime get_Timestamp() const { return m_pimpl->Timestamp; }
+	void put_Timestamp(DateTime v) { m_pimpl->Timestamp = v; }
+	DEFPROP(DateTime, Timestamp);
+
+	CanonicalPubKey get_PubKey() const { return m_pimpl->PubKey; }
+	void put_PubKey(const CanonicalPubKey& v) { m_pimpl->PubKey = v; }
+	DEFPROP(CanonicalPubKey, PubKey);
+
+	Blob get_PrivKey() const { return m_pimpl->PrivKey; }
+	DEFPROP_GET(Blob, PrivKey);
+		
+	Blob get_PlainPrivKey() const { return m_pimpl->PlainPrivKey(); }
+	DEFPROP_GET(Blob, PlainPrivKey);
+
+	String get_Comment() const { return m_pimpl->Comment; }
+	void put_Comment(RCString v) { m_pimpl->Comment = v; }
+	DEFPROP(String, Comment);
+
+	AddressType get_AddressType() const { return m_pimpl->AddressType; }
+	void put_AddressType(AddressType v) { m_pimpl->AddressType = v; }
+	DEFPROP(AddressType, AddressType);
+
+	Address ToAddress() const { return m_pimpl->ToAddress(); }
+};
+
+Blob EncryptedPrivKey(BuggyAes& aes, const KeyInfo& key);
 
 class CCrypter {
 private:
@@ -141,12 +125,12 @@ private:
 public:
     bool SetKeyFromPassphrase(const std::string &strKeyData, const std::vector<unsigned char>& chSalt, const unsigned int nRounds, const unsigned int nDerivationMethod);
     bool Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned char> &vchCiphertext);
-    bool Decrypt(const ConstBuf& vchCiphertext, CKeyingMaterial& vchPlaintext);
+    bool Decrypt(RCSpan vchCiphertext, CKeyingMaterial& vchPlaintext);
     bool SetKey(const CKeyingMaterial& chNewKey, const std::vector<unsigned char>& chNewIV);
 
     void CleanKey() {
         memset(&chKey, 0, sizeof chKey);
-        memset(&chIV, 0, sizeof chIV);        
+        memset(&chIV, 0, sizeof chIV);
         fKeySet = false;
     }
 
@@ -158,12 +142,13 @@ public:
         CleanKey();
     }
 
-	static MyKeyInfo GenRandomKey();
-	static Blob PublicKeyBlobToCompressedBlob(const ConstBuf& cbuf);
 };
 
 bool EncryptSecret(CKeyingMaterial& vMasterKey, const Blob& vchPlaintext, const HashValue& nIV, std::vector<unsigned char> &vchCiphertext);
-bool DecryptSecret(const CKeyingMaterial& vMasterKey, const ConstBuf& vchCiphertext, const HashValue& nIV, Blob &vchPlaintext);
+bool DecryptSecret(const CKeyingMaterial& vMasterKey, RCSpan vchCiphertext, const HashValue& nIV, Blob &vchPlaintext);
+
+
+
 
 
 } // Coin::

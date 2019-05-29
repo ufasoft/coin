@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -11,108 +11,73 @@
 using namespace Crypto;
 
 #include "util.h"
+#include "opcode.h"
+
+#pragma warning(disable: 4146 4244)	// for MPIR
 
 #if UCFG_COIN_ECC=='S'
 #	include <crypto/cryp/secp256k1.h>
+#else
+#	include <el/crypto/ext-openssl.h>
 #endif
 
 
 namespace Coin {
 
-
-Address::Address(HasherEng& hasher)
-	: Hasher(hasher)
-{
-	Ver = hasher.AddressVersion;
-	memset(data(), 0, size());
-}
-
-Address::Address(HasherEng& hasher, const HashValue160& hash, RCString comment)
-	: Hasher(hasher)
-	, Comment(comment)
-{
-	Ver = hasher.AddressVersion;
-	HashValue160::operator=(hash);
-}
-
-Address::Address(HasherEng& hasher, const HashValue160& hash, byte ver)
-	: Hasher(hasher)
-	, Ver(ver)
-{
-	HashValue160::operator=(hash);
-}
-
-Address::Address(HasherEng& hasher, RCString s)
-	: Hasher(hasher)
-{
-	try {
-		Blob blob = ConvertFromBase58(s.Trim());
-		if (blob.Size < 21)
-			Throw(CoinErr::InvalidAddress);
-		Ver = blob.constData()[0];
-		memcpy(data(), blob.constData()+1, 20);
-	} catch (RCExc) {
-		Throw(CoinErr::InvalidAddress);
-	}
-	CheckVer(hasher);
-}
-
-void Address::CheckVer(HasherEng& hasher) const {
-	if (&Hasher != &hasher || Ver != hasher.AddressVersion && Ver != hasher.ScriptAddressVersion)
-		Throw(CoinErr::InvalidAddress);
-}
-
-String Address::ToString() const {
-	CHasherEngThreadKeeper hasherKeeper(&Hasher);
-
-	vector<byte> v(21);
-	v[0] = Ver;
-	memcpy(&v[1], data(), 20);
-	return ConvertToBase58(ConstBuf(&v[0], v.size()));
+vararray<uint8_t, 25> KeyInfoBase::ToPubScript() const {
+	HashValue160 hash160 = PubKey.Hash160;
+	uint8_t script[25] = { (uint8_t)Opcode::OP_DUP, (uint8_t)Opcode::OP_HASH160, 20,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		(uint8_t)Opcode::OP_EQUALVERIFY, (uint8_t)Opcode::OP_CHECKSIG
+	};
+	memcpy(script + 3, hash160.data(), 20);
+	return vararray<uint8_t, 25>(script, sizeof(script));
 }
 
 Address KeyInfoBase::ToAddress() const {
-	return Address(*HasherEng::GetCurrent(), PubKey.Hash160, Comment);
+	HashValue160 hash160 = PubKey.Hash160;
+	if (AddressType == AddressType::P2SH) {
+		hash160 = Hash160(ToPubScript());
+	}
+	return Address(*HasherEng::GetCurrent(), AddressType, hash160, 0, Comment);
 }
 
 Blob KeyInfoBase::PlainPrivKey() const {
-	byte typ = 0;
+	uint8_t typ = 0;
 	return Blob(&typ, 1) + get_PrivKey();
 }
 
-void KeyInfoBase::SetPrivData(const ConstBuf& cbuf, bool bCompressed) {
-	ASSERT(cbuf.Size <= 32);
-	m_privKey = cbuf.Size==32 ? cbuf : ConstBuf(Blob(0, 32-cbuf.Size)+cbuf);
+void KeyInfoBase::SetPrivData(RCSpan cbuf, bool bCompressed) {
+	ASSERT(cbuf.size() <= 32);
+	m_privKey = cbuf.size() == 32 ? cbuf : Span(Blob(0, 32 - cbuf.size()) + cbuf);
 
 #if UCFG_COIN_ECC=='S'
-	Blob pubKey = Sec256Dsa::PrivKeyToPubKey(m_privKey, bCompressed);
+	Blob pubKey = Span(Sec256Dsa::PrivKeyToPubKey(m_privKey, bCompressed));
 #else
 	Key = CngKey::Import(m_privKey, CngKeyBlobFormat::OSslEccPrivateBignum);
 	Blob pubKey = Key.Export(bCompressed ? CngKeyBlobFormat::OSslEccPublicCompressedBlob : CngKeyBlobFormat::OSslEccPublicBlob);
 #endif
-	if (PubKey.Data.Size != 0 && PubKey.Data != pubKey)
+	if (!PubKey.Data.empty() && !Equal(Span(PubKey.Data), pubKey))
 		Throw(E_FAIL);
 	PubKey = CanonicalPubKey(pubKey);
 }
 
-static const byte s_maxModOrder[32] ={ 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFE, 0xBA,0xAE,0xDC,0xE6,0xAF,0x48,0xA0,0x3B, 0xBF,0xD2,0x5E,0x8C,0xD0,0x36,0x41,0x40 };
+static const uint8_t s_maxModOrder[32] ={ 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFE, 0xBA,0xAE,0xDC,0xE6,0xAF,0x48,0xA0,0x3B, 0xBF,0xD2,0x5E,0x8C,0xD0,0x36,0x41,0x40 };
 
-KeyInfoBase KeyInfoBase::GenRandom(bool bCompressed) {
-	KeyInfoBase ki;
-	ki.Comment = nullptr;
+void KeyInfoBase::GenRandom(bool bCompressed) {
+	Comment = nullptr;
 #if UCFG_COIN_ECC=='S'
 	Ext::Crypto::Random rand;
-	byte privKey[32];
+	uint8_t privKey[32];
 	do {
-		rand.NextBytes(Buf(privKey, sizeof privKey));
+		rand.NextBytes(span<uint8_t>(privKey, sizeof privKey));
 	} while (memcmp(privKey, s_maxModOrder, 32) > 0);
-	ki.SetPrivData(ConstBuf(privKey, sizeof privKey), bCompressed);
+	SetPrivData(Span(privKey, sizeof privKey), bCompressed);
 #else
 	ECDsa dsa(256);
-	ki.Key = dsa.Key;
-	ki.SetPrivData(ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum), bCompressed);
+	Key = dsa.Key;
+	SetPrivData(ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum), bCompressed);
 #endif
-	return ki;
 }
 
 Blob KeyInfoBase::ToPrivateKeyDER() const {
@@ -125,23 +90,29 @@ Blob KeyInfoBase::ToPrivateKeyDER() const {
 #endif
 }
 
-KeyInfoBase KeyInfoBase::FromDER(const ConstBuf& privKey, const ConstBuf& pubKey) {
+void KeyInfoBase::FromDER(RCSpan privKey, RCSpan pubKey) {
 #if UCFG_COIN_ECC=='S'
 	Blob blob = Sec256Dsa::PrivKeyFromDER(privKey);
 #else
 	Blob blob = CngKey::Import(privKey, CngKeyBlobFormat::OSslEccPrivateBlob).Export(CngKeyBlobFormat::OSslEccPrivateBignum);
 #endif
-	KeyInfoBase ki;
-	ki.SetPrivData(blob, pubKey.Size == 33);
-	if (ConstBuf(ki.PubKey.Data) != pubKey)
+	SetPrivData(blob, pubKey.size() == 33);
+	if (!Equal(PubKey.Data, pubKey))
 		Throw(E_FAIL);
-	return ki;
+}
+
+static Blob CreateAesBip38(Aes& aes, RCString password, RCSpan salt) {
+	Blob derived = Scrypt(Encoding::UTF8.GetBytes(password), salt, 16384, 8, 8, 64);
+	aes.Mode = CipherMode::ECB;
+	aes.Padding = PaddingMode::None;
+	aes.Key = ConstBuf(derived.constData()+32, 32);
+	return derived;
 }
 
 String KeyInfoBase::ToString(RCString password) const {			// non-EC-multiplied case
 	ASSERT(m_privKey.Size == 32);
 
-	byte d[39] ={ 1, 0x42, 0xC0 };
+	uint8_t d[39] ={ 1, 0x42, 0xC0 };
 	size_t size = 39;
 	if (password == nullptr) {
 		d[0] = 0x80;
@@ -152,22 +123,35 @@ String KeyInfoBase::ToString(RCString password) const {			// non-EC-multiplied c
 	} else {
 		if (PubKey.IsCompressed())
 			d[2] |= 0x20;
-				
-		memcpy(d+3, SHA256_SHA256(Encoding::UTF8.GetBytes(ToAddress().ToString())).data(), 4);
 
-		Blob derived = Scrypt(Encoding::UTF8.GetBytes(password), ConstBuf(d+3, 4), 16384, 8, 8, 64);
+		memcpy(d + 3, SHA256_SHA256(Encoding::UTF8.GetBytes(ToAddress().ToString())).data(), 4);
+		Aes aes;
+		Blob derived = CreateAesBip38(aes, password, ConstBuf(d+3, 4));
 		Blob x = m_privKey;
 		VectorXor(x.data(), derived.constData(), 32);
-		Aes aes;
-		aes.Mode = CipherMode::ECB;
-		aes.Padding = PaddingMode::None;
-		aes.Key = ConstBuf(derived.constData()+32, 32);
 		memcpy(d+7, aes.Encrypt(x).constData(), 32);
 	}
 	return ConvertToBase58(ConstBuf(d, size));
 }
 
-Blob KeyInfoBase::SignHash(const ConstBuf& cbuf) {
+void KeyInfoBase::FromBIP38(RCString bip38, RCString password) {
+	if (password.empty())
+		Throw(ExtErr::InvalidPassword);
+
+	Blob blob = ConvertFromBase58(bip38);
+	const uint8_t *d = blob.constData();
+	if (blob.Size != 39 || d[0]!=1 || d[1] != 0x42)
+		Throw(CoinErr::InvalidPrivateKey);
+	Aes aes;
+	Blob derived = CreateAesBip38(aes, password, ConstBuf(d+3, 4));
+	Blob x = aes.Decrypt(ConstBuf(d+7, 32));
+	VectorXor(x.data(), derived.constData(), 32);
+	SetPrivData(x, d[2] & 0x20);
+	if (memcmp(d + 3, SHA256_SHA256(Encoding::UTF8.GetBytes(ToAddress().ToString())).data(), 4))
+		Throw(ExtErr::InvalidPassword);
+}
+
+Blob KeyInfoBase::SignHash(RCSpan cbuf) {
 #if UCFG_COIN_ECC=='S'
 	Sec256Dsa dsa;
 	dsa.m_privKey = m_privKey;
@@ -178,14 +162,14 @@ Blob KeyInfoBase::SignHash(const ConstBuf& cbuf) {
 #endif
 }
 
-bool KeyInfoBase::VerifyHash(const ConstBuf& pubKey, const HashValue& hash, const ConstBuf& sig) {
+bool KeyInfoBase::VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig) {
 #if UCFG_COIN_ECC=='S'
-	Sec256Dsa dsa;
+	Sec256DsaEx dsa;
 	dsa.ParsePubKey(pubKey);
 #else
 	ECDsa dsa(CngKey::Import(pubKey, CngKeyBlobFormat::OSslEccPublicBlob));
 #endif
-	return dsa.VerifyHash(hash.ToConstBuf(), sig);
+	return dsa.VerifyHash(hash.ToSpan(), sig);
 }
 
 
@@ -208,18 +192,18 @@ void KeyInfoBase::SetPrivData(const PrivateKey& privKey) {
 
 void KeyInfoBase::SetKeyFromPubKey() {
 #if UCFG_COIN_ECC!='S'
-	Key = CngKey::Import(PubKey, CngKeyBlobFormat::OSslEccPublicBlob);
+	Key = CngKey::Import(PubKey.Data, CngKeyBlobFormat::OSslEccPublicBlob);
 #endif
 }
 
 pair<Blob, bool> PrivateKey::GetPrivdataCompressed() const {
-	return pair<Blob, bool>(ConstBuf(m_blob.constData(), 32), m_blob.Size == 33);
+	return pair<Blob, bool>(ConstBuf(m_data.data(), 32), m_data.size() == 33);
 }
 
 Blob CanonicalPubKey::ToCompressed() const {
-	ASSERT(Data.Size==33 || Data.Size==65);
-	if (Data.Size == 33)
-		return Data;
+	ASSERT(Data.size() == 33 || Data.size() == 65);
+	if (Data.size() == 33)
+		return Span(Data);
 #if UCFG_COIN_ECC=='S'
 	if (!Sec256Dsa::VerifyPubKey(Data))
 		Throw(ExtErr::Crypto);
@@ -249,16 +233,17 @@ Blob CanonicalPubKey::ToCompressed() const {
 
 static const BigInteger s_ec_p("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16);
 
-CanonicalPubKey CanonicalPubKey::FromCompressed(const ConstBuf& cbuf) {
+CanonicalPubKey CanonicalPubKey::FromCompressed(RCSpan cbuf) {
 	CanonicalPubKey r;
-	if (cbuf.Size != 33 || !(cbuf.P[0] & 0x80))
-		r.Data = cbuf;
+	if (cbuf.size() != 33 || !(cbuf[0] & 0x80))
+		r.Data = CData(cbuf.data(), cbuf.size());
 	else {
 #if UCFG_COIN_ECC=='S'
-		byte buf[33];
-		memcpy(buf, cbuf.P, 33);
+		uint8_t buf[33];
+		memcpy(buf, cbuf.data(), 33);
 		buf[0] &= 0x7F;
-		r.Data = Sec256Dsa::DecompressPubKey(ConstBuf(buf, 33));
+		Blob blob = Sec256Dsa::DecompressPubKey(ConstBuf(buf, 33));
+		r.Data = CData(blob.constData(), blob.size());
 #else
 		BigInteger x = OpensslBn::FromBinary(ConstBuf(cbuf.P+1, 32)).ToBigInteger();
 		BigInteger xr = (x*x*x+7) % s_ec_p;

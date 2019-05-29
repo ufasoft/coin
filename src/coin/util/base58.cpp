@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -16,13 +16,13 @@ namespace Coin {
 
 static const char* s_pszBase58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-String ConvertToBase58ShaSquare(const ConstBuf& cbuf) {
+String ConvertToBase58ShaSquare(RCSpan cbuf) {
 	SHA256 sha;
-	HashValue hash = HashValue(sha.ComputeHash(sha.ComputeHash(cbuf)));
+	HashValue hash = HashValue(sha.ComputeHash(Span(sha.ComputeHash(cbuf))));
 	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
-	vector<byte> tmp(v.Size+1, 0);
+	vector<uint8_t> tmp(v.Size+1, 0);
 	std::reverse_copy(v.begin(), v.end(), tmp.begin());
 	for (BigInteger n(&tmp[0], tmp.size()); Sign(n);) {
 		pair<BigInteger, BigInteger> pp = div(n, 58);
@@ -35,12 +35,12 @@ String ConvertToBase58ShaSquare(const ConstBuf& cbuf) {
 	return String(&r[0], r.size());
 }
 
-String ConvertToBase58(const ConstBuf& cbuf) {
+String ConvertToBase58(RCSpan cbuf) {
 	HashValue hash = HasherEng::GetCurrent()->HashForAddress(cbuf);
 	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
-	vector<byte> tmp(v.Size+1, 0);
+	vector<uint8_t> tmp(v.Size+1, 0);
 	std::reverse_copy(v.begin(), v.end(), tmp.begin());
 	for (BigInteger n(&tmp[0], tmp.size()); Sign(n);) {
 		pair<BigInteger, BigInteger> pp = div(n, 58);
@@ -59,13 +59,13 @@ Blob ConvertFromBase58ShaSquare(RCString s) {
 		if (const char *q = strchr(s_pszBase58, *p)) {
 			bi = bi*58 + BigInteger(q-s_pszBase58);
 		} else
-			Throw(E_INVALIDARG);
+			Throw(errc::invalid_argument);
 	}
-	vector<byte> v((bi.Length+7)/8);
+	vector<uint8_t> v((bi.Length+7)/8);
 	bi.ToBytes(&v[0], v.size());
 	if (v.size()>=2 && v.end()[-1]==0 && v.end()[-1]>=0x80)
 		v.resize(v.size()-1);
-	vector<byte> r;
+	vector<uint8_t> r;
 	for (const char *p=s; *p==s_pszBase58[0]; ++p)
 		r.push_back(0);
 	r.resize(r.size()+v.size());
@@ -73,9 +73,9 @@ Blob ConvertFromBase58ShaSquare(RCString s) {
 	if (r.size() < 4)
 		Throw(E_FAIL);
 	SHA256 sha;
-	HashValue hash = HashValue(sha.ComputeHash(sha.ComputeHash(ConstBuf(&r[0], r.size()-4))));
+	HashValue hash = HashValue(sha.ComputeHash(sha.ComputeHash(Span(&r[0], r.size()-4))));
 	if (memcmp(hash.data(), &r.end()[-4], 4))
-		Throw(HRESULT_FROM_WIN32(ERROR_CRC));
+		Throw(ExtErr::Checksum);
 	return Blob(&r[0], r.size()-4);
 }
 
@@ -87,11 +87,11 @@ Blob ConvertFromBase58(RCString s, bool bCheckHash) {
 		} else
 			Throw(errc::invalid_argument);
 	}
-	vector<byte> v((bi.Length+7)/8);
+	vector<uint8_t> v((bi.Length+7)/8);
 	bi.ToBytes(&v[0], v.size());
 	if (v.size()>=2 && v.end()[-1]==0 && v.end()[-1]>=0x80)
 		v.resize(v.size()-1);
-	vector<byte> r;
+	vector<uint8_t> r;
 	for (const char *p=s; *p==s_pszBase58[0]; ++p)
 		r.push_back(0);
 	r.resize(r.size()+v.size());
@@ -99,9 +99,9 @@ Blob ConvertFromBase58(RCString s, bool bCheckHash) {
 	if (r.size() < 4)
 		Throw(E_FAIL);
 	if (bCheckHash) {
-		HashValue hash = HasherEng::GetCurrent()->HashForAddress(ConstBuf(&r[0], r.size()-4));
+		HashValue hash = HasherEng::GetCurrent()->HashForAddress(Span(&r[0], r.size()-4));
 		if (memcmp(hash.data(), &r.end()[-4], 4))
-			Throw(HRESULT_FROM_WIN32(ERROR_CRC));
+			Throw(ExtErr::Checksum);
 	}
 	return Blob(&r[0], r.size()-4);
 }

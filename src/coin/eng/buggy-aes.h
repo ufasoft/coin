@@ -16,8 +16,8 @@ using namespace Ext::Crypto;
 class BuggyAes : public Aes {
 	typedef Aes base;
 public:
-	Blob Encrypt(const ConstBuf& cbuf) override;
-	Blob Decrypt(const ConstBuf& cbuf) override;
+	Blob Encrypt(RCSpan cbuf) override;
+	Blob Decrypt(RCSpan cbuf) override;
 };
 
 

@@ -103,7 +103,7 @@ void WorkerThreadBase::Stop() {
 }
 
 void WorkerThreadBase::CompleteRound(uint64_t nHashes) {
-	m_span += DateTime::UtcNow()-m_dtStartRound;
+	m_span += Clock::now()-m_dtStartRound;
 	m_nHashes += nHashes;
 
 	Miner.OnRoundComplete();
@@ -125,13 +125,13 @@ ptr<BitcoinWorkData> BitcoinWorkData::FromJson(RCString sjson, Coin::HashAlgo al
 	if (jres.HasKey("target")) {
 		Blob t = Blob::FromHexString(jres["target"].ToString());
 		if (t.Size != 32)
-			Throw(E_INVALIDARG);
+			Throw(errc::invalid_argument);
 		copy(t.begin(), t.end(), r.HashTarget.data());
 	}
 	if (jres.HasKey("target_share")) {
 		Blob t = Blob::FromHexString(jres["target_share"].ToString().substr(2));
 		if (t.Size != 32)
-			Throw(E_INVALIDARG);
+			Throw(errc::invalid_argument);
 		reverse_copy(t.begin(), t.end(), r.HashTarget.data());
 	}
 	pair<uint32_t, uint32_t> nonceRange = FromOptionalNonceRange(jres);
@@ -140,7 +140,7 @@ ptr<BitcoinWorkData> BitcoinWorkData::FromJson(RCString sjson, Coin::HashAlgo al
 
 	if (Coin::HashAlgo::Sha256 == r.HashAlgo) {
 		if (0 == r.Hash1.Size) {
-			static const byte s_hash1[64] = {
+			static const uint8_t s_hash1[64] = {
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -301,7 +301,7 @@ BitcoinMiner::BitcoinMiner()
 	UserAgentString = String(UCFG_MANUFACTURER);
 #if UCFG_WIN32
 	try {
-		DBG_LOCAL_IGNORE_WIN32(ERROR_RESOURCE_TYPE_NOT_FOUND);	
+		DBG_LOCAL_IGNORE_WIN32(ERROR_RESOURCE_TYPE_NOT_FOUND);
 
 		UserAgentString += " "+AfxGetCApp()->GetInternalName()+"/"+FileVersionInfo(String(System.ExeFilePath.native())).ProductVersion;
 	} catch (RCExc) {
@@ -335,11 +335,11 @@ void BitcoinMiner::InitDevices(vector<String>& selectedDevs) {
 		ptr<ComputationDevice> dev = new CpuDevice;
 		dev->Name = "CPU";
 #if UCFG_CPU_X86_X64
-		dev->Description = String(CpuInfo().Name);	
+		dev->Description = String(CpuInfo().Name);
 #elif defined(_M_ARM)
-		dev->Description = "ARM";	
+		dev->Description = "ARM";
 #elif defined(_M_MIPS)
-		dev->Description = "MIPS";	
+		dev->Description = "MIPS";
 #endif
 		int nCore = Environment.ProcessorCoreCount;
 		dev->Description += EXT_STR(", " << nCore << " core" << (nCore>1 ? "s" : ""));
@@ -427,10 +427,10 @@ String BitcoinMiner::GetCurrentUrl() {
 
 static regex s_reBitcoinUrl("^(http://)?[^/]+(/)?");
 
-void BitcoinMiner::CheckLongPolling(WebClient& wc, RCString longPollUri, RCString longPollId) {
+void BitcoinMiner::CheckLongPolling(const WebHeaderCollection& respHeaders, RCString longPollUri, RCString longPollId) {
 	EXT_LOCK (m_csLongPollingThread) {
 		if (m_bLongPolling) {
-			String longPollingPath = longPollUri != nullptr ? longPollUri : wc.get_ResponseHeaders().Get("X-Long-Polling");
+			String longPollingPath = longPollUri != nullptr ? longPollUri : respHeaders.Get("X-Long-Polling");
 			if (!!longPollingPath) {
 				if (m_LongPollingThread)
 					return;
@@ -442,7 +442,7 @@ void BitcoinMiner::CheckLongPolling(WebClient& wc, RCString longPollUri, RCStrin
 					ssize_t idx = -1;
 					if (m[2].matched)
 						idx = m.position(2);
-					if (longPollingPath.Left(7) == "http://")
+					if (longPollingPath.StartsWith("http://"))
 						t->LongPollingUrl = longPollingPath;
 					else
 						t->LongPollingUrl = (idx==-1 ? url : url.Left(idx)) + longPollingPath;
@@ -485,7 +485,7 @@ void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 		wd.HashAlgo == Coin::HashAlgo::Sha256 && (wd.Midstate.Size != 32 || wd.Hash1.Size != 64))
 		Throw(E_FAIL);
 
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	EXT_LOCK (m_csCurrentData) {
 		if (bClearOld)
 			TaskQueue.clear();
@@ -507,12 +507,12 @@ void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 		this->m_minGetworkQueue = 1;
 #endif
 		m_evDataReady.Set();
-		
+
 	}
 }
 
 void BitcoinMiner::SetWebInfo(const WebHeaderCollection& headers) {
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	EXT_LOCK (m_csCurrentData) {
 		if (now > m_dtSwichToMainUrl) {
 			BitcoinUrl = MainBitcoinUrl;
@@ -546,8 +546,8 @@ void BitcoinMiner::SetWebInfo(const WebHeaderCollection& headers) {
 }
 
 void BitcoinMiner::CallNotifyRequest(WorkerThreadBase& wt, RCString url, RCString longPollId) {
-	DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_TIMEOUT);	
-	DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_OPERATION_CANCELLED);	
+	DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_TIMEOUT);
+	DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_OPERATION_CANCELLED);
 
 	BitcoinWebClient wc = GetWebClient(&wt);
 	wc.Timeout = 10*60*1000;
@@ -573,13 +573,13 @@ void BitcoinMiner::CallNotifyRequest(WorkerThreadBase& wt, RCString url, RCStrin
 				uri = json["longpolluri"].ToString();
 			else if (json.HasKey("longpoll"))
 				uri = json["longpoll"].ToString();
-			CheckLongPolling(wc, uri, longpollid);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
+			CheckLongPolling(wc.get_ResponseHeaders(), uri, longpollid);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
 		}
 	} else if (ptr<BitcoinWorkData> wd = BitcoinWorkData::FromJson(s, HashAlgo)) {
 		wd->SetRollNTime(wc);
 		SetWebInfo(wc.get_ResponseHeaders());
-		CheckLongPolling(wc);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
-		wd->Timestamp = DateTime::UtcNow();
+		CheckLongPolling(wc.get_ResponseHeaders());  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
+		wd->Timestamp = Clock::now();
 		SetNewData(*wd, true);
 	}
 }
@@ -616,7 +616,7 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkForThread(WorkerThreadBase& wt, uint32
 				if (w->HashAlgo == Coin::HashAlgo::Solid) {
 					if (por >> 10)
 						por >>= 10;
-				}				
+				}
 				int64_t req = int64_t(por) * UCFG_BITCOIN_NPAR,
 					  avail = int64_t(w->LastNonce)-int64_t(w->FirstNonce)+1;
 				if (por != FULL_TASK) {
@@ -642,7 +642,7 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkForThread(WorkerThreadBase& wt, uint32
 		m_evDataReady.Reset();
 		m_evDataReady.lock(1000);
 	}
-	
+
 /*!!!	uint32_t firstNonce = wd.FirstNonce+next*BitcoinMiner::NONCE_STEP,
 			lastNonce = uint32_t(firstNonce + int64_t(BitcoinMiner::NONCE_STEP)*BitcoinSha256::NPAR/BitcoinSha256::NPAR - 1);    //  BitcoinSha256::NPAR can be non power of 2
 	wd.FirstNonce = firstNonce;
@@ -668,7 +668,7 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkFromMinerBlock(const DateTime& now, Co
 #endif
 
 	size_t cbN2 = minerBlock->ExtraNonce2.Size;
-	byte *pN2 = minerBlock->ExtraNonce2.data();
+	uint8_t *pN2 = minerBlock->ExtraNonce2.data();
 	if (cbN2 == 1)
 		++*pN2;
 	else if (cbN2 < 4)
@@ -714,13 +714,13 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkFromMinerBlock(const DateTime& now, Co
 ptr<BitcoinWorkData> BitcoinMiner::GetWork(WebClient*& curWebClient) {
 	if (ConnectionClient)
 		return ConnectionClient->GetWork();
-	
-	DateTime now = DateTime::UtcNow();
+
+	DateTime now = Clock::now();
 	String url;
 	EXT_LOCK (m_csCurrentData) {
 		if (MinerBlock) {
 			if (now < m_dtNextGetWork || (Pooled && now < MinerBlock->MyExpireTime))
-				return GetWorkFromMinerBlock(now, MinerBlock);			
+				return GetWorkFromMinerBlock(now, MinerBlock);
 			MinerBlock = nullptr;
 		}
 		url = BitcoinUrl;
@@ -748,7 +748,7 @@ LAB_FALLBACK_GETWORK:
 			caps.push_back("workid");
 			caps.push_back("coinbase/append");
 			caps.push_back("longpollid");
-			
+
 			ptr<Coin::MinerBlock> newMinerBlock = WalletClient->GetBlockTemplate(caps);
 
 			String xStratum = EXT_LOCKED(WalletClient->MtxHeaders, WalletClient->Headers).Get("X-Stratum");
@@ -758,8 +758,9 @@ LAB_FALLBACK_GETWORK:
 				return ConnectionClient->GetWork();
 			}
 
-			*m_pTraceStream << DateTime::Now() << " WorkData. Height: " << newMinerBlock->Height << endl;
+			*m_pTraceStream << Clock::now().ToLocalTime() << " WorkData. Height: " << newMinerBlock->Height << endl;
 
+			newMinerBlock->Algo = HashAlgo;
 			uniform_int_distribution<uint32_t> dist(0, 0xFFFFFFFF);
 			uint32_t rnd = dist(s_rng);
 			newMinerBlock->ExtraNonce1 = Blob(&rnd, 4);
@@ -774,7 +775,7 @@ LAB_FALLBACK_GETWORK:
 
 //!!!R			String sjson = wc.UploadString(url, "{\"method\": \"" + method + "\", \"params\": [{\"capabilities\": [\"coinbasetxn\", \"workid\", \"coinbase/append\", \"longpollid\"]}], \"id\":0}");
 
-			
+
 
 			/*!!!?
 			VarValue json = ParseJson(sjson);
@@ -800,7 +801,7 @@ LAB_FALLBACK_GETWORK:
 				SetWebInfo(EXT_LOCKED(WalletClient->MtxHeaders, WalletClient->Headers));
 
 				if (!newMinerBlock->LongPollId.empty())
-					CheckLongPolling(wc, newMinerBlock->LongPollUrl, newMinerBlock->LongPollId);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
+					CheckLongPolling(EXT_LOCKED(WalletClient->MtxHeaders, WalletClient->Headers), newMinerBlock->LongPollUrl, newMinerBlock->LongPollId);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
 
 				return GetWorkFromMinerBlock(now, MinerBlock);
 			}
@@ -809,7 +810,7 @@ LAB_FALLBACK_GETWORK:
 			SetWebInfo(wc.get_ResponseHeaders());
 			m_msWait = NORMAL_WAIT;
 		}
-		CheckLongPolling(wc);  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
+		CheckLongPolling(EXT_LOCKED(WalletClient->MtxHeaders, WalletClient->Headers));  // should be before SetNewData() because SetNewData() uses m_LongPollingThread
 		return pwd;
 	} catch (RCExc ex) {
 		*m_pTraceStream << ex.what() << endl;
@@ -821,10 +822,10 @@ LAB_FALLBACK_GETWORK:
 			if (HostIndex+1 < HostList.size()) {
 				SUrlTtr& urlTtr = HostList[++HostIndex];
 				BitcoinUrl = urlTtr.Url;
-				m_dtSwichToMainUrl = urlTtr.TtrMinutes ? DateTime::UtcNow()+TimeSpan::FromSeconds(urlTtr.TtrMinutes*60) : DateTime::MaxValue;
+				m_dtSwichToMainUrl = urlTtr.TtrMinutes ? Clock::now()+TimeSpan::FromSeconds(urlTtr.TtrMinutes*60) : DateTime::MaxValue;
 				*m_pTraceStream << "Switching to " << BitcoinUrl  << endl;
 				return nullptr;
-			} else 
+			} else
 				HostIndex = 0;
 		}
 	}
@@ -833,7 +834,7 @@ LAB_FALLBACK_GETWORK:
 }
 
 void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
-	
+
 	String arg;
 	if (m_getWorkMethodLevel == 2) {
 		HashValue merkle = HashValue(ConstBuf(wd.Data.constData()+36, 32));
@@ -846,7 +847,7 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 			return false;
 		Coin::MinerBlock& mblock = it->second.first; */
 		mblock.Nonce = wd.Nonce;
-		
+
 		Blob tx0;
 		HashValue hash, hashPow;
 		switch (wd.HashAlgo) {
@@ -880,20 +881,20 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 		const vector<MinerTx>& txes = mblock.Txes;
 
 		MemoryStream ms;
-		BinaryWriter wr(ms);
+		ProtocolWriter wr(ms);
 		mblock.WriteHeader(wr);
 
 		CoinSerialized::WriteVarInt(wr, txes.size());
-		wr.BaseStream.WriteBuf(tx0);
-		for (size_t i=1; i<txes.size(); ++i)
-			wr.BaseStream.WriteBuf(txes[i].Data);		
+		wr.BaseStream.Write(tx0);
+		for (size_t i = 1; i < txes.size(); ++i)
+			wr.BaseStream.Write(txes[i].Data);
 
-		WalletClient->SubmitBlock(ms, mblock.WorkId);
+		WalletClient->SubmitBlock(ms.AsSpan(), mblock.WorkId);
 
 /*!!!R		arg = "{\"method\":\"submitblock\",\"params\":[\"" + s + "\"";
 
 		if (mblock.WorkId != nullptr)
-			arg += ", \"workid\":\""+mblock.WorkId+"\"";			
+			arg += ", \"workid\":\""+mblock.WorkId+"\"";
 		arg += "],\"id\":1}";		*/
 	} else {
 		WalletClient->GetWork(wd.Data);
@@ -994,7 +995,7 @@ void BitcoinMiner::Print(const BitcoinWorkData& wd, bool bSuccess, RCString mess
 			;
 		shash = shash.substr(nPos, 8);
 	}
-	*m_pTraceStream  << DateTime::Now() << " Result: " << shash << (bSuccess ? " accepted" : " rejected") << "   " << (!message.empty() ? message : String()) << "              " << endl;
+	*m_pTraceStream  << Clock::now().ToLocalTime() << " Result: " << shash << (bSuccess ? " accepted" : " rejected") << "   " << (!message.empty() ? message : String()) << "              " << endl;
 }
 
 class GetWorkThread : public Thread {
@@ -1038,10 +1039,10 @@ protected:
 #endif
 		DBG_LOCAL_IGNORE_WIN32(ERROR_INTERNET_TIMEOUT);
 		DBG_LOCAL_IGNORE_WIN32(ERROR_HTTP_INVALID_SERVER_RESPONSE);
-		
+
 		MeanCalculator<int64_t> meanHash(20);
 		MeanCalculator<double> meanChain(20);
-		
+
 		for (DateTime dt=Miner.DtStart; !m_bStop; ) {
 			if (Miner.ConnectionClient) {
 				bool bWait = !Miner.ConnectionClient->HasWorkData();
@@ -1053,14 +1054,14 @@ protected:
 					goto LAB_WAIT;
 			}
 
-			dt = DateTime::UtcNow();
+			dt = Clock::now();
 			if (EXT_LOCKED(Miner.m_csCurrentData, dt > Miner.m_dtNextGetWork || Miner.TaskQueue.size() < Miner.m_minGetworkQueue)) {
 				if (ptr<BitcoinWorkData> wd = Miner.GetWork(CurrentWebClient)) {
-					wd->Timestamp = dt = DateTime::UtcNow();
+					wd->Timestamp = dt = Clock::now();
 					Miner.SetNewData(*wd);
 					continue;
 				}
-			}	
+			}
 
 LAB_WAIT:
 			Miner.m_evGetWork.lock(Miner.m_msWait);
@@ -1131,7 +1132,7 @@ void BitcoinMiner::CreateConnectionClient(RCString s) {
 		ConnectionClientThread = c;
 #endif
 	} else
-		Throw(E_INVALIDARG);
+		Throw(errc::invalid_argument);
 	ConnectionClient->SetEpServer(IPEndPoint(uri.Host, (uint16_t)uri.Port));
 	ConnectionClientThread->Start();
 }
@@ -1159,7 +1160,7 @@ void BitcoinMiner::Start(thread_group *tr) {
 	InitDevices(selectedDevs);
 	if (!Threads.empty())
 		return;
-	DtStart = DateTime::UtcNow();
+	DtStart = Clock::now();
 	m_evDataReady.Reset();
 	m_evGetWork.Set();
 	(GetWorkThread = new Coin::GetWorkThread(_self, tr))->Start();
@@ -1237,7 +1238,7 @@ void WorkerThread::Execute() {
 
 
 ptr<BitcoinWorkData> ConnectionClient::GetWork() {
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	EXT_LOCK (MtxData) {
 		if (MinerBlock) {
 			if (now < MinerBlock->MyExpireTime)
@@ -1292,10 +1293,10 @@ void Hasher::MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, uint32_t *
 			EXT_LOCK (miner.m_csCurrentData) {
 				miner.WorksToSubmit.push_back(&wd);
 			}
-			miner.m_evGetWork.Set(); 
+			miner.m_evGetWork.Set();
 		}*/
 #endif
-		if (!hash[31] && hash <= wd.HashTarget)
+		if (!hash.data()[31] && hash <= wd.HashTarget)
 			miner.TestAndSubmit(&wd, htobe(nonce));
 	}
 }

@@ -1,9 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="..\..\el\inet\async-text-client.cpp">
-      <Filter>Comp</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\el\comp\stdafx.cpp">
       <Filter>Comp</Filter>
     </ClCompile>
@@ -49,9 +46,6 @@
     <ClCompile Include="rpc-wallet-client.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\inet\json-rpc.cpp">
-      <Filter>Comp</Filter>
-    </ClCompile>
     <ClCompile Include="coin-err.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -60,6 +54,9 @@
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\ecdsa.cpp">
       <Filter>Comp\DEBUG</Filter>
+    </ClCompile>
+    <ClCompile Include="address.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -88,6 +85,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="coin-err.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="opcode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

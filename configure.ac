@@ -1,5 +1,5 @@
 AC_PREREQ([2.67])
-AC_INIT(ufasoft_coin, 0.72, support@ufasoft.com,, http://ufasoft.com/coin)
+AC_INIT(ufasoft_coin, 0.190, support@ufasoft.com,, http://ufasoft.com/coin)
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE([subdir-objects dist-xz])
 AM_SILENT_RULES([yes])

@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -11,8 +11,8 @@
 namespace Ext { namespace DB { namespace KV {
 
 
-void DbTable::CheckKeyArg(const ConstBuf& k) {
-	if (k.Size == 0 || k.Size > MAX_KEY_SIZE)
+void DbTable::CheckKeyArg(RCSpan k) {
+	if (k.size() == 0 || k.size() > MAX_KEY_SIZE)
 		Throw(errc::invalid_argument);
 }
 
@@ -20,16 +20,16 @@ void DbTable::Open(DbTransaction& tx, bool bCreate) {
 	CKVStorageKeeper keeper(&tx.Storage);
 
 	DbCursor cM(tx, DbTable::Main());
-	ConstBuf k(Name.c_str(), strlen(Name.c_str()));
+	Span k((const uint8_t*)Name.c_str(), strlen(Name.c_str()));
 	if (!cM.SeekToKey(k)) {
 		if (!bCreate)
 			Throw(E_FAIL);
 		TableData td;
-		td.Type = (byte)Type;
-		td.HtType = (byte)HtType;
+		td.Type = (uint8_t)Type;
+		td.HtType = (uint8_t)HtType;
 		td.RootPgNo = 0;
 		td.KeySize = KeySize;
-		DbTable::Main().Put(tx, k, ConstBuf(&td, sizeof td));
+		DbTable::Main().Put(tx, k, Span((const uint8_t*)&td, sizeof td));
 	//	cM.SeekToKey(k);		//!!!?
 	}
 }
@@ -38,11 +38,11 @@ void DbTable::Drop(DbTransaction& tx) {
 	if (tx.ReadOnly)
 		Throw(errc::permission_denied);
 	DbCursor(tx, _self).Drop();
-	ConstBuf k(Name.c_str(), strlen(Name.c_str()));
+	Span k((const uint8_t*)Name.c_str(), strlen(Name.c_str()));
 	DbTable::Main().Delete(tx, k);
 }
 
-void DbTable::Put(DbTransaction& tx, const ConstBuf& k, const ConstBuf& d, bool bInsert) {
+void DbTable::Put(DbTransaction& tx, RCSpan k, RCSpan d, bool bInsert) {
 	CKVStorageKeeper keeper(&tx.Storage);
 	CheckKeyArg(k);
 
@@ -50,7 +50,7 @@ void DbTable::Put(DbTransaction& tx, const ConstBuf& k, const ConstBuf& d, bool 
 	c.Put(k, d, bInsert);
 }
 
-bool DbTable::Delete(DbTransaction& tx, const ConstBuf& k) {
+bool DbTable::Delete(DbTransaction& tx, RCSpan k) {
 	CKVStorageKeeper keeper(&tx.Storage);
 	CheckKeyArg(k);
 
@@ -72,7 +72,7 @@ void KVStorage::Vacuum() {
 		dbNew.UserVersion = UserVersion;
 		dbNew.FrontEndName = FrontEndName;
 		dbNew.FrontEndVersion = FrontEndVersion;
-		
+
 		dbNew.Create(tmpPath);
 		{
 			DbTransaction txS(_self, true), txD(dbNew);
@@ -82,7 +82,7 @@ void KVStorage::Vacuum() {
 
 			for (DbCursor ct(txS, DbTable::Main()); ct.SeekToNext();) {
 				String tableName = Encoding::UTF8.GetChars(ct.Key);
-				const TableData& td = *(const TableData*)ct.get_Data().P;
+				const TableData& td = *(const TableData*)ct.get_Data().data();
 
 				DbTable tS(tableName), tD(tableName);
 				tD.Type = (TableType)td.Type;
@@ -98,7 +98,7 @@ void KVStorage::Vacuum() {
 						nProgress = m_stepProgress;
 					}
 					++n;
-					bytes += c.get_Data().Size;
+					bytes += c.get_Data().size();
 				}
 				TRC(2, "Table: " << tableName << ":\t" << n << " records\t" << bytes << " bytes");
 			}
@@ -107,13 +107,13 @@ void KVStorage::Vacuum() {
 		lk.lock();
 		Close(false);
 	} catch (RCExc) {
-		sys::remove(tmpPath);
+		filesystem::remove(tmpPath);
 		throw;
 	}
 	path tmpOriginal = FilePath / ".bak";
-	sys::rename(FilePath, tmpOriginal);
-	sys::rename(tmpPath, FilePath);
-	sys::remove(tmpOriginal);
+	filesystem::rename(FilePath, tmpOriginal);
+	filesystem::rename(tmpPath, FilePath);
+	filesystem::remove(tmpOriginal);
 	Open(FilePath);
 }
 

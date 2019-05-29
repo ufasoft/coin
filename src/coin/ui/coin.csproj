@@ -35,12 +35,13 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Coin</RootNamespace>
     <AssemblyName>coin</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
     <BaseIntermediateOutputPath>$(OUT)\obj\$(AssemblyName)</BaseIntermediateOutputPath>
-    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -50,8 +51,9 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <OutputPath>$(OUT)\$(PlatformShortName)_$(Configuration)</OutputPath>
+    <OutputPath>$(OUT)\$(Platform)_$(Configuration)</OutputPath>
     <Prefer32Bit>false</Prefer32Bit>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -259,10 +261,6 @@
     <ProjectReference Include="..\..\m\guicomp\guicomp.csproj">
       <Project>{0cb510bb-f1e6-4ac6-8e9d-43d93c71f1c4}</Project>
       <Name>guicomp</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\m\util\u.util.csproj">
-      <Project>{ead7752e-f97a-4116-abc1-2e1ba49c2185}</Project>
-      <Name>u.util</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

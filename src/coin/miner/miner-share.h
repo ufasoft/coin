@@ -17,9 +17,9 @@ public:
 	uint32_t BirthdayA, BirthdayB;
 	Blob ExtraNonce;
 
-	void WriteHeader(BinaryWriter& wr) const override;
+	void WriteHeader(ProtocolWriter& wr) const override;
 	HashValue GetHash() const override;
-	Coin::HashValue MerkleRoot(bool bSave) const override { return m_merkleRoot.get(); }
+	Coin::HashValue MerkleRoot(bool bSave) const override { return m_merkleRoot.value(); }
 	virtual uint32_t GetDifficulty() const { Throw(E_NOTIMPL); }
 	virtual Coin::HashValue GetHashPow() const;
 };
@@ -36,7 +36,7 @@ public:
 	uint32_t SieveSize, SieveCandidate;
 
 protected:
-	void WriteHeader(BinaryWriter& wr) const override;
+	void WriteHeader(ProtocolWriter& wr) const override;
 	uint32_t GetDifficulty() const override;
 };
 #endif // UCFG_COIN_PRIME
@@ -55,7 +55,7 @@ public:
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
-	void Process(P2P::Link& link)  override;
+	void ProcessMsg(P2P::Link& link)  override;
 };
 
 

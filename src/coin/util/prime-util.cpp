@@ -19,7 +19,7 @@ const BigInteger& GetPrimeMax() {
 static const Bn BN_2(2);
 
 BigInteger HashValueToBigInteger(const HashValue& hash) {
-	byte ar[33];
+	uint8_t ar[33];
 	memcpy(ar, hash.data(), 32);
 	ar[32] = 0;
 	return BigInteger(ar, 33);

@@ -6,13 +6,29 @@
 #define USE_FIELD_GMP
 #define USE_FIELD_INV_BUILTIN
 
-#if UCFG_64 && !UCFG_PLATFORM_X64
-#	define HAVE___INT128 1
-#	define USE_SCALAR_4X64 1
+#if UCFG_USE_MASM && UCFG_CPU_X86_X64
+#	define USE_ASM_X86_64
+#endif
+
+#if UCFG_PLATFORM_X64 && defined USE_ASM_X86_64
+#	define USE_FIELD_4X64 1
+#	if UCFG_MSC_VERSION
+#		define USE_SCALAR_8X32 1
+#	else
+#		define HAVE___INT128 1
+#		define USE_SCALAR_4X64 1
+#	endif
+#elif UCFG_64 && (!UCFG_MSC_VERSION || defined(USE_ASM_X86_64))
 #	define USE_FIELD_5X52 1
+#	if UCFG_MSC_VERSION
+#		define USE_SCALAR_8X32 1
+#	else
+#		define HAVE___INT128 1
+#		define USE_SCALAR_4X64 1
+#	endif
 #else
-#	define USE_SCALAR_8X32 1
 #	define USE_FIELD_10X26 1
+#	define USE_SCALAR_8X32 1
 #endif
 
 
@@ -25,40 +41,65 @@ namespace Ext { namespace Crypto {
 class Sec256Signature {
 public:
 	Sec256Signature();
-	Sec256Signature(const ConstBuf& cbuf);
+	Sec256Signature(RCSpan cbuf);
 	~Sec256Signature();
-	void Parse(const ConstBuf& cbuf);
-	void AssignCompact(const array<byte, 64>& ar);
-	array<byte, 64> ToCompact() const;
+	void Parse(RCSpan cbuf);
+	void AssignCompact(const array<uint8_t, 64>& ar);
+	array<uint8_t, 64> ToCompact() const;
 	Blob Serialize() const;
 private:
-	secp256k1_ecdsa_sig_t m_sig;
+	secp256k1_scalar m_r, m_s;
 
 	friend class Sec256Dsa;
+};
+
+class Sec256SignatureEx {	// High-level signature
+public:
+	Sec256SignatureEx(RCSpan cbuf) {
+		Parse(cbuf);
+	}
+
+	void Parse(RCSpan cbuf);
+private:
+	secp256k1_ecdsa_signature m_sig;
+
+	friend class Sec256DsaEx;
 };
 
 class Sec256Dsa : public DsaBase {
 public:
 	Blob m_privKey;
 
-	static vararray<byte, 65> RecoverPubKey(const ConstBuf& hash, const Sec256Signature& sig, byte recid, bool bCompressed = false);
+	static vararray<uint8_t, 65> RecoverPubKey(RCSpan hash, const Sec256Signature& sig, uint8_t recid, bool bCompressed = false);
 
-	void ParsePubKey(const ConstBuf& cbuf);
-	Blob SignHash(const ConstBuf& hash) override;
-	bool VerifyHashSig(const ConstBuf& hash, const Sec256Signature& sig);
+	void ParsePubKey(RCSpan cbuf);
+	Blob SignHash(RCSpan hash) override;
+	bool VerifyHashSig(RCSpan hash, const Sec256Signature& sig);
 
-	bool VerifyHash(const ConstBuf& hash, const ConstBuf& bufSig) override {
+	bool VerifyHash(RCSpan hash, RCSpan bufSig) override {
 		return VerifyHashSig(hash, bufSig);
 	}
 
-	static vararray<byte, 65> PrivKeyToPubKey(const ConstBuf& privKey, bool bCompressed);
-	static Blob PrivKeyToDER(const ConstBuf& privKey, bool bCompressed);
-	static Blob PrivKeyFromDER(const ConstBuf& der);
-	static bool VerifyPubKey(const ConstBuf& cbuf);
-	static Blob DecompressPubKey(const ConstBuf& cbuf);
+	static vararray<uint8_t, 65> PrivKeyToPubKey(RCSpan privKey, bool bCompressed);
+	static Blob PrivKeyToDER(RCSpan privKey, bool bCompressed);
+	static Blob PrivKeyFromDER(RCSpan der);
+	static bool VerifyPubKey(RCSpan cbuf);
+	static Blob DecompressPubKey(RCSpan cbuf);
 private:
-	secp256k1_ge_t m_pubkey;
+	secp256k1_ge m_pubkey;
 };
 
+class Sec256DsaEx : public DsaBase {
+public:
+	void ParsePubKey(RCSpan cbuf);
+	bool VerifyHashSig(RCSpan hash, const Sec256SignatureEx& sig);
+	Blob SignHash(RCSpan hash) override { Throw(E_NOTIMPL); }
+
+	bool VerifyHash(RCSpan hash, RCSpan bufSig) override {
+		return VerifyHashSig(hash, Sec256SignatureEx(bufSig));		//!!!C Use Sec256SignatureEx for compatibility with old incorrect signature format
+	}
+private:
+	secp256k1_pubkey m_pubkey;
+};
 
 }} // Ext::Crypto::

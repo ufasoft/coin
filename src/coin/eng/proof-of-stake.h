@@ -43,10 +43,16 @@ class PosBlockObj : public BlockObj {
 	typedef BlockObj base;
 public:
 	Blob Signature;
-	optional<uint64_t> StakeModifier;	
+	optional<uint64_t> StakeModifier;
+
+	const seconds STAKE_MIN_AGE;				// minimum age for coin age
 
 	static PosBlockObj& Of(const Block& block) {
 		return *dynamic_cast<PosBlockObj*>(block.m_pimpl.get());
+	}
+
+	PosBlockObj()
+		: STAKE_MIN_AGE(60 * 60 * 24 * 30) {
 	}
 
 	virtual bool StakeEntropyBit() const {
@@ -56,7 +62,7 @@ public:
 	using base::Write;
 	void WriteSuffix(BinaryWriter& wr) const {
 		base::WriteSuffix(wr);
-		CoinSerialized::WriteBlob(wr, Signature);
+		CoinSerialized::WriteSpan(wr, Signature);
 	}
 
 	void Read(const BinaryReader& rd) override {
@@ -102,6 +108,8 @@ public:
 			Throw(CoinErr::TimestampViolation);
 	}
 
+	virtual int64_t CorrectTimeWeight(DateTime dtTx, int64_t nTimeWeight) const;
+	void WriteKernelStakeModifierV05(DateTime dtTx, BinaryWriter& wr, const Block& blockPrev) const;
 	virtual void WriteKernelStakeModifier(BinaryWriter& wr, const Block& blockPrev) const;
 	HashValue HashProofOfStake() const;
 	bool VerifySignatureByTxOut(const TxOut& txOut);
@@ -159,7 +167,7 @@ protected:
 	TxObj *CreateTxObj() override { return new PosTxObj; }
 	virtual TimeSpan GetTargetSpacingWorkMax(const DateTime& dt) { return TimeSpan::FromHours(2); }
 	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override;
-	
+
 	Target GetNextTarget(const BlockHeader& headerLast, const Block& block) override {
 		return GetNextTargetRequired(headerLast, block);
 	}

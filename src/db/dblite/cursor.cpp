@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -17,7 +17,7 @@ void PagedMap::Init(const TableData& td) {
 
 TableData PagedMap::GetTableData() {
 	TableData r;
-	r.Type = (byte)Type();
+	r.Type = (uint8_t)Type();
 	r.KeySize = KeySize;
 	return r;
 }
@@ -26,46 +26,105 @@ CursorObj::~CursorObj() {
 //!!!R	CKVStorageKeeper keeper(&Tree->Tx.Storage);
 	if (Map)
 		Map->Cursors.erase(IntrusiveList<CursorObj>::const_iterator(this));
-//!!!R	Path.clear();																	// explicit to be in scope of t_pKVStorage 
+//!!!R	Path.clear();																	// explicit to be in scope of t_pKVStorage
 }
 
-const ConstBuf& CursorObj::get_Key() {
-	if (!m_key.P) {
+RCSpan CursorObj::get_Key() {
+	if (!m_key.data()) {
 		PagePos& pagePos = Top();
 		LiteEntry& e = pagePos.Page.Entries(Map->KeySize)[pagePos.Pos];
-		if (byte keyOffset = pagePos.Page.Header().KeyOffset()) {
-			m_bigKey.Size = Map->KeySize;
+		if (uint8_t keyOffset = pagePos.Page.Header().KeyOffset()) {
+			m_bigKey.resize(Map->KeySize);
 			uint32_t leNpage = htole(NPage);
-			memcpy(keyOffset + (byte*)memcpy(m_bigKey.data(), &leNpage, keyOffset), e.P, Map->KeySize - keyOffset);
-			m_key = m_bigKey;
+			memcpy(keyOffset + (uint8_t*)memcpy(&m_bigKey[0], &leNpage, keyOffset), e.P, Map->KeySize - keyOffset);
+			m_key = Span(m_bigKey);
 		} else
 			m_key = e.Key(Map->KeySize);
 	}
 	return m_key;
 }
 
-const ConstBuf& CursorObj::get_Data() {
-	if (!m_data.P) {
+void CursorStream::Init() {
+	if (!m_bInited) {
+		EntryDesc e = m_curObj.Map->GetEntryDesc(m_curObj.Top());
+		if (e.Overflowed) {
+			m_length = e.DataSize;
+			m_pgnoNext = e.PgNo;
+		} else {
+			m_length = e.LocalData.size();
+			m_pgnoNext = DB_EOF_PGNO;
+		}
+		m_mb = e.LocalData;
+		m_pos = 0;
+		m_bInited = true;
+	}
+}
+
+void CursorStream::put_Position(uint64_t pos) const {
+	if (pos < m_pos)
+		Throw(E_NOTIMPL);
+	KVStorage& stg = m_curObj.Map->Tx.Storage;
+	uint64_t rest;
+	while ((rest=pos-m_pos) >= m_mb.size()) {
+		m_pos += m_mb.size();
+		if (m_pos == m_length)
+			break;
+		if (m_pgnoNext == DB_EOF_PGNO)
+			Throw(ExtErr::DB_Corrupt);
+		m_page = m_curObj.Map->Tx.OpenPage(m_pgnoNext);
+		m_mb = Span((const uint8_t*)m_page.get_Address() + 4, (size_t)std::min(uint64_t(stg.PageSize - 4), m_length - m_pos));
+		m_pgnoNext = *(BeUInt32*)(m_mb.data() - 4);
+	}
+    m_mb = m_mb.subspan((size_t)rest);
+	base::put_Position(pos);
+
+
+
+	/*!!!R
+
+	m_bigData.Size = (size_t)e.DataSize;
+	size_t off = e.LocalData.Size;
+	memcpy(m_bigData.data(), e.LocalData.P, off);
+	KVStorage& stg = Map->Tx.Storage;
+	for (uint32_t pgno = e.PgNo; pgno!=DB_EOF_PGNO;) {
+	Page page = Map->Tx.OpenPage(pgno);
+	pgno = *(BeUInt32*)(page.get_Address());
+	size_t size = std::min(stg.PageSize - 4, m_bigData.Size-off);
+	memcpy(m_bigData.data()+off, (const uint8_t*)page.get_Address()+4, size);
+	off += size;
+	//				ASSERT(pgno < 0x10000000); //!!!
+	}
+	*/
+
+}
+
+size_t CursorStream::Read(void *buf, size_t count) const {
+	size_t r = 0;
+	while (m_pos!=m_length && count) {
+		size_t size = (min)(count, m_mb.size());
+		memcpy(buf, m_mb.data(), size);
+		buf = (uint8_t*)buf + size;
+		count -= size;
+		r += size;
+		put_Position(m_pos + size);
+	}
+	return r;
+}
+
+RCSpan CursorObj::get_Data() {
+	if (!m_data.data()) {
 		EntryDesc e = Map->GetEntryDesc(Top());
 		if (!e.Overflowed)
 			m_data = e.LocalData;
 		else {
 			if (e.DataSize > numeric_limits<size_t>::max())
 				Throw(E_FAIL);
-			m_bigData.Size = (size_t)e.DataSize;
-			size_t off = e.LocalData.Size;
-			memcpy(m_bigData.data(), e.LocalData.P, off);
-			KVStorage& stg = Map->Tx.Storage;
-			for (uint32_t pgno = e.PgNo; pgno!=DB_EOF_PGNO;) {
-				Page page = Map->Tx.OpenPage(pgno);
-				pgno = *(BeUInt32*)(page.get_Address());
-				size_t size = std::min(stg.PageSize - 4, m_bigData.Size-off);
-				memcpy(m_bigData.data()+off, (const byte*)page.get_Address()+4, size);
-				off += size;
-//				ASSERT(pgno < 0x10000000); //!!!
-			}
-			m_data = m_bigData;
-		}			
+			m_dataStream.m_bInited = false;
+			m_dataStream.Init();
+			m_bigData.resize((size_t)m_dataStream.Length);
+			m_dataStream.ReadBuffer(&m_bigData[0], m_bigData.size());
+			m_data = Span(&m_bigData[0], m_bigData.size());
+		}
 	}
 	return m_data;
 }
@@ -82,43 +141,75 @@ void CursorObj::Delete() {
 	Deleted = true;
 }
 
-void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, ConstBuf k, const ConstBuf& head, uint64_t fullSize, uint32_t pgnoTail) {
+void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail) {
 	DbTransaction& tx = dynamic_cast<DbTransaction&>(Map->Tx);
 	size_t pageSize = tx.Storage.PageSize;
 	PagePos& pp = Top();
 	LiteEntry *entries = pp.Page.Entries(Map->KeySize);
 	tx.TmpPageSpace.Size = pageSize;
-	byte *p = tx.TmpPageSpace.data(), *q = p;
+	uint8_t *p = tx.TmpPageSpace.data(), *q = p;
 	if (!Map->KeySize)
-		*p++ = (byte)k.Size;
-	byte keyOffset = pp.Page.Header().KeyOffset();
-	memcpy(p, k.P+keyOffset, k.Size-keyOffset);
-	Write7BitEncoded(p += k.Size-keyOffset, fullSize);
-	memcpy(exchange(p, p+ppEntry.first), head.P, ppEntry.first);
+		*p++ = (uint8_t)k.size();
+	uint8_t keyOffset = pp.Page.Header().KeyOffset();
+	memcpy(p, k.data() + keyOffset, k.size() - keyOffset);
+	Write7BitEncoded(p += k.size() - keyOffset, fullSize);
+	memcpy(exchange(p, p + ppEntry.first), head.data(), ppEntry.first);
 	if (ppEntry.second) {
-		size_t cbOverflow = head.Size - ppEntry.first;
+		size_t cbOverflow = head.size() - ppEntry.first;
 		if (0 == cbOverflow)
 			PutLeUInt32(exchange(p, p+4), pgnoTail);
 		else {
 			int n = int((cbOverflow+pageSize-4-1) / (pageSize-4));
 			vector<uint32_t> pages = tx.AllocatePages(n);
-			const byte *q = head.P + ppEntry.first;
+			const uint8_t* q = head.data() + ppEntry.first;
 			size_t off = ppEntry.first;
 			for (size_t cbCopy, i=0; cbOverflow; q+=cbCopy, cbOverflow-=cbCopy, ++i) {
 				cbCopy = std::min(cbOverflow, pageSize-4);
 				Page page = tx.OpenPage(pages[i]);
 				*(BeUInt32*)page.get_Address() = i==pages.size()-1 ? pgnoTail : pages[i+1];
-				memcpy((byte*)page.get_Address()+4, q, cbCopy);
+				memcpy((uint8_t*)page.get_Address() + 4, q, cbCopy);
 			}
 			PutLeUInt32(exchange(p, p+4), pages[0]);
-		}			
+		}
 	}
 	tx.m_bError = true;
-	InsertCell(pp, ConstBuf(q, p-q), Map->KeySize);
+	InsertCell(pp, Span(q, p-q), Map->KeySize);
 	Deleted = false;
 	if (pp.Page.Overflows)
 		Balance();
 	tx.m_bError = false;
+}
+
+void CursorObj::DoDelete() {
+	if (Map->Tx.ReadOnly)
+		Throw(errc::permission_denied);
+	if (!Initialized || Deleted)
+		Throw(errc::invalid_argument);
+	ASSERT(!Top().Page.IsBranch);
+	Touch();
+	Delete();
+}
+
+void CursorObj::DoPut(Span k, RCSpan d, bool bInsert) {
+	if (Map->Tx.ReadOnly)
+		Throw(errc::permission_denied);
+	ASSERT(k.size() <= KVStorage::MAX_KEY_SIZE && (!Map->KeySize || Map->KeySize == k.size()));
+
+	Put(k, d, bInsert);
+}
+
+void CursorObj::DoUpdate(const Span& d) {
+	if (Map->Tx.ReadOnly)
+		Throw(errc::permission_denied);
+	if (!Initialized || Deleted || !Positioned)
+		Throw(errc::invalid_argument);
+	Update(d);
+}
+
+bool CursorObj::DoSeekToKey(RCSpan k) {
+	bool r = SeekToKey(k);
+	Positioned = r;
+	return r;
 }
 
 bool CursorObj::SeekToNext() {
@@ -133,10 +224,10 @@ bool CursorObj::SeekToNext() {
 			pp.Pos++;
 		else if (!SeekToSibling(true)) {
 			Eof = true;
-			return Initialized = false;		
+			return Initialized = false;
 		}
 	}
-		
+
 //	ASSERT(!Top().Page.IsBranch);
 	return ClearKeyData();
 }
@@ -162,7 +253,7 @@ bool CursorObj::SeekToPrev() {
 
 bool CursorObj::ReturnFromSeekKey(int pos) {
 	Top().Pos = pos;
-	Eof = false;	
+	Eof = false;
 	return Initialized = ClearKeyData();
 }
 
@@ -189,10 +280,11 @@ DbCursor::DbCursor(DbTransactionBase& tx, DbTable& table) {
 			dynamic_cast<BTree*>(m.get())->Root = tx.MainTableRoot;
 		} else {
 			DbCursor cMain(tx, DbTable::Main());
-			ConstBuf k(table.Name.c_str(), strlen(table.Name.c_str()));
+			const char *pTableName = table.Name.c_str();
+			Span k((const uint8_t*)pTableName, strlen(pTableName));
 			if (!cMain.SeekToKey(k))
 				Throw(E_FAIL);
-			TableData& td = *(TableData*)cMain.get_Data().P;
+			TableData& td = *(TableData*)cMain.get_Data().data();
 			type = (TableType)td.Type;
 			switch (type) {
 			case TableType::BTree: m = new BTree(tx); break;
@@ -241,7 +333,7 @@ void DbCursor::AssignImpl(TableType type) {
 	m_pimpl->m_aRef = 1000;
 }
 
-bool DbCursor::Seek(CursorPos cPos, const ConstBuf& k) {
+bool DbCursor::Seek(CursorPos cPos, RCSpan k) {
 	switch (cPos) {
 	case CursorPos::First:
 		return SeekToFirst();
@@ -259,32 +351,6 @@ bool DbCursor::Seek(CursorPos cPos, const ConstBuf& k) {
 	default:
 		Throw(errc::invalid_argument);
 	}
-}
-
-void DbCursor::Delete() {
-	if (m_pimpl->Map->Tx.ReadOnly)
-		Throw(errc::permission_denied);
-	if (!m_pimpl->Initialized || m_pimpl->Deleted)
-		Throw(errc::invalid_argument);
-	ASSERT(!m_pimpl->Top().Page.IsBranch);
-	m_pimpl->Touch();
-	m_pimpl->Delete();
-}
-
-void DbCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
-	if (m_pimpl->Map->Tx.ReadOnly)
-		Throw(errc::permission_denied);
-	ASSERT(k.Size <= KVStorage::MAX_KEY_SIZE && (!m_pimpl->Map->KeySize || m_pimpl->Map->KeySize==k.Size));
-
-	m_pimpl->Put(k, d, bInsert);
-}
-
-void DbCursor::Update(const ConstBuf& d) {
-	if (m_pimpl->Map->Tx.ReadOnly)
-		Throw(errc::permission_denied);
-	if (!m_pimpl->Initialized || m_pimpl->Deleted || !m_pimpl->Positioned)
-		Throw(errc::invalid_argument);
-	m_pimpl->Update(d);
 }
 
 

@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -56,7 +56,7 @@ public:
 DECIMAL ToDecimal(const pair<int64_t, int>& pp) {
 	DECIMAL r = { 0 };
 	r.sign = pp.first<0 ? DECIMAL_NEG : 0;
-	r.scale = (byte)pp.second;
+	r.scale = (uint8_t)pp.second;
 	r.Lo64 = std::abs(pp.first);
 	return r;
 }
@@ -211,9 +211,9 @@ public:
 		*r = ToDecimal(m_wallet.Balance);
 	} METHOD_END
 
-	HRESULT __stdcall SendTo(DECIMAL amount, BSTR addr, BSTR comment) 
+	HRESULT __stdcall SendTo(DECIMAL amount, BSTR addr, BSTR comment)
 	METHOD_BEGIN {
-		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
+		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng, nullptr, true);
 		if (amount.sign || amount.Lo64==0)
 			Throw(E_INVALIDARG);
 		m_wallet.SendTo(make_decimal64(amount.Lo64, -amount.scale), addr, comment);
@@ -233,11 +233,32 @@ public:
 			if (m_saTxes.vt == VT_EMPTY) {
 				vector<WalletTx> vec;
 				EXT_LOCK (m_wallet.Eng.m_cdb.MtxDb) {
-					for (DbDataReader dr=m_wallet.Eng.m_cdb.CmdGetTxes.Bind(1, m_wallet.m_dbNetId).ExecuteReader(); dr.Read();) {
+					for (DbDataReader dr = m_wallet.Eng.m_cdb.CmdGetTxes.Bind(1, m_wallet.m_dbNetId).ExecuteReader(); dr.Read();) {
 						WalletTx wtx;
 						wtx.LoadFromDb(dr, true);
-						if (!m_wallet.Eng.m_cdb.Hash160ToMyKey.count(wtx.To))
-							wtx.Amount = -wtx.Amount;
+						auto& to = wtx.To;
+						switch (to.Type) {
+						case AddressType::P2PKH:
+							if (!m_wallet.Eng.m_cdb.Hash160ToKey.count((HashValue160)to))
+								wtx.Amount = -wtx.Amount;
+							break;
+						case AddressType::P2SH:
+							if (!m_wallet.Eng.m_cdb.P2SHToKey.count((HashValue160)to))
+								wtx.Amount = -wtx.Amount;
+							break;
+						case AddressType::Bech32:
+							switch (to.Data().size()) {
+							case 20:
+								if (!m_wallet.Eng.m_cdb.Hash160ToKey.count((HashValue160)to))
+									wtx.Amount = -wtx.Amount;
+								break;
+							case 32:
+								if (!m_wallet.Eng.m_cdb.P2SHToKey.count(Hash160(((HashValue)to).ToSpan())))	//!!!?
+									wtx.Amount = -wtx.Amount;
+								break;
+							}
+						}
+
 						vec.push_back(wtx);
 					}
 				}
@@ -245,10 +266,12 @@ public:
 				for (long idx=0; idx<vec.size(); ++idx) {
 					WalletTx& wtx = vec[idx];
 					CComPtr<ITransaction> iTx;
-					if (!Lookup(m_keyToTxCom, wtx.UniqueKey(), iTx)) {
+					if (optional<CComPtr<ITransaction>> oiTx = Lookup(m_keyToTxCom, wtx.UniqueKey()))
+						iTx = oiTx.value();
+					else {
 						auto ptx = new TransactionCom(_self);
 						iTx = (ITransaction*)ptx;
-						m_keyToTxCom.insert(make_pair(wtx.UniqueKey(), iTx));						
+						m_keyToTxCom.insert(make_pair(wtx.UniqueKey(), iTx));
 					}
 					TransactionCom *txCom = dynamic_cast<TransactionCom*>(iTx.P);
 					txCom->m_wtx = wtx;
@@ -281,7 +304,7 @@ public:
 		COleSafeArray sa;
 		vector<Address> ar = m_wallet.MyAddresses;
 		sa.CreateOneDim(VT_DISPATCH, ar.size());
-		for (long i=0; i<ar.size(); ++i)
+		for (long i = 0; i < ar.size(); ++i)
 			sa.PutElement(&i, GetAddressByString(ar[i]).Detach());
 		*r = sa.Detach().parray;
 	} METHOD_END
@@ -331,11 +354,11 @@ public:
 
 			EXT_FOR (const Address& addr, m_wallet.MyAddresses) {
 				m_str2addr[addr.ToString()] = static_cast<IAddress*>(new AddressCom(_self, addr));
-			}	
+			}
 
 			EXT_FOR (const Address& addr, m_wallet.Recipients) {
 				m_str2addr[addr.ToString()] = static_cast<IAddress*>(new AddressCom(_self, addr));
-			}	
+			}
 
 		} else {
 			m_wallet.Stop();
@@ -401,7 +424,7 @@ public:
 				}
 
 				if (Block bestBlock = m_wallet.Eng.BestBlock()) {
-					TimeSpan span = DateTime::UtcNow()-bestBlock.Timestamp;
+					TimeSpan span = Clock::now()-bestBlock.Timestamp;
 					if (span > hours(1)) {
 						int n;
 						if (span < hours(24))
@@ -411,7 +434,7 @@ public:
 						if (n > 1)
 							os << "s";
 						os << " ago";
-					} else 
+					} else
 						os << bestBlock.Timestamp.ToLocalTime();
 				}
 
@@ -445,10 +468,10 @@ public:
 
 	HRESULT __stdcall AddRecipient(BSTR addr, BSTR comment, IAddress **r)
 	METHOD_BEGIN {
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecipientAlreadyPresents);		
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
-		Address a(m_wallet.Eng, addr);
+		Address a(m_wallet.Eng, addr, comment);
 		m_str2addr.erase(addr);
-		a.Comment = comment;
 		m_wallet.AddRecipient(a);
 		*r = GetAddressByString(a).Detach();
 	} METHOD_END
@@ -482,14 +505,50 @@ public:
 	HRESULT __stdcall ImportFromBootstrapDat(BSTR filepath)
 	METHOD_BEGIN {
 		(new BootstrapDbThread(m_wallet.Eng, filepath))->Start();
-	} METHOD_END		
+	} METHOD_END
+
+	HRESULT __stdcall ImportPrivateKey(BSTR sKey, BSTR password)
+	METHOD_BEGIN {
+		CoinEng& eng = m_wallet.Eng;
+		CCoinEngThreadKeeper engKeeper(&eng);
+		String ssKey = String(sKey).Trim();
+		Blob blob = ConvertFromBase58(ssKey);
+		if (blob.Size < 33) {
+			Throw(CoinErr::InvalidPrivateKey);
+		}
+		uint8_t ver = blob.constData()[0];
+		if (ver == 0x80) {
+			KeyInfo ki;
+			ki.m_pimpl->SetPrivData(Span(blob.constData()+1, 32), blob.Size==34);
+			ki.Comment = "Imported";
+			EXT_LOCK(eng.m_cdb.MtxDb) {
+				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
+					eng.m_cdb.AddNewKey(ki);
+			}
+		} else if (ver==1 && blob.constData()[1] == 0x42) {
+			KeyInfo ki;
+			ki.m_pimpl->FromBIP38(ssKey, password);
+			ki.Comment = "Imported";
+			EXT_LOCK(eng.m_cdb.MtxDb) {
+				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
+					eng.m_cdb.AddNewKey(ki);
+			}
+		} else {
+			Throw(CoinErr::InvalidPrivateKey);
+		}
+	} METHOD_END
+
+	HRESULT __stdcall ExportKeys(BSTR password, BSTR filepath)
+	METHOD_BEGIN {
+		(new ExportKeysThread(m_wallet.Eng, filepath, password))->Start();
+	} METHOD_END
 
 	HRESULT __stdcall ExportToBootstrapDat(BSTR filepath)
 	METHOD_BEGIN {
 		ptr<BootstrapDbThread> t = new BootstrapDbThread(m_wallet.Eng, filepath);
 		t->Exporting = true;
 		t->Start();
-	} METHOD_END		
+	} METHOD_END
 
 	HRESULT __stdcall CancelPendingTxes()
 	METHOD_BEGIN {
@@ -559,7 +618,7 @@ class WalletAndEng : public Wallet {
 public:
 	CComPtr<IWallet> m_iWallet;
 
-	WalletAndEng(CoinDb& cdb, RCString name);	
+	WalletAndEng(CoinDb& cdb, RCString name);
 	~WalletAndEng();
 };
 
@@ -595,7 +654,7 @@ public:
 	CoinDb m_cdb;
 
 	vector<ptr<WalletAndEng>> m_vWalletEng;
-	
+
 	CoinEngCom() {
 	}
 
@@ -627,7 +686,7 @@ public:
 			m_cdb.Load();
 			vector<String> names;
 			String xml = CoinEng::GetCoinChainsXml();
-#if UCFG_WIN32		
+#if UCFG_WIN32
 			XmlDocument doc = new XmlDocument;
 			doc.LoadXml(xml);		// LoadXml() instead of Load() to eliminate loading shell32.dll
 			XmlNodeReader rd(doc);
@@ -726,7 +785,7 @@ HRESULT __stdcall TransactionCom::get_Fee(DECIMAL *r)
 METHOD_BEGIN {
 	DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
 	DBG_LOCAL_IGNORE_CONDITION(ExtErr::DB_NoRecord);
-	
+
 	CCoinEngThreadKeeper engKeeper(&m_wallet.m_wallet.Eng);
 	*r = ToDecimal(m_wallet.m_wallet.GetDecimalFee(m_wtx));
 } METHOD_END
@@ -745,7 +804,7 @@ METHOD_BEGIN {
 	EXT_LOCK (m_wallet.m_wallet.Eng.m_cdb.MtxDb) {
 		SqliteCommand(EXT_STR("UPDATE mytxes SET comment=? WHERE netid=" << m_wallet.m_wallet.m_dbNetId << " AND hash=?"), m_wallet.m_wallet.Eng.m_cdb.m_dbWallet)
 			.Bind(1, m_wtx.Comment)
-			.Bind(2, Hash(m_wtx))
+			.Bind(2, Hash(m_wtx).ToSpan())
 			.ExecuteNonQuery();
 	}
 } METHOD_END

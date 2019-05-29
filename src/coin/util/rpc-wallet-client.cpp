@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -6,7 +6,7 @@
 #include <el/ext.h>
 
 #include <el/libext/ext-net.h>
-#include <el/libext/ext-http.h>
+#include <el/inet/http.h>
 #if UCFG_WIN32
 #	include <el/libext/win32/ext-win.h>
 #endif
@@ -17,6 +17,8 @@ using namespace Ext::Inet;
 #include "wallet-client.h"
 
 namespace Coin {
+
+using namespace Ext::Inet;
 
 static atomic<int> s_aTriedPort;
 
@@ -39,7 +41,7 @@ uint16_t GetFreePort() {
 			sock.Bind(IPEndPoint(IPAddress::Any, port));
 			return port;
 		} catch (RCExc) {
-		}	
+		}
 	}
 	Throw(HRESULT_FROM_WIN32(ERROR_NO_SYSTEM_RESOURCES));
 }
@@ -82,8 +84,8 @@ public:
 		m_wc.CacheLevel = RequestCacheLevel::BypassCache;
 		m_wc.Credentials.UserName = Login;
 		m_wc.Credentials.Password = Password;
-	}	
-	
+	}
+
 	void Start() override {
 		if (!RpcUrl.get_Port())
 			RpcUrl = Uri("http://127.0.0.1:" + Convert::ToString(GetFreePort()));
@@ -91,7 +93,7 @@ public:
 			try {
 				DBG_LOCAL_IGNORE_CONDITION(errc::connection_refused);
 
-				Call("getinfo");			
+				Call("getinfo");
 
 				if (!PathDaemon.empty()) {
 					try {
@@ -116,7 +118,7 @@ public:
 				return;
 			TRC(2, "Process " << m_process.get_ID() << " exited with code " << m_process.get_ExitCode());
 		}
-		
+
 		String exeFilePath = System.get_ExeFilePath();
 		ostringstream os;
 		create_directories(DataDir);
@@ -131,7 +133,7 @@ public:
 			<< " -datadir=\"" << DataDir << "\"";
 		if (EnableNotifications) {
 			os << " -blocknotify=\"" << exeFilePath << " " << EpApi << " blocknotify " << Name << " %s\""
-			<< " -alertnotify=\"" << exeFilePath << " " << EpApi << " alertnotify " << Name << " %s\"";		
+			<< " -alertnotify=\"" << exeFilePath << " " << EpApi << " alertnotify " << Name << " %s\"";
 			if (WalletNotifications)
 				os << " -walletnotify=\"" << exeFilePath << " " << EpApi <<  " walletnotify " << Name << " %s\"";
 		}
@@ -255,7 +257,7 @@ public:
 		}
 	}
 
-	void SubmitBlock(const ConstBuf& data, RCString workid) override {
+	void SubmitBlock(RCSpan data, RCString workid) override {
 		String sdata = EXT_STR(data);
 		if (HasSubmitBlockMethod) {
 			try {
@@ -280,7 +282,7 @@ public:
 		}
 	}
 
-	void GetWork(const ConstBuf& data) override {
+	void GetWork(RCSpan data) override {
 		ProcessSubmitResult(Call("getwork", EXT_STR(data)));
 	}
 
@@ -288,12 +290,12 @@ public:
 		return (!!account ? Call("getnewaddress", account) : Call("getnewaddress")).ToString();
 	}
 protected:
-	Ext::WebClient GetWebClient() {
+	WebClient GetWebClient() {
 		return m_wc;
 	}
 
 	VarValue Call(RCString method, const vector<VarValue>& params = vector<VarValue>()) {
-		Ext::WebClient wc = GetWebClient();
+		WebClient wc = GetWebClient();
 		wc.Proxy = nullptr;		//!!!?
 		wc.CacheLevel = RequestCacheLevel::BypassCache;
 		wc.Credentials.UserName = !Login.empty() ? Login : RpcUrl.UserName;
@@ -305,7 +307,7 @@ protected:
 
 			sjson = wc.UploadString(RpcUrl.ToString(), JsonRpc.Request(method, params));
 		} catch (WebException& ex) {
-			if (ex.code() == http_error::unauthorized)
+			if (ex.code() == HttpStatusCode::Unauthorized)
 				throw;
 			sjson = ex.Result;
 		}

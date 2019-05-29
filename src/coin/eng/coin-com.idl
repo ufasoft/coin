@@ -81,6 +81,8 @@ library CointEng {
 		[id(28), propget] HRESULT LiteModeAllowed([out,retval] VARIANT_BOOL *r);
 		[id(29)] HRESULT ExportToBootstrapDat([in] BSTR filepath);
 		[id(30)] HRESULT ImportFromBootstrapDat([in] BSTR filepath);
+		[id(31)] HRESULT ImportPrivateKey([in] BSTR sKey, [in] BSTR password);
+		[id(32)] HRESULT ExportKeys([in] BSTR password, [in] BSTR filepath);
 	};
 
 	[uuid(55534654-3F35-46d9-0004-54BAFC250402)]

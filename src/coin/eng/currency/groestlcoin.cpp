@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2015-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -17,7 +17,6 @@ class GroestlBlockObj : public BlockObj {
 	typedef BlockObj base;
 public:
 	GroestlBlockObj() {
-		Ver = 112;
 	}
 protected:
 };
@@ -38,31 +37,38 @@ protected:
 		static const double logBase6percent = log(0.94),
 			logBase10percent = log(0.9),
 			logBase1percent = log(0.99);
-		int64_t r = height>=150000 ? int64_t(25 * ChainParams.CoinValue * exp(logBase1percent * ((height-150000) / 10080)))
-			: height>=120000 ? int64_t(250 * ChainParams.CoinValue * exp(logBase10percent * ((height-120000) / 1440)))
-			: height>1 ? (max)(5*ChainParams.CoinValue, int64_t(512 * ChainParams.CoinValue * exp(logBase6percent * (height / 10080))))
-			: height==1 ? 240640 * ChainParams.CoinValue
-			: ChainParams.CoinValue;
+		int64_t r =
+			height >= 1772880 ? 5 * ChainParams.CoinValue
+			: height >= 150000 ? int64_t(25 * ChainParams.CoinValue * exp(logBase1percent * ((height - 150000) / 10080)))
+			: height >= 120000 ? int64_t(250 * ChainParams.CoinValue * exp(logBase10percent * ((height - 120000) / 1440)))
+			: height > 1 ? (max)(5 * ChainParams.CoinValue, int64_t(512 * ChainParams.CoinValue * exp(logBase6percent * (height / 10080)))) : height == 1 ? 240640 * ChainParams.CoinValue : ChainParams.CoinValue;
 		return (bForCheck ? 1 : -44) + r;			// max difference with reference implementation is 43 until Block #10,000,000
 	}
 
-	HashValue HashFromTx(const Tx& tx) override {
-		return SHA256().ComputeHash(EXT_BIN(tx));
+	HashValue HashFromTx(const Tx& tx, bool widnessAware) override {
+        MemoryStream stm;
+		ProtocolWriter wr(stm);
+		wr.WitnessAware = widnessAware;
+        tx.Write(wr);
+		return SHA256().ComputeHash(stm);
 	}
 
-	HashValue HashForSignature(const ConstBuf& cbuf) override {
+	HashValue HashForSignature(RCSpan cbuf) override {
 		return SHA256().ComputeHash(cbuf);
 	}
 
-	HashValue HashMessage(const ConstBuf& cbuf) override {
+	HashValue HashMessage(RCSpan cbuf) override {
 		return GroestlHash(cbuf);		// OP_HASH256 implementation
 	}
 
-	HashValue HashForAddress(const ConstBuf& cbuf) override {
+	HashValue HashForAddress(RCSpan cbuf) override {
 		return GroestlHash(cbuf);
 	}
 
 	Target DarkGravityWave(const BlockHeader& headerLast, const Block& block, bool bWave3) {
+		if (!bWave3)
+			return block.get_DifficultyTarget();			// workaround of DarkGravityWave() v1 FP-non-determinism
+
 		const int minBlocks = bWave3 ? 24 : 12,
 			maxBlocks = bWave3 ? 24 : 120;
 
@@ -74,24 +80,24 @@ protected:
 		int64_t secAvg = 0, sum2 = 0;
 		int mass = 1;
 		DateTime dtPrev = b.Timestamp;
-		for (; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevHeader()) {
+		for (; b.Height > 0 && (maxBlocks <= 0 || mass <= maxBlocks); ++mass, b = b.GetPrevHeader()) {
 			DateTime dt = b.Timestamp;
 			if (bWave3) {
 				if (mass <= minBlocks) {
 					average = mass==1 ? BigInteger(b.get_DifficultyTarget())
-						: (BigInteger(b.get_DifficultyTarget()) + average*mass)/(mass + 1);
+						: (BigInteger(b.get_DifficultyTarget()) + average*mass) / (mass + 1);
 				}
 			} else {
 				if (mass <= minBlocks)
-					average += (BigInteger(b.get_DifficultyTarget()) - average)/mass;
+					average += (BigInteger(b.get_DifficultyTarget()) - average) / mass;
 				int diff = (max)(0, (int)duration_cast<seconds>(dtPrev - dt).count());
-				if (mass>1 && mass<=minBlocks+2)
+				if (mass > 1 && mass <= minBlocks + 2)
 					secAvg += (diff - secAvg)/(mass-1);
 				sum2 += diff;
 			}
 			dtPrev = dt;
 		}
-		
+
 		int count = mass - 1,
 			count2 = count - 1;
 		int secTarget = int(ChainParams.BlockSpan.count() * count);
@@ -105,7 +111,7 @@ protected:
 			actualSeconds = int(secTarget/shift);
 		}
 		if (bAdjustAverage)
-			average = average * clamp(actualSeconds, secTarget/3, secTarget*3) / secTarget;
+			average = average * clamp(actualSeconds, secTarget / 3, secTarget * 3) / secTarget;
 
 		return Target(average);
 	}

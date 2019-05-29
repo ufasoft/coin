@@ -89,7 +89,7 @@ public:
 
 		m_db.ExecuteNonQuery("PRAGMA locking_mode=EXCLUSIVE");
 	}
-	
+
 	bool Create(const path& p) override {
 		m_db.Create(p);
 
@@ -118,7 +118,7 @@ public:
 		SetPragmas();
 		return true;
 	}
-	
+
 	bool Open(const path& p) override {
 		m_db.Open(p, FileAccess::ReadWrite, FileShare::None);
 		SetPragmas();
@@ -139,7 +139,7 @@ public:
 		Version dbver = CheckUserVersion();
 		if (dbver < ver) {
 			TRC(0, "Upgrading Database " << eng.GetDbFilePath() << " from version " << dbver << " to " << ver);
-		
+
 			TransactionScope dbtx(m_db);
 			eng.UpgradeDb(ver);
 			SetUserVersion(m_db, ver);
@@ -194,14 +194,13 @@ public:
 		return TxHashesOutNums(m_cmdTxBlockordIdxToHash.Bind(1, height).ExecuteVector().GetBytes(0));
 	}
 
-	vector<uint32_t> InsertBlock(const Block& block, const ConstBuf& data, const ConstBuf& txData) override {
+	void InsertBlock(const Block& block) override {
 		m_cmdInsertBlock
 			.Bind(1, ReducedBlockHash(Hash(block)))
 			.Bind(2, int64_t(block.Height))
 			.Bind(3, data)
 			.Bind(4, txData)
 			.ExecuteNonQuery();
-		return vector<uint32_t>();
 	}
 
 	void DeleteBlock(int height, const vector<int64_t>& txids) override {
@@ -216,7 +215,7 @@ public:
 		SqliteCommand(EXT_STR("DELETE FROM blocks WHERE id=" << height), m_db).ExecuteNonQuery();
 	}
 
-	bool FindTxById(const ConstBuf& txid, Tx *ptx) override {
+	bool FindTxById(RCSpan txid, Tx *ptx) override {
 		EXT_LOCK (MtxSqlite) {
 			DbDataReader dr = m_cmdFindTx.Bind(1, *(int64_t*)txid.P).ExecuteReader();
 			if (!dr.Read())
@@ -254,8 +253,8 @@ public:
 //!!!		ASSERT(!MtxSqlite.try_lock());
 
 		DbDataReader dr = m_cmdTxHashToBlockordIdx
-								.Bind(1, ReducedHashValue(hash))
-								.ExecuteVector();
+							.Bind(1, ReducedHashValue(hash))
+							.ExecuteVector();
 		int heightOut = dr.GetInt32(0);
 		wr.Write7BitEncoded(height-heightOut+1);
 		pair<int, int> pp = TxHashesOutNums(dr.GetBytes(1)).StartingTxOutIdx(hash);
@@ -280,7 +279,7 @@ public:
 		return vec;
 	}
 
-	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, const ConstBuf& txIns, const ConstBuf& spend, const ConstBuf& data) override {
+	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data) override {
 		CoinEng& eng = Eng();
 
 		m_cmdInsertTx
@@ -292,13 +291,13 @@ public:
 		m_cmdInsertTx.Bind(5, data);
 		try {
 			DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, SQLITE_CONSTRAINT_PRIMARYKEY));
-					
+
 			m_cmdInsertTx.ExecuteNonQuery();
 		} catch (const SqliteException&) {
 			TRC(1, "Duplicated Transaction: " << txHash);
 
 			if (height >= eng.ChainParams.CheckDupTxHeight && ContainsInLinear(GetCoinsByTxHash(txHash), true))
-				Throw(CoinErr::DupNonSpentTx);						
+				Throw(CoinErr::DupNonSpentTx);
 
 			SqliteCommand("UPDATE txes SET coins=? WHERE id=?", m_db)
 				.Bind(1, spend)
@@ -325,12 +324,12 @@ public:
 		}
 	}
 
-	void InsertPubkey(int64_t id, const ConstBuf& pk) override {
+	void InsertPubkey(int64_t id, RCSpan pk) override {
 //!!!		ASSERT(!MtxSqlite.try_lock());
 		CmdPubkeyInsert.Bind(1, id).Bind(2, pk).ExecuteNonQuery();
 	}
 
-	void UpdatePubkey(int64_t id, const ConstBuf& pk) override {
+	void UpdatePubkey(int64_t id, RCSpan pk) override {
 //!!!		ASSERT(!MtxSqlite.try_lock());
 		CmdPubkeyUpdate.Bind(1, pk).Bind(2, id).ExecuteNonQuery();
 	}
@@ -342,11 +341,11 @@ public:
 		EXT_LOCKED(MtxSqlite, m_cmdBeginExclusive.ExecuteNonQuery());
 	//	EXT_LOCKED(MtxSqlite, m_db.BeginTransaction());
 	 }
-	
+
 	void Commit() override { EXT_LOCKED(MtxSqlite, m_cmdCommit.ExecuteNonQuery()); }
 
 	void Rollback() override { EXT_LOCKED(MtxSqlite, m_db.Rollback()); }
-	
+
 	void SetProgressHandler(int(*pfn)(void*), void *p = 0, int n = 1) override {
 		EXT_LOCK (MtxSqlite) {
 			m_db.SetProgressHandler(pfn, p, n);
@@ -366,7 +365,7 @@ public:
 		CoinEng& eng = Eng();
 		EXT_LOCK (MtxSqlite) {
 			if (eng.BestBlock() && !eng.JournalModeDelete) {
-				TimeSpan span = DateTime::UtcNow()-eng.BestBlock().Timestamp;
+				TimeSpan span = Clock::now()-eng.BestBlock().Timestamp;
 				if (!eng.InWalJournalMode && span > TimeSpan::FromDays(7)) {
 					eng.InWalJournalMode = true;
 					m_db.ExecuteNonQuery("PRAGMA journal_mode=wal");
@@ -384,21 +383,8 @@ public:
 		}
 	}
 
-	vector<Block> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) override {
-		vector<Block> r;
-		int idx = locators.FindIndexInMainChain();
-		EXT_LOCK (MtxSqlite) {
-			SqliteCommand cmd(EXT_STR("SELECT id, hash, data, txhashes FROM blocks WHERE id>" << idx << " ORDER BY id LIMIT " << 2000 + locators.DistanceBack), m_db);
-			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
-				Block block = LoadBlock(dr);
-				r.push_back(block);
-				if (Hash(block) == hashStop)
-					break;
-			}
-		}
-		return r;
-	}
-private:	
+	vector<BlockHeader> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) override;
+private:
 	Block LoadBlock(DbDataReader& sr);
 	void LoadFromDb(Tx& tx, DbDataReader& sr);
 };

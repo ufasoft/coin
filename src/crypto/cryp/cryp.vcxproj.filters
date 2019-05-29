@@ -13,9 +13,6 @@
     <Filter Include="comp">
       <UniqueIdentifier>{97cfe1e3-9955-49a7-aa92-39c513ee879d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="secp256k1_inc">
-      <UniqueIdentifier>{5cce225a-9776-47a2-9d6d-e54c2558ebff}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\asm">
       <UniqueIdentifier>{5a003bed-17de-4c3b-ba65-fce7a84d823f}</UniqueIdentifier>
     </Filter>
@@ -27,6 +24,15 @@
     </Filter>
     <Filter Include="shplib\H">
       <UniqueIdentifier>{5ff9b623-fddb-4199-98eb-649e09031c61}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="secp256k1">
+      <UniqueIdentifier>{5cce225a-9776-47a2-9d6d-e54c2558ebff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="secp256k1\x64">
+      <UniqueIdentifier>{c89455b7-a709-4d6f-b9c3-9e1c91d48c44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\asm_x64">
+      <UniqueIdentifier>{47c5fa13-d2d6-4ad1-b6fb-333565350fc9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -168,10 +174,13 @@
     <ClInclude Include="..\..\el\crypto\aes-imp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\el\comp\byte-permutation.h">
+      <Filter>comp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\FOREIGN\secp256k1\secp256k1.c">
-      <Filter>secp256k1_inc</Filter>
+      <Filter>secp256k1</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\comp\stdafx.cpp">
       <Filter>comp</Filter>
@@ -224,6 +233,12 @@
     <ClCompile Include="..\..\el\crypto\cipher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\el\comp\byte-permutation.cpp">
+      <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\el\crypto\siphash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cryp-64.def">
@@ -251,5 +266,22 @@
     <MASM Include="..\..\el\crypto\x86x64\groestl_x86x64.asm">
       <Filter>Source Files\asm</Filter>
     </MASM>
+    <MASM Include="..\..\el\crypto\x86x64\salsa20_x86x64.asm">
+      <Filter>Source Files\asm</Filter>
+    </MASM>
+    <MASM Include="x64\field_4x64_x64.asm">
+      <Filter>secp256k1\x64</Filter>
+    </MASM>
+    <MASM Include="x64\field_4x64_x64_bmi.asm">
+      <Filter>secp256k1\x64</Filter>
+    </MASM>
+    <MASM Include="..\..\..\FOREIGN\secp256k1\field_5x52_x64.asm">
+      <Filter>secp256k1\x64</Filter>
+    </MASM>
+    <MASM Include="..\..\el\crypto\x64\sha256_x64_sse2_bmi2.asm">
+      <Filter>Source Files\asm_x64</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
   </ItemGroup>
 </Project>

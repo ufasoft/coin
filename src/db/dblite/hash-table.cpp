@@ -14,7 +14,7 @@ namespace Ext { namespace DB { namespace KV {
 
 HashTable::HashTable(DbTransactionBase& tx)
 	:	base(tx)
-	,	PageMap(tx)	
+	,	PageMap(tx)
 	,	HtType(HashType::MurmurHash3)
 #ifdef X_DEBUG//!!!D
 	, MaxLevel(16)
@@ -25,22 +25,22 @@ HashTable::HashTable(DbTransactionBase& tx)
 	ASSERT(MaxLevel <= 32);
 }
 
-uint32_t HashTable::Hash(const ConstBuf& key) const {
+uint32_t HashTable::Hash(RCSpan key) const {
    	switch (HtType) {
    	case HashType::MurmurHash3:
    		return MurmurHash3_32(key, Tx.Storage.m_salt);
 	case HashType::Identity:
 	{
 		uint32_t r = 0;
-		for (size_t n=min(key.Size, size_t(4)), i=0; i<n; ++i)
-			r |= key.P[i] << 8*i;
+		for (size_t n = min(key.size(), size_t(4)), i = 0; i < n; ++i)
+			r |= key[i] << 8 * i;
 		return r;
 	}
 	case HashType::RevIdentity:
 		{
 			uint32_t r = 0;
-			for (size_t n=min(key.Size, size_t(4)), i=n; i--;)
-				r |= key.P[n-i-1] << 8*i;
+		for (size_t n = min(key.size(), size_t(4)), i = n; i--;)
+			r |= key[n - i - 1] << 8 * i;
 			return r;
 		}
    	default:
@@ -66,15 +66,15 @@ Page HashTable::TouchBucket(uint32_t nPage) {
 
 TableData HashTable::GetTableData() {
 	TableData r = base::GetTableData();
-	r.HtType = (byte)HtType;
+	r.HtType = (uint8_t)HtType;
 	r.RootPgNo = PageMap.PageRoot ? htole(PageMap.PageRoot.N) : 0;
 	r.PageMapLength = htole(PageMap.Length);
 	return r;
 }
 
 uint32_t HashTable::GetPgno(uint32_t nPage) const {
-	uint64_t offset = uint64_t(nPage) * 4;	
-	return offset<PageMap.Length ? PageMap.GetUInt32(offset) : 0;
+	uint64_t offset = uint64_t(nPage) * 4;
+	return offset < PageMap.Length ? PageMap.GetUInt32(offset) : 0;
 }
 
 BTreeSubCursor::BTreeSubCursor(HtCursor& cHT)
@@ -146,7 +146,7 @@ bool HtCursor::SeekToNext() {
 				return ClearKeyData();
 			SubCursor = nullptr;
 			m_pagePos.Pos = NumKeys(m_pagePos.Page);
-		}	
+		}
 		bool r = base::SeekToNext();
 		if (!r || !m_pagePos.Page.IsBranch)
 			return r;
@@ -167,10 +167,10 @@ bool HtCursor::SeekToPrev() {
 	}
 }
 
-bool HtCursor::SeekToKeyHash(const ConstBuf& k, uint32_t hash) {
+bool HtCursor::SeekToKeyHash(RCSpan k, uint32_t hash) {
 	SubCursor = nullptr;
 	Initialized = ClearKeyData();
-	for (int level=Ht->BitsOfHash(); level>=0; --level) {
+	for (int level = Ht->BitsOfHash(); level >= 0; --level) {
 		if (uint32_t pgno = Ht->GetPgno(NPage = hash & uint32_t((1LL << level)-1))) {				// converting to 1LL because int(1) << 32 == 1
 			PageHeader& h = (m_pagePos.Page = Ht->Tx.OpenPage(pgno)).Header();
 			if (h.Flags & PageHeader::FLAG_BRANCH) {
@@ -185,7 +185,7 @@ bool HtCursor::SeekToKeyHash(const ConstBuf& k, uint32_t hash) {
 	return false;
 }
 
-bool HtCursor::SeekToKey(const ConstBuf& k) {
+bool HtCursor::SeekToKey(RCSpan k) {
 	return SeekToKeyHash(k, Ht->Hash(k));
 }
 
@@ -210,9 +210,9 @@ void HashTable::Split(uint32_t nPage, int level) {
 	Page pageNew = dynamic_cast<DbTransaction&>(Tx).Allocate(PageAlloc::Leaf);
 	PageMap.PutUInt32(uint64_t(nPageNew)*4, pageNew.N);
 	uint32_t mask = uint32_t(1LL << (level+1))-1;
-	byte bitMask = 0;
+	uint8_t bitMask = 0;
 	PageHeader& h = page.Header();
-	byte keyOffset = h.KeyOffset();
+	uint8_t keyOffset = h.KeyOffset();
 	if (HtType==HashType::Identity && KeySize) {
 		if (h.Flags & PageHeader::FLAGS_KEY_OFFSET) {
 			bitMask = 1 << (level & 7);
@@ -222,9 +222,9 @@ void HashTable::Split(uint32_t nPage, int level) {
 	LiteEntry *entries = page.Entries(KeySize);
 	PageHeader& dh = pageNew.Header();
 	int off = (bitMask == 0x80) && keyOffset<KeySize ? 1 : 0;	//!!!  was: (bitMask == 0x80) && keyOffset<KeySize-1 ? 1 : 0
-	h.SetKeyOffset(byte(keyOffset + off));
+	h.SetKeyOffset(uint8_t(keyOffset + off));
 	dh.SetKeyOffset(h.KeyOffset());
-	byte *ps = h.Data,
+	uint8_t *ps = h.Data,
 		 *pd = dh.Data;
 	for (int i=0; i<h.Num; ++i) {
 		LiteEntry& e = entries[i];
@@ -244,12 +244,12 @@ void HashTable::Split(uint32_t nPage, int level) {
 	page.ClearEntries();
 }
 
-bool HtCursor::UpdateImpl(const ConstBuf& k, const ConstBuf& d, bool bInsert) {
-	pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.Size);
-	size_t ksize = Map->KeySize ? Map->KeySize-m_pagePos.Page.Header().KeyOffset() : 1+k.Size;
-	size_t entrySize = GetEntrySize(ppEntry, ksize, d.Size);
+bool HtCursor::UpdateImpl(RCSpan k, RCSpan d, bool bInsert) {
+	pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.size());
+	size_t ksize = Map->KeySize ? Map->KeySize - m_pagePos.Page.Header().KeyOffset() : 1 + k.size();
+	size_t entrySize = GetEntrySize(ppEntry, ksize, d.size());
 	if (m_pagePos.Page.SizeLeft(Map->KeySize) < entrySize) {
-		for (int level = BitOps::ScanReverse(NPage); level<Ht->MaxLevel; ++level) {
+		for (int level = BitOps::ScanReverse(NPage); level < Ht->MaxLevel; ++level) {
 			if (!Ht->GetPgno((1 << level) | NPage)) {
 				Ht->Split(NPage, level);
 				return false;
@@ -259,26 +259,26 @@ bool HtCursor::UpdateImpl(const ConstBuf& k, const ConstBuf& d, bool bInsert) {
 		UpdateFromSubCursor();
 		return true;
 	}
-	InsertImpHeadTail(ppEntry, k, d, d.Size, DB_EOF_PGNO);
+	InsertImpHeadTail(ppEntry, k, d, d.size(), DB_EOF_PGNO);
 	return true;
 }
 
-void HtCursor::Update(const ConstBuf& d) {
+void HtCursor::Update(RCSpan d) {
 	if (SubCursor) {
 		SubCursor->Update(d);
 		UpdateFromSubCursor();
 	} else {
-		ConstBuf k = get_Key();
-		byte key[256];
-		memcpy(key, k.P, k.Size);
-		k = ConstBuf(key, k.Size);
+		Span k = get_Key();
+		uint8_t key[256];
+		memcpy(key, k.data(), k.size());
+		k = Span(key, k.size());
 		Touch();
 		Delete();
 		if (!UpdateImpl(k, d, false)) {
 			uint32_t hash = Ht->Hash(k);
 			do {
 				SeekToKeyHash(k, hash);
-			} while (!UpdateImpl(k, d, false));	
+			} while (!UpdateImpl(k, d, false));
 		}
 	}
 }
@@ -291,7 +291,7 @@ void HtCursor::Delete() {
 		base::Delete();
 }
 
-void HtCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
+void HtCursor::Put(Span k, RCSpan d, bool bInsert) {
 	if (Ht->PageMap.Length == 0) {
 		Ht->PageMap.PutUInt32(0, dynamic_cast<DbTransaction&>(Ht->Tx).Allocate(PageAlloc::Leaf).N);
 		Map->Dirty = true;
@@ -303,7 +303,7 @@ void HtCursor::Put(ConstBuf k, const ConstBuf& d, bool bInsert) {
 		UpdateFromSubCursor();
 	} else {
 		if (bExists && bInsert)
-			throw DbException(ExtErr::DB_DupKey, nullptr);
+			throw DbException(make_error_code(ExtErr::DB_DupKey), nullptr);
 		Touch();
 		if (bExists)
 			Delete();

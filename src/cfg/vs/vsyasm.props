@@ -15,7 +15,7 @@
   <ItemDefinitionGroup>
     <YASM>
       <Debug>False</Debug>
-      <ObjectFile>$(IntDir)</ObjectFile>
+      <ObjectFile>$(IntDir)\%(RelativeDir)\%(FileName).obj</ObjectFile>
       <PreProc>0</PreProc>
       <Parser>0</Parser>
       <CommandLineTemplate>"$(YasmPath)"vsyasm.exe -Xvc -f $(Platform.ToLower()) [AllOptions] [AdditionalOptions] [Inputs]</CommandLineTemplate>

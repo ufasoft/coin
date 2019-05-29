@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -25,6 +25,9 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::InconsistentDatabase							, "Inconsistent Database"						}
 	, { CoinErr::SubsidyIsVeryBig								, "Subsidy is very big"							}
 	, { CoinErr::ContainsNonFinalTx								, "Block contains non-final transaction"		}
+	, { CoinErr::BadWitnessNonceSize							, "Bad Witness Nonce size"						}
+	, { CoinErr::BadWitnessMerkleMatch							, "Bad Witness Merkle match"					}
+	, { CoinErr::UnexpectedWitness								, "Unexpected Witness"							}
 	, { CoinErr::IncorrectProofOfWork							, "Incorrect Proof of Work"						}
 	, { CoinErr::ProofOfWorkFailed								, "Proof of Work failed"						}
 	, { CoinErr::TooEarlyTimestamp								, "Too early Timestamp"							}
@@ -40,7 +43,6 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::VeryBigPayload									, "Very Big Payload"							}
 	, { CoinErr::RecipientAlreadyPresents						, "This Recipient already presents"				}
 	, { CoinErr::XmlFileNotFound								, "File coin-chains.xml not Found or corrupted"	}
-	, { CoinErr::InvalidScript									, "Invalid xCoin Script"						}
 	, { CoinErr::NoCurrencyWithThisName							, "No Currency with this Name"					}
 	, { CoinErr::CheckpointVerifySignatureFailed				, "CheckPoint Verify Signature Failed"			}
 	, { CoinErr::BadBlockSignature								, "Bad Block Signature"							}
@@ -72,7 +74,50 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::BadPrevBlock									, "Previous Block not found"					}
 	, { CoinErr::InvalidPrivateKey								, "Invalid Private Key"							}
 	, { CoinErr::VersionMessageMustBeFirst						, "Version message must be first"				}
+	, { CoinErr::GetBlocksLocatorSize							, "getblocks message has too many locators"	}
 
+	, { CoinErr::SCRIPT_ERR_UNKNOWN_ERROR						, "Unknown Script error"						}
+	, { CoinErr::SCRIPT_ERR_EVAL_FALSE							, "Script evaluated without error but finished with a false/empty top stack element"	}
+	, { CoinErr::SCRIPT_ERR_VERIFY								, "Script failed an OP_VERIFY operation"		}
+	, { CoinErr::SCRIPT_ERR_EQUALVERIFY							, "Script failed an OP_EQUALVERIFY operation"	}
+	, { CoinErr::SCRIPT_ERR_CHECKMULTISIGVERIFY					, "Script failed an OP_CHECKMULTISIGVERIFY operation"	}
+	, { CoinErr::SCRIPT_ERR_CHECKSIGVERIFY						, "Script failed an OP_CHECKSIGVERIFY operation"	}
+	, { CoinErr::SCRIPT_ERR_NUMEQUALVERIFY						, "Script failed an OP_NUMEQUALVERIFY operation"	}
+	, { CoinErr::SCRIPT_ERR_SCRIPT_SIZE							, "Script is too big"							}
+	, { CoinErr::SCRIPT_ERR_PUSH_SIZE							, "Push value size limit exceeded"				}
+	, { CoinErr::SCRIPT_ERR_OP_COUNT							, "Operation limit exceeded"					}
+	, { CoinErr::SCRIPT_ERR_STACK_SIZE							, "Stack size limit exceeded"					}
+	, { CoinErr::SCRIPT_ERR_SIG_COUNT							, "Signature count negative or greater than pubkey count"	}
+	, { CoinErr::SCRIPT_ERR_PUBKEY_COUNT						, "Pubkey count negative or limit exceeded"		}
+	, { CoinErr::SCRIPT_ERR_BAD_OPCODE							, "Opcode missing or not understood"			}
+	, { CoinErr::SCRIPT_ERR_DISABLED_OPCODE						, "Attempted to use a disabled opcode"			}
+	, { CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION				, "Operation not valid with the current stack size"		}
+	, { CoinErr::SCRIPT_ERR_INVALID_ALTSTACK_OPERATION			, "Operation not valid with the current altstack size"	}
+	, { CoinErr::SCRIPT_ERR_OP_RETURN							, "OP_RETURN was encountered"					}
+	, { CoinErr::SCRIPT_ERR_UNBALANCED_CONDITIONAL				, "Invalid OP_IF construction"					}
+	, { CoinErr::SCRIPT_ERR_NEGATIVE_LOCKTIME					, "Negative locktime"							}
+	, { CoinErr::SCRIPT_ERR_UNSATISFIED_LOCKTIME				, "Locktime requirement not satisfied"			}
+	, { CoinErr::SCRIPT_ERR_SIG_HASHTYPE						, "Signature hash type missing or not understood"	}
+	, { CoinErr::SCRIPT_ERR_SIG_DER								, "Non-canonical DER signature"						}
+	, { CoinErr::SCRIPT_ERR_MINIMALDATA							, "Data push larger than necessary"					}
+	, { CoinErr::SCRIPT_ERR_SIG_PUSHONLY						, "Only non-push operators allowed in signatures"	}
+	, { CoinErr::SCRIPT_ERR_SIG_HIGH_S							, "Non-canonical signature: S value is unnecessarily high"	}
+	, { CoinErr::SCRIPT_ERR_SIG_NULLDUMMY						, "Dummy CHECKMULTISIG argument must be zero"		}
+	, { CoinErr::SCRIPT_ERR_MINIMALIF							, "OP_IF/NOTIF argument must be minimal"			}
+	, { CoinErr::SCRIPT_ERR_SIG_NULLFAIL						, "Signature must be zero for failed CHECK(MULTI)SIG operation"	}
+	, { CoinErr::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS			, "NOPx reserved for soft-fork upgrades"			}
+	, { CoinErr::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM	, "Witness version reserved for soft-fork upgrades"	}
+	, { CoinErr::SCRIPT_ERR_PUBKEYTYPE							, "Public key is neither compressed or uncompressed"	}
+	, { CoinErr::SCRIPT_ERR_CLEANSTACK							, "Extra items left on stack after execution"		}
+	, { CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WRONG_LENGTH		, "Witness program has incorrect length"			}
+	, { CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY		, "Witness program was passed an empty witness"		}
+	, { CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH			, "Witness program hash mismatch"					}
+	, { CoinErr::SCRIPT_ERR_WITNESS_MALLEATED					, "Witness requires empty scriptSig"				}
+	, { CoinErr::SCRIPT_ERR_WITNESS_MALLEATED_P2SH				, "Witness requires only-redeemscript scriptSig"	}
+	, { CoinErr::SCRIPT_ERR_WITNESS_UNEXPECTED					, "Witness provided for non-witness script"			}
+	, { CoinErr::SCRIPT_ERR_WITNESS_PUBKEYTYPE					, "Using non-compressed keys in segwit"				}
+	, { CoinErr::SCRIPT_ERR_OP_CODESEPARATOR					, "Using OP_CODESEPARATOR in non-witness script"	}
+	, { CoinErr::SCRIPT_ERR_SIG_FINDANDDELETE					, "Signature is found in scriptCode"				}
 
 	, { CoinErr::RPC_MISC_ERROR									, "Exception thrown in command handling"		}
 	, { CoinErr::RPC_FORBIDDEN_BY_SAFE_MODE						, "Server is in safe mode, and command is not allowed in safe mode"	}
@@ -131,20 +176,25 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::MINER_UNKNOWN_WORK								, "the template or workid could not be identified"										}
 	, { CoinErr::MINER_FPGA_PROTOCOL							, "FPGA hardware protocol violation, try to RESET the device"							}
 };
-	
+
 
 
 static class CoinCategory : public ErrorCategoryBase {
 	typedef ErrorCategoryBase base;
 public:
+	unordered_map<CoinErr, const char*> m_map;
+
 	CoinCategory()
 		:	base("Coin", FACILITY_COIN)
-	{}
+	{
+		for (auto& m : s_coinMessageTable) {
+			m_map[m.Code] = m.Msg;
+		}
+	}
 
 	string message(int errval) const override {
-		if (const char *s = FindInCodeMessageTable(s_coinMessageTable, errval))
-			return s;
-		return "Unknown Coin error";
+		auto it = m_map.find((CoinErr)errval);
+		return it != m_map.end() ? it->second : "Unknown Coin error";
 	}
 } s_coin_category;
 
@@ -172,4 +222,3 @@ int SubmitRejectionCode(RCString rej) {
 }
 
 } // Coin::
-

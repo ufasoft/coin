@@ -11,3 +11,10 @@
 *.lai
 *.la
 *.a
+
+
+.vs/
+src/coin/.vs
+x64_R_St/
+x86_R_St/
+obj/

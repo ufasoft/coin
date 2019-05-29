@@ -13,11 +13,17 @@ using namespace Ext::Crypto;
 namespace Coin {
 
 void CMasterKey::Write(BinaryWriter& wr) const {
-	wr << vchCryptedKey << vchSalt << nDerivationMethod << nDeriveIterations << vchOtherDerivationParameters;
+    Ext::Write(wr, vchCryptedKey);
+    Ext::Write(wr, vchSalt);
+    wr << nDerivationMethod << nDeriveIterations;
+    Ext::Write(wr, vchOtherDerivationParameters);
 }
 
 void CMasterKey::Read(const BinaryReader& rd) {
-	rd >> vchCryptedKey >> vchSalt >> nDerivationMethod >> nDeriveIterations >> vchOtherDerivationParameters;
+    Ext::Read(rd, vchCryptedKey);
+    Ext::Read(rd, vchSalt);
+    rd >> nDerivationMethod >> nDeriveIterations;
+    Ext::Read(rd, vchOtherDerivationParameters);
 }
 
 void CWalletKey::Write(BinaryWriter& wr) const {
@@ -67,21 +73,21 @@ bool CCrypter::Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned
 
 
 	Aes aes;
-	aes.Key = ConstBuf(chKey, sizeof chKey);
-	aes.IV = ConstBuf(chIV, sizeof chIV);
+	aes.Key = Span(chKey, sizeof chKey);
+	aes.IV = Span(chIV, sizeof chIV);
 	Blob r = aes.Encrypt(vchPlaintext);
 	vchCiphertext = vector<unsigned char>(r.constData(), r.constData()+r.Size);
 
     return true;
 }
 
-bool CCrypter::Decrypt(const ConstBuf& vchCiphertext, CKeyingMaterial& vchPlaintext) {
+bool CCrypter::Decrypt(RCSpan vchCiphertext, CKeyingMaterial& vchPlaintext) {
     if (!fKeySet)
         return false;
 
 	Aes aes;
-	aes.Key = ConstBuf(chKey, sizeof chKey);
-	aes.IV = ConstBuf(chIV, sizeof chIV);
+	aes.Key = Span(chKey, sizeof chKey);
+	aes.IV = Span(chIV, sizeof chIV);
 	vchPlaintext = aes.Decrypt(vchCiphertext);
 
     return true;
@@ -96,7 +102,7 @@ bool EncryptSecret(CKeyingMaterial& vMasterKey, const Blob& vchPlaintext, const 
     return cKeyCrypter.Encrypt((CKeyingMaterial)vchPlaintext, vchCiphertext);
 }
 
-bool DecryptSecret(const CKeyingMaterial& vMasterKey, const ConstBuf& vchCiphertext, const HashValue& nIV, Blob& vchPlaintext) {
+bool DecryptSecret(const CKeyingMaterial& vMasterKey, RCSpan vchCiphertext, const HashValue& nIV, Blob& vchPlaintext) {
     CCrypter cKeyCrypter;
     std::vector<unsigned char> chIV(WALLET_CRYPTO_KEY_SIZE);
     memcpy(&chIV[0], nIV.data(), WALLET_CRYPTO_KEY_SIZE);

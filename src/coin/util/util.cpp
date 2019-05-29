@@ -84,15 +84,15 @@ String AlgoToString(HashAlgo algo) {
 	}
 }
 
-void BitsToTargetBE(uint32_t bits, byte target[32]) {
+void BitsToTargetBE(uint32_t bits, uint8_t target[32]) {
 	memset(target, 0, 32);
-	int off = byte(bits>>24)-3;
+	int off = uint8_t(bits>>24)-3;
 	if (off < 30 && off >= -2)
-		target[29-off] = byte(bits>>16);
+		target[29-off] = uint8_t(bits>>16);
 	if (off < 31 && off >= -1)
-		target[30-off] = byte(bits>>8);
+		target[30-off] = uint8_t(bits>>8);
 	if (off < 32 && off >= 0)
-		target[31-off] = byte(bits);
+		target[31-off] = uint8_t(bits);
 }
 
 static const HashValue s_NullHashValue;
@@ -103,10 +103,10 @@ HashValue::HashValue(const hashval& hv) {
 	memcpy(data(), hv.data(), hv.size());
 }
 
-HashValue::HashValue(const ConstBuf& mb) {
-	if (mb.Size != 32)
+HashValue::HashValue(RCSpan mb) {
+	if (mb.size() != 32)
 		Throw(errc::invalid_argument);
-	memcpy(data(), mb.P, mb.Size);
+	memcpy(data(), mb.data(), mb.size());
 }
 
 const HashValue& HashValue::Null() {
@@ -150,15 +150,21 @@ HashValue HashValue::FromShareDifficulty(double difficulty, HashAlgo algo) {
 	return r;
 }
 
-BlockHashValue::BlockHashValue(const ConstBuf& mb) {
-	ASSERT(mb.Size>=1 && mb.Size<=32);
-	memcpy(data(), mb.P, mb.Size);
+BlockHashValue::BlockHashValue(RCSpan mb) {
+	ASSERT(mb.size() >= 1 && mb.size() <= 32);
+	memcpy(data(), mb.data(), mb.size());
 }
 
 HashValue::HashValue(RCString s) {
-	Blob blob = Blob::FromHexString(s);	
+	Blob blob = Blob::FromHexString(s);
 	ASSERT(blob.Size == 32);
 	reverse_copy(blob.constData(), blob.constData()+32, data());
+}
+
+HashValue::HashValue(const char *s) {
+    Blob blob = Blob::FromHexString(s);
+    ASSERT(blob.Size == 32);
+    reverse_copy(blob.constData(), blob.constData() + 32, data());
 }
 
 bool HashValue::operator<(const HashValue& v) const {
@@ -166,57 +172,62 @@ bool HashValue::operator<(const HashValue& v) const {
 }
 
 HashValue HashValue::Combine(const HashValue& h1, const HashValue& h2) {
-	byte buf[64];
+	uint8_t buf[64];
 	memcpy(buf, h1.data(), 32);
 	memcpy(buf+32, h2.data(), 32);
-	SHA256 sha;
-	return HashValue(sha.ComputeHash(sha.ComputeHash(ConstBuf(buf, 64))));
+	return SHA256_SHA256(Span(buf, 64));
 }
 
 HashValue160::HashValue160(RCString s) {
-	Blob blob = Blob::FromHexString(s);	
+	Blob blob = Blob::FromHexString(s);
 	ASSERT(blob.Size == 20);
-	reverse_copy(blob.constData(), blob.constData()+20, data());
+	reverse_copy(blob.constData(), blob.constData() + 20, data());
 }
 
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
-	byte buf[32];
+	uint8_t buf[32];
 	memcpy(buf, hash.data(), 32);
-	std::reverse(buf, buf+32);
+	std::reverse(buf, buf + 32);
 	return os << ConstBuf(buf, 32);
 }
 
-Blob CalcSha256Midstate(const ConstBuf& mb) {
+COIN_UTIL_API wostream& operator<<(wostream& os, const HashValue& hash) {
+	uint8_t buf[32];
+	memcpy(buf, hash.data(), 32);
+	std::reverse(buf, buf + 32);
+	return os << ConstBuf(buf, 32);
+}
+
+Blob CalcSha256Midstate(RCSpan mb) {
 	uint32_t w[64];
-	uint32_t *pw = (uint32_t*)mb.P;
-	for (int i=0; i<16; ++i)
+	uint32_t *pw = (uint32_t*)mb.data();
+	for (int i = 0; i < 16; ++i)
 		w[i] = letoh(pw[i]);
 	Blob r(s_sha256_hinit, 8*sizeof(uint32_t));
 	uint32_t *pv = (uint32_t*)r.data();
-	SHA256().HashBlock(pv, (const byte*)w, 0);				// BitcoinSha256().CalcRounds(w, s_sha256_hinit, pv, 16, 0, 64);
-	for (int i=0; i<8; ++i)
+	SHA256().HashBlock(pv, (uint8_t*)w, 0);				// BitcoinSha256().CalcRounds(w, s_sha256_hinit, pv, 16, 0, 64);
+	for (int i = 0; i < 8; ++i)
 		pv[i] = htole(pv[i]);
 	return r;
 }
 
 void CoinSerialized::WriteVarInt(BinaryWriter& wr, uint64_t v) {
 	if (v < 0xFD)
-		wr << byte(v);
+		wr << uint8_t(v);
 	else if (v <= 0xFFFF)
-		wr << byte(0xFD) << uint16_t(v);
+		wr << uint8_t(0xFD) << uint16_t(v);
 	else if (v <= 0xFFFFFFFFUL)
-		wr << byte(0xFE) << uint32_t(v);
+		wr << uint8_t(0xFE) << uint32_t(v);
 	else
-		wr << byte(0xFF) << v;
+		wr << uint8_t(0xFF) << v;
 }
 
 uint64_t CoinSerialized::ReadVarInt(const BinaryReader& rd) {
-	switch (byte pref = rd.ReadByte()) {
-	case 0xFD:	return rd.ReadUInt16();
-	case 0xFE:	return rd.ReadUInt32();
-	case 0xFF:	return rd.ReadUInt64();
-	default:
-		return pref;
+	switch (uint8_t pref = rd.ReadByte()) {
+	case 0xFD: return rd.ReadUInt16();
+	case 0xFE: return rd.ReadUInt32();
+	case 0xFF: return rd.ReadUInt64();
+	default: return pref;
 	}
 }
 
@@ -239,33 +250,33 @@ String CoinSerialized::ReadString(const BinaryReader& rd) {
 	return String((const char*)blob.constData(), blob.Size);
 }
 
-void CoinSerialized::WriteBlob(BinaryWriter& wr, const ConstBuf& mb) {
-	WriteVarInt(wr, mb.Size);
-	wr.Write(mb.P, mb.Size);
+void CoinSerialized::WriteSpan(BinaryWriter& wr, RCSpan mb) {
+	WriteVarInt(wr, mb.size());
+	wr.Write(mb.data(), mb.size());
 }
 
-void BlockBase::WriteHeader(BinaryWriter& wr) const {
+void BlockBase::WriteHeader(ProtocolWriter& wr) const {
 	wr << Ver << PrevBlockHash << MerkleRoot() << (uint32_t)to_time_t(Timestamp) << DifficultyTargetBits << Nonce;
 }
 
 HashValue BlockBase::GetHash() const {
 	MemoryStream ms;
-	WriteHeader(BinaryWriter(ms).Ref());
-	return Coin::Hash(ms);
+	WriteHeader(ProtocolWriter(ms).Ref());
+	return Coin::Hash(ms.AsSpan());
 }
 
-Blob Swab32(const ConstBuf& buf) {
-	if (buf.Size % 4)
+Blob Swab32(RCSpan buf) {
+	if (buf.size() % 4)
 		Throw(errc::invalid_argument);
 	Blob r(buf);
 	uint32_t *p = (uint32_t*)r.data();
-	for (int i=0; i<buf.Size/4; ++i)
+	for (int i = 0; i < buf.size() / 4; ++i)
 		p[i] = _byteswap_ulong(p[i]);
 	return r;
 }
 
 void FormatHashBlocks(void* pbuffer, size_t len) {
-    byte* pdata = (byte*)pbuffer;
+    uint8_t* pdata = (uint8_t*)pbuffer;
     uint32_t blocks = 1 + ((len + 8) / 64);
     pdata[len] = 0x80;
     memset(pdata + len+1, 0, 64 * blocks - len-1);
@@ -275,12 +286,13 @@ void FormatHashBlocks(void* pbuffer, size_t len) {
 		*p = _byteswap_ulong(*p);
 }
 
-BinaryWriter& operator<<(BinaryWriter& wr, const CCoinMerkleBranch& branch) {
-	CoinSerialized::Write(wr, branch.Vec);	
-	return wr << int32_t(branch.Index);
+ProtocolWriter& operator<<(ProtocolWriter& wr, const CCoinMerkleBranch& branch) {
+	CoinSerialized::Write(wr, branch.Vec);
+	wr << int32_t(branch.Index);
+    return wr;
 }
 
-const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch) {
+const ProtocolReader& operator>>(const ProtocolReader& rd, CCoinMerkleBranch& branch) {
 	CoinSerialized::Read(rd, branch.Vec);
 	branch.Index = rd.ReadInt32();
 	branch.m_h2 = &HashValue::Combine;
@@ -290,12 +302,12 @@ const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch
 
 /*!!!R
 void MerkleBranch::Write(BinaryWriter& wr) const {
-	CoinSerialized::Write(wr, Vec);	
+	CoinSerialized::Write(wr, Vec);
 	wr << Index;
 }
 
 void MerkleBranch::Read(const BinaryReader& rd) {
-	CoinSerialized::Read(rd, Vec);	
+	CoinSerialized::Read(rd, Vec);
 	rd >> Index;
 }
 
@@ -304,7 +316,7 @@ HashValue MerkleBranch::Apply(HashValue hash) const {
 		return HashValue::Null();
 	int idx = Index;
 	EXT_FOR (const HashValue& other, Vec) {
-		byte buf[32*2];
+		uint8_t buf[32*2];
 		if (idx & 1) {
 			memcpy(buf, other.data(), 32);
 			memcpy(buf+32, hash.data(), 32);
@@ -351,11 +363,11 @@ void HasherEng::SetCurrent(HasherEng *heng) {
 	t_pHasherEng = heng;
 }
 
-HashValue HasherEng::HashBuf(const ConstBuf& cbuf) {
+HashValue HasherEng::HashBuf(RCSpan cbuf) {
 	return SHA256_SHA256(cbuf);
 }
 
-HashValue HasherEng::HashForAddress(const ConstBuf& cbuf) {
+HashValue HasherEng::HashForAddress(RCSpan cbuf) {
 	return HashBuf(cbuf);
 }
 
@@ -368,7 +380,7 @@ CHasherEngThreadKeeper::~CHasherEngThreadKeeper() {
 	t_pHasherEng = m_prev;
 }
 
-HashValue Hash(const ConstBuf& mb) {
+HashValue Hash(RCSpan mb) {
 	return HasherEng::GetCurrent()->HashBuf(mb);
 }
 

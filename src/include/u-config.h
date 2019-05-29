@@ -93,5 +93,3 @@
 #define UCFG_COIN_DOGECOIN 0
 
 #define UCFG_OS_IMPTLS 1
-
-

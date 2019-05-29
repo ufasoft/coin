@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com      ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -50,11 +50,11 @@ private:
 
 
 
-Blob BuggyAes::Encrypt(const ConstBuf& cbuf) {
+Blob BuggyAes::Encrypt(RCSpan cbuf) {
 #if UCFG_USE_OPENSSL
 	int rlen = cbuf.Size+AES_BLOCK_SIZE, flen = 0;
 	Blob r(0, rlen);
-    
+
 	CipherCtx ctx;
     SslCheck(::EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), 0, m_key.constData(), IV.constData()));		//!!! should be EVP_EncryptInit_ex() in normal AES
     SslCheck(::EVP_EncryptUpdate(ctx, r.data(), &rlen, cbuf.P, cbuf.Size));
@@ -66,27 +66,27 @@ Blob BuggyAes::Encrypt(const ConstBuf& cbuf) {
 	const int cbBlock = BlockSize / 8;
 	MemoryStream ms;
 	Blob block(0, cbBlock);
-	byte *tdata = (byte*)alloca(cbBlock);
-	ConstBuf state = IV;
+	uint8_t *tdata = (uint8_t*)alloca(cbBlock);
+	Span state = IV;
 	Blob ekey = CalcInvExpandedKey();
 	for (size_t pos = 0;; pos += block.Size) {
-		size_t size = (min)(cbuf.Size - pos, size_t(cbBlock));
-		memcpy(tdata, cbuf.P + pos, size);
+		size_t size = (min)(cbuf.size() - pos, size_t(cbBlock));
+		memcpy(tdata, cbuf.data() + pos, size);
 		if (size < cbBlock)
 			Pad(tdata, cbBlock - size);
 
 		DecryptBlock(ekey, tdata);
-		VectorXor(tdata, state.P, cbBlock);
-		state = ConstBuf(cbuf.P+pos, cbBlock);
+		VectorXor(tdata, state.data(), cbBlock);
+		state = Span(cbuf.data() + pos, cbBlock);
 		ms.WriteBuffer(tdata, cbBlock);
 		if (size < cbBlock)
 			break;
 	}
-	return ms;
+	return Span(ms);
 #endif
 }
 
-Blob BuggyAes::Decrypt(const ConstBuf& cbuf) {
+Blob BuggyAes::Decrypt(RCSpan cbuf) {
 #if UCFG_USE_OPENSSL
 	int rlen = cbuf.Size, flen = 0;
 	Blob r(0, rlen);
@@ -100,25 +100,25 @@ Blob BuggyAes::Decrypt(const ConstBuf& cbuf) {
 #else
 	InitParams();
 	const int cbBlock = BlockSize/8;
-	if (cbuf.Size % cbBlock)
+	if (cbuf.size() % cbBlock)
 		Throw(errc::invalid_argument);
 	MemoryStream ms;
 	Blob block = IV;
-	ConstBuf state = IV;
+	Span state = IV;
 	Blob ekey = CalcExpandedKey();
-	for (size_t pos=0;  pos<cbuf.Size; pos+=block.Size) {
-		VectorXor(block.data(), cbuf.P+pos, cbBlock);
-		EncryptBlock(ekey, block.data());		
-		if (pos+cbBlock==cbuf.Size) {
-			byte nPad = block.constData()[cbBlock-1];
+	for (size_t pos = 0; pos < cbuf.size(); pos += block.Size) {
+		VectorXor(block.data(), cbuf.data() + pos, cbBlock);
+		EncryptBlock(ekey, block.data());
+		if (pos + cbBlock == cbuf.size()) {
+			uint8_t nPad = block.constData()[cbBlock-1];
 			for (int i=0; i<nPad; ++i)
 				if (block.constData()[cbBlock-1-i] != nPad)
 					Throw(ExtErr::Crypto);									//!!!TODO Must be EXT_Crypto_DecryptFailed
-			ms.WriteBuffer(block.constData(), cbBlock-nPad);		
+			ms.WriteBuffer(block.constData(), cbBlock-nPad);
 		} else
-			ms.WriteBuf(block);
+			ms.Write(block);
 	}
-	return ms;
+	return Span(ms);
 #endif
 }
 

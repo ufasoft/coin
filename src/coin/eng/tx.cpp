@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -13,64 +13,169 @@ using namespace std::placeholders;
 #include <el/num/mod.h>
 using namespace Ext::Num;
 
-#define OPENSSL_NO_SCTP
-#include <openssl/err.h>
-#include <openssl/ec.h>
-
 #include "coin-protocol.h"
 #include "script.h"
 #include "crypter.h"
 #include "eng.h"
 #include "coin-model.h"
 
+#include <crypto/cryp/secp256k1.h>
+
+#if UCFG_COIN_ECC == 'S'
+#else
+#	define OPENSSL_NO_SCTP
+#	include <openssl/err.h>
+#	include <openssl/ec.h>
+#endif
+
 namespace Coin {
 
-const Blob& TxIn::Script() const {
+static Blob VararrayToBlob(const vararray<uint8_t, 65>& ar) { //!!!OT
+	return Blob(ar.data(), ar.size());
+}
+
+Span TxIn::Script() const {
 	if (!m_script) {
 		CoinEng& eng = Eng();
-		Tx tx = Tx::FromDb(PrevOutPoint.TxHash);
-		const TxOut& txOut = tx.TxOuts()[PrevOutPoint.Index];
-		Blob pk = RecoverPubKeyType & 0x40
-			? Sec256Dsa::RecoverPubKey(SignatureHash(txOut.get_PkScript(), *m_pTxo, N, 1), ConstBuf(m_sig.constData()+1, m_sig.Size-1), RecoverPubKeyType&3, RecoverPubKeyType&4)
-			: eng.GetPkById(txOut.m_idPk);
-		byte lenPk = byte(pk.Size);
-		m_script.AssignIfNull(m_sig + ConstBuf(&lenPk, 1) + pk);
+		int nIn = int(this - &m_pTxo->m_txIns[0]);
+		SignatureHasher hasher(*m_pTxo);
+		hasher.NIn = nIn;
+		hasher.HashType = SigHashType::SIGHASH_ALL;
+		Blob pk = RecoverPubKeyType & 0x40 ? VararrayToBlob(Sec256Dsa::RecoverPubKey(hasher.Hash(PrevTxOut.get_ScriptPubKey()).ToSpan(), Span(m_sig.constData() + 1, m_sig.Size - 1), RecoverPubKeyType & 3, RecoverPubKeyType & 4))
+										   : Span(eng.GetPkById(PrevTxOut.m_idPk).Data);
+		uint8_t lenPk = uint8_t(pk.Size);
+		m_script.AssignIfNull(m_sig + Span(&lenPk, 1) + pk);
 	}
 	return m_script;
 }
 
-void TxIn::Write(BinaryWriter& wr) const {
-	wr << PrevOutPoint;
-	CoinSerialized::WriteBlob(wr, Script());
-	wr << Sequence;
+unsigned WitnessSigOps(uint8_t ver, RCSpan program, const vector<Blob>& witness) {
+    return ver != 0
+        ? 0
+        : program.size() == WITNESS_V0_KEYHASH_SIZE ? 1
+        : program.size() == WITNESS_V0_SCRIPTHASH_SIZE && !witness.empty() ? CalcSigOpCount1(witness.back(), true)
+        : 0;
+}
+
+unsigned TxIn::CountWitnessSigOps() const {
+    if (!t_features.SegWit)
+        return 0;
+
+    Span scriptPubKey = PrevTxOut.ScriptPubKey;
+    auto pp = Script::WitnessProgram(scriptPubKey);
+    if (pp.first.data())
+        return WitnessSigOps(pp.second, pp.first, Witness);
+
+    Span scriptSig = Script();
+    if (Script::IsPayToScriptHash(scriptPubKey) && Script::IsPushOnly(scriptSig)) {
+        LiteInstr lastInstr;
+        for (CMemReadStream stm(scriptSig); GetInstr(stm, lastInstr);)
+            ;
+        pp = Script::WitnessProgram(lastInstr.Value);
+        if (pp.first.data())
+            return WitnessSigOps(pp.second, pp.first, Witness);
+    }
+    return 0;
+}
+
+void TxIn::Write(ProtocolWriter& wr, bool writeForSigHash) const {
+	PrevOutPoint.Write(wr);
+	CoinSerialized::WriteSpan(wr, !wr.ForSignatureHash ? Script() : writeForSigHash ? wr.ClearedScript : Span());
+	wr << (!wr.HashTypeSingle && !wr.HashTypeNone || writeForSigHash ? Sequence : 0);
 }
 
 void TxIn::Read(const BinaryReader& rd) {
-	rd >> PrevOutPoint;
+	PrevOutPoint.Read(rd);
 	m_script = CoinSerialized::ReadBlob(rd);
 	rd >> Sequence;
 }
 
 void TxOut::Write(BinaryWriter& wr) const {
-	CoinSerialized::WriteBlob(wr << Value, get_PkScript());
+	CoinSerialized::WriteSpan(wr << Value, get_ScriptPubKey());
 }
 
 void TxOut::Read(const BinaryReader& rd) {
-	m_pkScript = CoinSerialized::ReadBlob(rd >> Value);
+	m_scriptPubKey = CoinSerialized::ReadBlob(rd >> Value);
+}
+
+Tx CTxMap::Find(const HashValue& hash) const {
+	return Lookup(m_map, hash).value_or(Tx());
+}
+
+const Tx& CTxMap::Get(const HashValue& hash) const {
+	return m_map.at(hash);
 }
 
 const TxOut& CTxMap::GetOutputFor(const OutPoint& prev) const {
-	return at(prev.TxHash).TxOuts().at(prev.Index);
+	auto it = m_map.find(prev.TxHash);
+	if (it == m_map.end())
+		throw TxNotFoundException(prev.TxHash);
+	return it->second.TxOuts().at(prev.Index);
+}
+
+void CTxMap::Add(const Tx& tx) {
+	if (!m_map.insert(make_pair(Hash(tx), tx)).second)
+		Throw(E_FAIL);
+}
+
+bool CFutureTxMap::Contains(const HashValue& hash) const {
+	return EXT_LOCKED(m_mtx, m_map.count(hash));
+}
+
+Tx CFutureTxMap::Find(const HashValue& hash) const {
+	shared_future<TxFeeTuple> ft;
+	EXT_LOCK(m_mtx) {
+		if (auto o = Lookup(m_map, hash))
+			ft = o.value();
+		else
+			return nullptr;
+	}
+	return ft.get().Tx;
+}
+
+const Tx& CFutureTxMap::Get(const HashValue& hash) const {
+	shared_future<TxFeeTuple> ft = EXT_LOCKED(m_mtx, m_map.at(hash)); // not reference to prevend deadlock
+	return ft.get().Tx;
+}
+
+const TxOut& CFutureTxMap::GetOutputFor(const OutPoint& prev) const {
+	return Get(prev.TxHash).TxOuts().at(prev.Index);
+}
+
+static TxFeeTuple LoadTxFromDb(HashValue hash) {
+	return Tx::FromDb(hash);
+}
+
+void CFutureTxMap::Add(const Tx& tx) {
+	HashValue hash = Hash(tx);
+	promise<TxFeeTuple> pr;
+	pr.set_value(TxFeeTuple(tx));
+	EXT_LOCK(m_mtx) {
+		if (!m_map.insert(make_pair(hash, pr.get_future().share())).second)
+			Throw(E_FAIL);
+	}
+}
+
+void CFutureTxMap::Add(const HashValue& hash, const shared_future<TxFeeTuple> ft) {
+	EXT_LOCK(m_mtx) {
+		if (!m_map.insert(make_pair(hash, ft)).second)
+			Throw(E_FAIL);
+	}
+}
+
+void CFutureTxMap::Ensure(const HashValue& hash) {
+	EXT_LOCK(m_mtx) {
+		if (!m_map.count(hash))
+			m_map.insert(make_pair(hash, std::async(LoadTxFromDb, hash).share()));
+	}
 }
 
 bool CoinsView::HasInput(const OutPoint& op) const {
-	bool bHas;
-	if (Lookup(m_outPoints, op, bHas))
-		return bHas;
-	CoinEng& eng = Eng();
-	if (!eng.Db->FindTx(op.TxHash, 0))											//!!! Double find. Should be optimized. But we need this check during Reorganize()
+	if (auto o = Lookup(m_outPoints, op))
+		return o.value();
+	if (!Eng.Db->FindTx(op.TxHash, 0)) //!!! Double find. Should be optimized. But we need this check during Reorganize()
 		Throw(CoinErr::TxNotFound);
-	vector<bool> vSpend = eng.Db->GetCoinsByTxHash(op.TxHash);
+	vector<bool> vSpend = Eng.Db->GetCoinsByTxHash(op.TxHash);
 	return m_outPoints[op] = op.Index < vSpend.size() && vSpend[op.Index];
 }
 
@@ -78,41 +183,43 @@ void CoinsView::SpendInput(const OutPoint& op) {
 	m_outPoints[op] = false;
 }
 
+Tx CoinsView::Find(const HashValue& hash) const {
+	Tx r;
+	Eng.Db->FindTx(hash, &r);
+	return r;
+}
 
-//!!! static regex s_rePkScriptDestination("(\\x76\\xA9\\x14(.{20,20})\\x88\\xAC|(\\x21|\\x41)(.+)\\xAC)");		// binary, VC don't allows regex for binary data
+const Tx& CoinsView::Get(const HashValue& hash) const {
+	auto it = TxMap.m_map.find(hash);
+	if (it != TxMap.m_map.end())
+		return it->second;
+	Tx tx;
+	if (!Eng.Db->FindTx(hash, &tx))
+		Throw(CoinErr::TxNotFound);
+	TxMap.Add(tx);
+	return TxMap.Get(hash);
+}
 
-byte TryParseDestination(const ConstBuf& pkScript, HashValue160& hash160, Blob& pubkey) {
-	const byte *p = pkScript.P;
-	if (pkScript.Size < 4 || p[pkScript.Size-1] != OP_CHECKSIG)
-		return 0;
-	if (pkScript.Size == 25) {
-		if (p[0]==OP_DUP && p[1]==OP_HASH160 && p[2]==20 && p[pkScript.Size-2]==OP_EQUALVERIFY) {
-			hash160 = HashValue160(ConstBuf(p+3, 20));
-			return 20;
-		}
-	} else if (p[0]==33 || p[0]==65) {
-		byte len = p[0];
-		if (pkScript.Size == 1+len+1) {
-			hash160 = Hash160(pubkey = Blob(p+1, len));
-			return len;
-		}
-	}
-	return 0;
+const TxOut& CoinsView::GetOutputFor(const OutPoint& prev) const {
+	return Get(prev.TxHash).TxOuts().at(prev.Index);
+}
+
+void CoinsView::Add(const Tx& tx) {
+	Throw(E_NOTIMPL);
 }
 
 TxObj::TxObj()
-	:	Height(-1)
-	,	LockBlock(0)
-	,	m_nBytesOfHash(0)
-	,	m_bLoadedIns(false)
-{
+	: Height(-1)
+	, LockBlock(0)
+	, m_nBytesOfHash(0)
+	, m_bLoadedIns(false) {
 }
 
 void Tx::WriteTxIns(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 	int nIn = 0;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
-		byte typ = uint32_t(-1)==txIn.Sequence ? 0x80 : 0;
+	EXT_FOR(const TxIn& txIn, TxIns()) {
+		uint8_t typ = uint32_t(-1) == txIn.Sequence ? 0x80 : 0;
 		if (txIn.PrevOutPoint.IsNull())
 			wr.Write7BitEncoded(0);
 		else {
@@ -120,16 +227,17 @@ void Tx::WriteTxIns(DbWriter& wr) const {
 
 			pair<int, int> pp = wr.PTxHashesOutNums->StartingTxOutIdx(txIn.PrevOutPoint.TxHash);
 			if (pp.second >= 0) {
-				wr.Write7BitEncoded(1);			// current block
+				wr.Write7BitEncoded(1); // current block
 			} else {
 				pp = eng.Db->FindPrevTxCoords(wr, Height, txIn.PrevOutPoint.TxHash);
 			}
 			wr.Write7BitEncoded(pp.second + txIn.PrevOutPoint.Index);
 
-			ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
+			Span scriptSig = txIn.Script();
+			Span pk = FindStandardHashAllSigPubKey(scriptSig);
 			if (txIn.RecoverPubKeyType) {
 				typ |= txIn.RecoverPubKeyType;
-				(wr << typ).BaseStream.WriteBuf(Sec256Signature(ConstBuf(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2)).ToCompact());
+				(wr << typ).BaseStream.Write(Sec256Signature(scriptSig.subspan(1, pk.data() - scriptSig.data() - 2)).ToCompact());
 				goto LAB_TXIN_WROTE;
 			}
 #if 0 //!!!R
@@ -138,14 +246,15 @@ void Tx::WriteTxIns(DbWriter& wr) const {
 					/*!!!
 					ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);
 					Blob blobPk(pk.P+1, pk.Size-1);		//!!!O
-					HashValue hashSig = SignatureHash(Tx::FromDb(txIn.PrevOutPoint.TxHash).TxOuts()[txIn.PrevOutPoint.Index].PkScript, *m_pimpl, nIn, 1);
-					for (byte recid=0; recid<3; ++recid) {
+					SignatureHasher hasher(*m_pimpl);
+					HashValue hashSig = hasher.Hash(Tx::FromDb(txIn.PrevOutPoint.TxHash).TxOuts()[txIn.PrevOutPoint.Index].PkScript, nIn, 1);
+					for (uint8_t recid=0; recid<3; ++recid) {
 						if (Sec256Dsa::RecoverPubKey(hashSig, sig, recid, pk.Size<35) == blobPk) {
 							typ |= 8;
-							subType = byte((pk.Size<35 ? 4 : 0) | recid);
+							subType = uint8_t((pk.Size<35 ? 4 : 0) | recid);
 							goto LAB_RECOVER_OK;
 						}
-					} 
+					}
 					{
 						CConnectJob::CMap::iterator it = wr.ConnectJob->Map.find(Hash160(ConstBuf(pk.P+1, pk.Size-1)));
 						if (it == wr.ConnectJob->Map.end() || !it->second.PubKey)
@@ -161,16 +270,16 @@ void Tx::WriteTxIns(DbWriter& wr) const {
 				int len1 = txIn.Script().constData()[4];
 				typ |= 0x10;							// 0.58 bug workaround: typ should not be zero
 				typ |= (len1 & 1) << 5;
-				typ += byte(sig.Size-63);			
+				typ += uint8_t(sig.Size-63);
 				(wr << typ).Write(sig.P, len1);
 				wr.Write(sig.P+len1+2, sig.Size-len1-2);		// skip "0x02, len2" fields
 				goto LAB_TXIN_WROTE;
 			}
 #endif
 		}
-		wr << byte(typ);		//  | SCRIPT_PKSCRIPT_GEN
-		CoinSerialized::WriteBlob(wr, txIn.Script());
-LAB_TXIN_WROTE:
+		wr << uint8_t(typ); //  | SCRIPT_PKSCRIPT_GEN
+		CoinSerialized::WriteSpan(wr, txIn.Script());
+	LAB_TXIN_WROTE:
 		if (txIn.Sequence != uint32_t(-1))
 			wr.Write7BitEncoded(uint32_t(txIn.Sequence));
 		++nIn;
@@ -179,29 +288,30 @@ LAB_TXIN_WROTE:
 
 void TxObj::ReadTxIns(const DbReader& rd) const {
 	CoinEng& eng = Eng();
-	for (int nIn=0; !rd.BaseStream.Eof(); ++nIn) {
-		int64_t blockordBack = rd.Read7BitEncoded(),
-			 blockHeight = -1;
-		pair<int, OutPoint> pp(-1, OutPoint());
+	for (int nIn = 0; !rd.BaseStream.Eof(); ++nIn) {
+		int64_t blockordBack = rd.Read7BitEncoded(), blockHeight = -1;
+		//		pair<int, OutPoint> pp(-1, OutPoint());
 		TxIn txIn;
 		if (0 == blockordBack)
 			txIn.PrevOutPoint = OutPoint();
 		else {
 			int idx = (int)rd.Read7BitEncoded();
-			if (rd.ReadTxHashes) {																	//!!!? always true
-				blockHeight = Height-(blockordBack-1);
-				txIn.PrevOutPoint = (pp = rd.Eng->Db->GetTxHashesOutNums((int)blockHeight).OutPointByIdx(idx)).second;
+			if (rd.ReadTxHashes) { //!!!? always true
+				blockHeight = Height - (blockordBack - 1);
+				//!!!R				txIn.PrevOutPoint = (pp = rd.Eng->Db->GetTxHashesOutNums((int)blockHeight).OutPointByIdx(idx)).second;
+				pair<OutPoint, TxOut> pp = eng.Db->GetOutPointTxOut((int)blockHeight, idx);
+				txIn.PrevOutPoint = pp.first;
+				txIn.PrevTxOut = pp.second;
 			}
 		}
-		byte typ = rd.ReadByte();
+		uint8_t typ = rd.ReadByte();
 		switch (typ & 0x7F) {
-		case 0:
-			txIn.m_script = CoinSerialized::ReadBlob(rd);
-#ifdef X_DEBUG//!!!D
+		case 0: txIn.m_script = CoinSerialized::ReadBlob(rd);
+#ifdef X_DEBUG //!!!D
 			if (txIn.m_script.Size > 80) {
 				ConstBuf pk = FindStandardHashAllSigPubKey(txIn.Script());
 				if (pk.P) {
-					ConstBuf sig(txIn.Script().constData()+1, pk.P-txIn.Script().constData()-2);		
+					ConstBuf sig(txIn.Script().constData() + 1, pk.P - txIn.Script().constData() - 2);
 					Sec256Signature sigObj(sig), sigObj2;
 					sigObj2.AssignCompact(sigObj.ToCompact());
 					Blob ser = sigObj2.Serialize();
@@ -210,51 +320,49 @@ void TxObj::ReadTxIns(const DbReader& rd) const {
 						ser = sigObj2.Serialize();
 						ser = ser;
 					}
-
 				}
 			}
 #endif
 			break;
 		case 0x7F:
-			if (eng.Mode==EngMode::Lite)
+			if (eng.Mode == EngMode::Lite)
 				break;
-//!!!?			Throw(E_FAIL);
+			//!!!?			Throw(E_FAIL);
 		default:
 			if (typ & 8) {
-				array<byte, 64> ar;
+				array<uint8_t, 64> ar;
 				rd.BaseStream.ReadBuffer(ar.data(), ar.size());
 				Sec256Signature sigObj;
 				sigObj.AssignCompact(ar);
 				Blob ser = sigObj.Serialize();
 				Blob sig(0, ser.Size + 2);
-				byte *data = sig.data();
-				data[0] = byte(ser.Size + 1);
-				memcpy(data+1, ser.constData(), ser.Size);
-				data[sig.Size-1] = 1;
+				uint8_t* data = sig.data();
+				data[0] = uint8_t(ser.Size + 1);
+				memcpy(data + 1, ser.constData(), ser.Size);
+				data[sig.Size - 1] = 1;
 				if (typ & 0x40) {
 					txIn.m_pTxo = this;
-					txIn.N = nIn;
-					txIn.RecoverPubKeyType = byte(typ & 0x4F);
+					txIn.RecoverPubKeyType = uint8_t(typ & 0x4F);
 					txIn.m_sig = sig;
 				} else
 					txIn.m_script = sig;
 			} else {
-				int len = (typ & 0x07)+63;
-				ASSERT(len>63 || (typ & 0x10));   // WriteTxIns bug workaround
-				Blob sig(0, len+6);
-				byte *data = sig.data();
-			
-				data[0] = byte(len+5);
+				int len = (typ & 0x07) + 63;
+				ASSERT(len > 63 || (typ & 0x10)); // WriteTxIns bug workaround
+				Blob sig(0, len + 6);
+				uint8_t* data = sig.data();
+
+				data[0] = uint8_t(len + 5);
 				data[1] = 0x30;
-				data[2] = byte(len+2);
+				data[2] = uint8_t(len + 2);
 				data[3] = 2;
-				data[4] = 0x20 | ((typ & 0x20)>>5);
-				rd.Read(data+5, data[4]);
-				data[5+data[4]] = 2;
-				byte len2 = byte(len-data[4]-2);
-				data[5+data[4]+1] = len2;
-				rd.Read(data+5+data[4]+2, len2);
-				data[5+len] = 1;
+				data[4] = 0x20 | ((typ & 0x20) >> 5);
+				rd.Read(data + 5, data[4]);
+				data[5 + data[4]] = 2;
+				uint8_t len2 = uint8_t(len - data[4] - 2);
+				data[5 + data[4] + 1] = len2;
+				rd.Read(data + 5 + data[4] + 2, len2);
+				data[5 + len] = 1;
 				if (typ & 0x40) {
 					txIn.m_sig = sig;
 				} else
@@ -270,7 +378,7 @@ static mutex s_mtxTx;
 
 const vector<TxIn>& TxObj::TxIns() const {
 	if (!m_bLoadedIns) {
-		EXT_LOCK (s_mtxTx) {
+		EXT_LOCK(s_mtxTx) {
 			if (!m_bLoadedIns) {
 				ASSERT(m_nBytesOfHash && m_txIns.empty());
 				Eng().Db->ReadTxIns(m_hash, _self);
@@ -281,49 +389,99 @@ const vector<TxIn>& TxObj::TxIns() const {
 	return m_txIns;
 }
 
-void TxObj::Write(BinaryWriter& wr) const {
+void TxObj::Write(ProtocolWriter& wr) const {
 	wr << Ver;
 	WritePrefix(wr);
-	CoinSerialized::Write(wr, TxIns());
-	CoinSerialized::Write(wr, TxOuts);
+	auto hasWitness = wr.WitnessAware && HasWitness();
+	if (hasWitness)
+		wr << uint8_t(0) << uint8_t(1);
+
+	auto& txIns = TxIns();
+	if (wr.HashTypeAnyoneCanPay) {
+		WriteVarInt(wr, 1);
+		txIns[wr.NIn].Write(wr, true);
+	} else {
+		WriteVarInt(wr, txIns.size());
+		for (int i = 0; i < txIns.size(); ++i)
+			txIns[i].Write(wr, i == wr.NIn);
+	}
+
+	auto nOuts = wr.HashTypeNone ? 0 : wr.HashTypeSingle ? wr.NIn + 1 : (int)TxOuts.size();
+	WriteVarInt(wr, nOuts);
+	for (size_t i = 0; i < nOuts; ++i)
+		if (wr.HashTypeSingle && i != wr.NIn)
+			CoinSerialized::WriteSpan(wr << int64_t(-1), Span());
+		else
+			TxOuts[i].Write(wr);
+
+	if (hasWitness)
+		for (auto& txIn : txIns) {
+			WriteVarInt(wr, txIn.Witness.size());
+			for (auto& chunk : txIn.Witness)
+				CoinSerialized::WriteSpan(wr, chunk);
+    	}
 	wr << LockBlock;
 	WriteSuffix(wr);
 }
 
-void TxObj::Read(const BinaryReader& rd) {
+void TxObj::Read(const ProtocolReader& rd) {
 	ASSERT(!m_bLoadedIns);
 	DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
 
 	Ver = rd.ReadUInt32();
 	ReadPrefix(rd);
 	CoinSerialized::Read(rd, m_txIns);
-	m_bLoadedIns = true;
-	CoinSerialized::Read(rd, TxOuts);
+	if (m_txIns.empty() && rd.WitnessAware) {
+		uint8_t flag = rd.ReadByte();
+		if (!flag)
+			throw PeerMisbehavingException(10);
+		CoinSerialized::Read(rd, m_txIns);
+		m_bLoadedIns = true;
+		CoinSerialized::Read(rd, TxOuts);
+		if (flag & 1)
+			for (auto& txIn : m_txIns) {
+                auto wtinessSize = CoinSerialized::ReadVarInt(rd);
+                if (wtinessSize > 100000000)	//!!!
+                    Throw(ExtErr::Protocol_Violation);
+				txIn.Witness.resize((size_t)wtinessSize);
+				for (auto& chunk : txIn.Witness)
+					chunk = CoinSerialized::ReadBlob(rd);
+			}
+	} else {
+		m_bLoadedIns = true;
+		CoinSerialized::Read(rd, TxOuts);
+	}
 	if (m_txIns.empty() || TxOuts.empty())
 		throw PeerMisbehavingException(10);
 	LockBlock = rd.ReadUInt32();
-	if (LockBlock >= 500000000)
+	if (Tx::LocktimeTypeOf(LockBlock) == Tx::LocktimeType::Timestamp)
 		LockTimestamp = DateTime::from_time_t(LockBlock);
 	ReadSuffix(rd);
 }
 
-const DateTime LOCKTIME_THRESHOLD(1985, 11, 5, 0, 53, 20);
+bool TxObj::HasWitness() const {
+	for (auto& txIn : TxIns())
+		if (!txIn.Witness.empty())
+			return true;
+	return false;
+}
 
 bool TxObj::IsFinal(int height, const DateTime dt) const {
-    if (LockTimestamp.Ticks == 0)
-        return true;
-/*!!!        if (height == 0)
+	if (LockTimestamp.Ticks == 0)
+		return true;
+	/*!!!        if (height == 0)
         nBlockHeight = nBestHeight;
     if (nBlockTime == 0)
         nBlockTime = GetAdjustedTime(); */
-    if (LockTimestamp < (LockTimestamp<LOCKTIME_THRESHOLD ? DateTime::from_time_t(height) : dt))
-        return true;
-	return AllOf(TxIns(), bind(&TxIn::IsFinal, _1));
-/*!!!	EXT_FOR (const TxIn& txIn, TxIns()) {
+	if (Tx::LocktimeTypeOf(LockBlock) == Tx::LocktimeType::Block) {
+		if (LockBlock < height)
+			return true;
+	} else if (LockTimestamp < dt)
+		return true;
+	for (auto& txIn : TxIns())
         if (!txIn.IsFinal())
             return false;
-	}
-    return true;*/
+    return true;
 }
 
 bool Tx::AllowFree(double priority) {
@@ -331,7 +489,7 @@ bool Tx::AllowFree(double priority) {
 	return eng.AllowFreeTxes && (priority > eng.ChainParams.CoinValue * 144 / 250);
 }
 
-bool Tx::TryFromDb(const HashValue& hash, Tx *ptx) {
+bool Tx::TryFromDb(const HashValue& hash, Tx* ptx) {
 	CoinEng& eng = Eng();
 
 	EXT_LOCK(eng.Caches.Mtx) {
@@ -366,11 +524,11 @@ void Tx::EnsureCreate() {
 		m_pimpl = Eng().CreateTxObj();
 }
 
-void Tx::Write(BinaryWriter& wr) const {
+void Tx::Write(ProtocolWriter& wr) const {
 	m_pimpl->Write(wr);
 }
 
-void Tx::Read(const BinaryReader& rd) {
+void Tx::Read(const ProtocolReader& rd) {
 	EnsureCreate();
 	m_pimpl->Read(rd);
 }
@@ -380,9 +538,8 @@ bool Tx::IsNewerThan(const Tx& txOld) const {
 		return false;
 	bool r = false;
 	uint32_t lowest = UINT_MAX;
-	for (int i=0; i<TxIns().size(); ++i) {
-		const TxIn &txIn = TxIns()[i],
-			&oldIn = txOld.TxIns()[i];
+	for (int i = 0; i < TxIns().size(); ++i) {
+		const TxIn &txIn = TxIns()[i], &oldIn = txOld.TxIns()[i];
 		if (txIn.PrevOutPoint != oldIn.PrevOutPoint)
 			return false;
 		if (txIn.Sequence != oldIn.Sequence) {
@@ -396,89 +553,24 @@ bool Tx::IsNewerThan(const Tx& txOld) const {
 	return r;
 }
 
-void Tx::SpendInputs() const {
-	if (!IsCoinBase()) {
-		CoinEng& eng = Eng();
-
-		EXT_FOR (const TxIn& txIn, TxIns()) {
-			eng.Db->UpdateCoins(txIn.PrevOutPoint, true);
-		}
-	}
-}
-
-Blob ToCompressedKey(const ConstBuf& cbuf) {
-	ASSERT(cbuf.Size==33 || cbuf.Size==65);
-
-	if (cbuf.Size == 33)
-		return cbuf;
-	Blob r = CCrypter::PublicKeyBlobToCompressedBlob(cbuf);
-	r.data()[0] |= 0x80;
-	if (cbuf.P[0] & 2)
-		r.data()[0] |= 4; // POINT_CONVERSION_HYBRID
-#ifdef X_DEBUG//!!!D
-	Blob test(r);
-	test.data()[0] &= 0x7F;
-	ASSERT(ConstBuf(test) == ConstBuf(cbuf.P, 33));
-#endif
-#ifdef X_DEBUG//!!!D
-	ASSERT(ToUncompressedKey(r) == Blob(cbuf));
-#endif
-	return r;
-}
-
-
-/*!!!!ERROR
-Blob ToCompressedKeyWithoutCheck(const ConstBuf& cbuf) {							// Just truncates last 32 bytes. Use only after checking hashes!
-	ASSERT(cbuf.Size==33 || cbuf.Size==65);
-
-	if (cbuf.Size == 33)
-		return cbuf;
-	Blob r(cbuf.P, 33);
-	r.data()[0] |= 0x80;
-	return r;
-}
-*/
-
-static const BigInteger s_ec_p("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16);
-
-Blob ToUncompressedKey(const ConstBuf& cbuf) {
-	if (cbuf.Size != 33 || !(cbuf.P[0] & 0x80))
-		return cbuf;
-	BigInteger x = OpensslBn::FromBinary(ConstBuf(cbuf.P+1, 32)).ToBigInteger();
-	BigInteger xr = (x*x*x+7) % s_ec_p;
-	BigInteger y = sqrt_mod(xr, s_ec_p);
-	if (y.TestBit(0) != bool(cbuf.P[0] & 1))
-		y = s_ec_p-y;
-	Blob r(0, 65);
-	r.data()[0] = 4;									//	POINT_CONVERSION_UNCOMPRESSED
-	if (cbuf.P[0] & 4) {
-		r.data()[0] |= 2 | (cbuf.P[0] & 1);				//  POINT_CONVERSION_HYBRID
-	}
-	memcpy(r.data()+1, cbuf.P+1, 32);
-	OpensslBn(y).ToBinary(r.data()+33, 32);
-	return r;
-}
-
-PubKeyHash160 DbPubKeyToHashValue160(const ConstBuf& mb) {
-	return mb.Size == 20
-		? PubKeyHash160(nullptr, HashValue160(mb))
-		: PubKeyHash160(ToUncompressedKey(mb));
+PubKeyHash160 DbPubKeyToHashValue160(RCSpan mb) {
+	return mb.size() == 20 ? PubKeyHash160(nullptr, HashValue160(mb)) : PubKeyHash160(CanonicalPubKey::FromCompressed(mb));
 }
 
 HashValue160 CoinEng::GetHash160ById(int64_t id) {
-	EXT_LOCK (Caches.Mtx) {
-		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);	
+	EXT_LOCK(Caches.Mtx) {
+		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);
 		if (it != Caches.m_cachePkIdToPubKey.end())
 			return it->second.first.Hash160;
 	}
 	Blob pk = Db->FindPubkey(id);
 	if (!!pk) {
 		PubKeyHash160 pkh = DbPubKeyToHashValue160(pk);
-#ifdef X_DEBUG//!!!D
+#ifdef X_DEBUG //!!!D
 		CIdPk idpk(pkh.Hash160);
 		ASSERT(idpk == id);
 #endif
-		EXT_LOCK (Caches.Mtx) {
+		EXT_LOCK(Caches.Mtx) {
 			if (Caches.PubkeyCacheEnabled)
 				Caches.m_cachePkIdToPubKey.insert(make_pair(id, pkh));
 		}
@@ -487,9 +579,9 @@ HashValue160 CoinEng::GetHash160ById(int64_t id) {
 		Throw(ExtErr::DB_NoRecord);
 }
 
-Blob CoinEng::GetPkById(int64_t id) {
-	EXT_LOCK (Caches.Mtx) {
-		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);	
+CanonicalPubKey CoinEng::GetPkById(int64_t id) {
+	EXT_LOCK(Caches.Mtx) {
+		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);
 		if (it != Caches.m_cachePkIdToPubKey.end())
 			return it->second.first.PubKey;
 	}
@@ -497,8 +589,8 @@ Blob CoinEng::GetPkById(int64_t id) {
 	if (!!pk) {
 		if (pk.Size == 20)
 			Throw(CoinErr::InconsistentDatabase);
-		PubKeyHash160 pkh = PubKeyHash160(ToUncompressedKey(pk));
-		EXT_LOCK (Caches.Mtx) {
+		PubKeyHash160 pkh = PubKeyHash160(CanonicalPubKey::FromCompressed(pk));
+		EXT_LOCK(Caches.Mtx) {
 			if (Caches.PubkeyCacheEnabled)
 				Caches.m_cachePkIdToPubKey.insert(make_pair(id, pkh));
 		}
@@ -507,10 +599,11 @@ Blob CoinEng::GetPkById(int64_t id) {
 		Throw(ExtErr::DB_NoRecord);
 }
 
+/*!!!?R
 bool CoinEng::GetPkId(const HashValue160& hash160, CIdPk& id) {
 	id = CIdPk(hash160);
 	EXT_LOCK (Caches.Mtx) {
-		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);	
+		ChainCaches::CCachePkIdToPubKey::iterator it = Caches.m_cachePkIdToPubKey.find(id);
 		if (it != Caches.m_cachePkIdToPubKey.end())
 			return hash160 == it->second.first.Hash160;
 	}
@@ -532,7 +625,7 @@ bool CoinEng::GetPkId(const HashValue160& hash160, CIdPk& id) {
 	return true;
 }
 
-bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
+bool CoinEng::GetPkId(RCSpan cbuf, CIdPk& id) {
 	ASSERT(cbuf.Size != 20);
 
 	if (!IsPubKey(cbuf))
@@ -542,10 +635,11 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 	id = CIdPk(hash160);
 	Blob compressed;
 	try {
-		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
-		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
+		DBG_LOCAL_IGNORE_CONDITION(ExtErr::Crypto);
+//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_POINT_IS_NOT_ON_CURVE));
+//!!!R		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, ERR_R_EC_LIB));
 
-		compressed = ToCompressedKey(cbuf);
+		compressed = CanonicalKey(cbuf).ToComptessed();
 	} catch (RCExc) {
 		return false;
 	}
@@ -568,73 +662,66 @@ bool CoinEng::GetPkId(const ConstBuf& cbuf, CIdPk& id) {
 	Db->InsertPubkey((int64_t)id, compressed);
 	return true;
 }
+*/
+
+int64_t TxOut::DustThreshold(int64_t feeRate) const
+{
+    Span s = ScriptPubKey;
+    if (!Script::IsSpendable(s))
+        return 0;
+	return Tx::CalcMinFee(EXT_BIN(_self).size() + 32 + 4 + 1 + 4 + 107 / (Script::WitnessProgram(s).first.data() ? WITNESS_SCALE_FACTOR : 1), feeRate);
+}
 
 void TxOut::CheckForDust() const {
-	if (Value < 3*(Eng().ChainParams.MinTxFee * (EXT_BIN(_self).Size + 148) / 1000))
+    if (IsDust(Eng().ChainParams.DustRelayFee))
 		Throw(CoinErr::TxAmountTooSmall);
 }
 
-const Blob& TxOut::get_PkScript() const {
-	if (!m_pkScript) {
+Span TxOutBase::get_ScriptPubKey() const {
+	if (!m_scriptPubKey) {
 		CoinEng& eng = Eng();
 		switch (m_typ) {
-		case 20:
-			{
-				byte ar[25] = { OP_DUP, OP_HASH160,
-								20,
-								0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-								OP_EQUALVERIFY, OP_CHECKSIG };
-				HashValue160 hash160 = eng.GetHash160ById(m_idPk);
-				memcpy(ar+3, hash160.data(), 20);
-				m_pkScript.AssignIfNull(Blob(ar, sizeof ar));
-			}
-			break;
+		case 20: {
+			uint8_t ar[25] = { (uint8_t)Opcode::OP_DUP, (uint8_t)Opcode::OP_HASH160, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (uint8_t)Opcode::OP_EQUALVERIFY, (uint8_t)Opcode::OP_CHECKSIG};
+			HashValue160 hash160 = eng.GetHash160ById(m_idPk);
+			memcpy(ar + 3, hash160.data(), 20);
+			m_scriptPubKey.AssignIfNull(Blob(ar, sizeof ar));
+		} break;
 		case 33:
-		case 65:
-			{
-				Blob pk = eng.GetPkById(m_idPk);
-				ASSERT(pk.Size == 33 || pk.Size == 65);
-				Blob pkScript(0, pk.Size+2);
-				pkScript.data()[0] = byte(pk.Size);
-				memcpy(pkScript.data()+1, pk.constData(), pk.Size);
-				pkScript.data()[pk.Size+1] = OP_CHECKSIG;
-				m_pkScript.AssignIfNull(pkScript);
-			}
-			break;
-		default:
-			Throw(ExtErr::CodeNotReachable);
+		case 65: {
+			Blob pk = Span(eng.GetPkById(m_idPk).Data);
+			ASSERT(pk.Size == 33 || pk.Size == 65);
+			Blob pkScript(0, pk.Size + 2);
+			pkScript.data()[0] = uint8_t(pk.Size);
+			memcpy(pkScript.data() + 1, pk.constData(), pk.Size);
+			pkScript.data()[pk.Size + 1] = (uint8_t)Opcode::OP_CHECKSIG;
+			m_scriptPubKey.AssignIfNull(pkScript);
+		} break;
+		default: Throw(ExtErr::CodeNotReachable);
 		}
 	}
-	return m_pkScript;
+	return m_scriptPubKey;
 }
 
-bool IsCanonicalSignature(const ConstBuf& sig) {
-	if (sig.Size<9 || sig.Size>73 || sig.P[0]!=0x30)
-		return false;
-	//!!!TODO
-
-	return true;
-}
-
-ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf) {
-	ConstBuf r(0, 0);
-	if (cbuf.Size > 64) {
-		int len = cbuf.P[0];
-		if (len>64 && len<64+32 && cbuf.P[1]==0x30 && cbuf.P[2]==len-3 && cbuf.P[3]==2) {
-			switch (int len1 = cbuf.P[4]) {
+Span FindStandardHashAllSigPubKey(RCSpan cbuf) {
+	Span r(0, (size_t)0);
+	if (cbuf.size() > 64) {
+		int len = cbuf[0];
+		if (len > 64 && len < 64 + 32 && cbuf[1] == 0x30 && cbuf[2] == len - 3 && cbuf[3] == 2) {
+			switch (int len1 = cbuf[4]) {
 			case 0x1F:
 			case 0x20:
 			case 0x21:
-				if (cbuf.P[5+len1] == 2 && cbuf.P[5+len1+1]+len1+4 == len-3 && cbuf.P[len]==1) {
-					if (cbuf.Size == len+1)
-						r = ConstBuf(cbuf.P+len+1, 0);
-					else if (cbuf.Size > len+2) {
-						int len2 = cbuf.P[1+len];
-						if ((len2==33 || len2==65) && cbuf.Size == len+len2+2)
-							r = ConstBuf(cbuf.P+len+1, len2+1);
+				if (cbuf[5 + len1] == 2 && cbuf[5 + len1 + 1] + len1 + 4 == len - 3 && cbuf[len] == 1) {
+					if (cbuf.size() == len + 1)
+						r = Span(cbuf.data() + len + 1, (size_t)0);
+					else if (cbuf.size() > len + 2) {
+						int len2 = cbuf[1 + len];
+						if ((len2 == 33 || len2 == 65) && cbuf.size() == len + len2 + 2)
+							r = Span(cbuf.data() + len + 1, len2 + 1);
 					}
 				}
-			}			
+			}
 		}
 	}
 	return r;
@@ -642,11 +729,18 @@ ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf) {
 
 DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 	CoinEng& eng = Eng();
-	
+
 	if (!wr.BlockchainDb) {
 		wr.Write7BitEncoded(tx.m_pimpl->Ver);
 		tx.m_pimpl->WritePrefix(wr);
-		wr << tx.TxIns() << tx.TxOuts();
+
+		const vector<TxIn>& txIns = tx.TxIns();
+		size_t nIns = txIns.size();
+		wr.WriteSize(nIns);
+		for (size_t i = 0; i < nIns; ++i)
+			txIns[i].Write(wr);
+
+        Write(wr, tx.TxOuts());
 		wr.Write7BitEncoded(tx.LockBlock);
 		tx.m_pimpl->WriteSuffix(wr);
 	} else {
@@ -661,42 +755,43 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 			wr.Write7BitEncoded(tx.LockBlock);
 		tx.m_pimpl->WriteSuffix(wr);
 
-		for (int i=0; i<tx.TxOuts().size(); ++i) {
+		for (int i = 0; i < tx.TxOuts().size(); ++i) {
 			const TxOut& txOut = tx.TxOuts()[i];
 #if UCFG_COIN_PUBKEYID_36BITS
 			uint64_t valtyp = uint64_t(txOut.Value) << 6;
 #else
 			uint64_t valtyp = uint64_t(txOut.Value) << 5;
 #endif
-			HashValue160 hash160;
-			Blob pk;
+			Span span160;
+			Span pk;
 			CIdPk idPk;
-			switch (byte typ = txOut.TryParseDestination(hash160, pk)) {
+			switch (uint8_t typ = TryParseDestination(txOut.ScriptPubKey, span160, pk)) {
 			case 20:
 			case 33:
 			case 65:
-				if (eng.Mode==EngMode::Lite) {
+				if (eng.Mode == EngMode::Lite) {
 					wr.Write7BitEncoded(valtyp | 3);
 					break;
 				} else {
+					HashValue160 hash160(span160);
 					CConnectJob::CMap::iterator it = wr.ConnectJob->Map.find(hash160);
 					if (it != wr.ConnectJob->Map.end() && !!it->second.PubKey) {
 						idPk = CIdPk(hash160);
 #if UCFG_COIN_PUBKEYID_36BITS
-						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((int64_t(idPk) & 0xF00000000)>>30));
+						wr.Write7BitEncoded(valtyp | (20 == typ ? 1 : 2) | ((int64_t(idPk) & 0xF00000000) >> 30));
 #else
-						wr.Write7BitEncoded(valtyp | (20==typ ? 1 : 2) | ((int64_t(idPk) & 0x700000000)>>30));
+						wr.Write7BitEncoded(valtyp | (20 == typ ? 1 : 2) | ((int64_t(idPk) & 0x700000000) >> 30));
 #endif
 						wr << uint32_t(int64_t(txOut.m_idPk = idPk));
 						break;
 					}
 				}
 			default:
-				wr.Write7BitEncoded(valtyp);						// SCRIPT_PKSCRIPT_GEN
-				CoinSerialized::WriteBlob(wr, txOut.get_PkScript());
+				wr.Write7BitEncoded(valtyp); // SCRIPT_PKSCRIPT_GEN
+				CoinSerialized::WriteSpan(wr, txOut.get_ScriptPubKey());
 			}
 		}
-	}	
+	}
 	return wr;
 }
 
@@ -704,8 +799,8 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 	CoinEng& eng = Eng();
 
 	uint64_t v;
-//!!!?	if (tx.Ver != 1)
-//		Throw(ExtErr::New_Protocol_Version);
+	//!!!?	if (tx.Ver != 1)
+	//		Throw(ExtErr::New_Protocol_Version);
 
 	tx.EnsureCreate();
 
@@ -713,7 +808,8 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 		v = rd.Read7BitEncoded();
 		tx.m_pimpl->Ver = (uint32_t)v;
 		tx.m_pimpl->ReadPrefix(rd);
-		rd >> tx.m_pimpl->m_txIns >> tx.m_pimpl->TxOuts;
+        Read(rd, tx.m_pimpl->m_txIns);
+        Read(rd, tx.m_pimpl->TxOuts);
 		tx.m_pimpl->m_bLoadedIns = true;
 		tx.m_pimpl->LockBlock = (uint32_t)rd.Read7BitEncoded();
 		tx.m_pimpl->ReadSuffix(rd);
@@ -726,45 +822,45 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 			tx.LockBlock = (uint32_t)rd.Read7BitEncoded();
 		tx.m_pimpl->ReadSuffix(rd);
 
+#if UCFG_COIN_TXES_IN_BLOCKTABLE
+		for (int i = 0; i < rd.NOut; ++i) {
+#else
 		while (!rd.BaseStream.Eof()) {
+#endif
 			uint64_t valtyp = rd.Read7BitEncoded();
 #if UCFG_COIN_PUBKEYID_36BITS
-			uint64_t value = valtyp>>6;
+			uint64_t value = valtyp >> 6;
 #else
-			uint64_t value = valtyp>>5;
+			uint64_t value = valtyp >> 5;
 #endif
 			tx.TxOuts().push_back(TxOut(value, Blob(nullptr)));
 			TxOut& txOut = tx.TxOuts().back();
-			static const byte s_types[] = { 0, 20, 33, 0x7F };
-			switch (byte typ = s_types[valtyp & 3]) {
-			case 0:
-				txOut.m_pkScript = CoinSerialized::ReadBlob(rd);
-				break;
+			static const uint8_t s_types[] = {0, 20, 33, 0x7F};
+			switch (uint8_t typ = s_types[valtyp & 3]) {
+			case 0: txOut.m_scriptPubKey = CoinSerialized::ReadBlob(rd); break;
 			case 20:
 			case 33:
-			case 65:
-				txOut.m_typ = typ;
-				txOut.m_pkScript = nullptr;
+			case 65: txOut.m_typ = typ; txOut.m_scriptPubKey = nullptr;
 #if UCFG_COIN_PUBKEYID_36BITS
 				txOut.m_idPk = CIdPk(int64_t(rd.ReadUInt32()) | ((valtyp & 0x3C) << 30));
 #else
 				txOut.m_idPk = CIdPk(int64_t(rd.ReadUInt32()) | ((valtyp & 0x1C) << 30));
 #endif
 				break;
-			default:
-				Throw(E_FAIL);
-			}		
+			default: Throw(E_FAIL);
+			}
 		}
-	}	
-	if (tx.LockBlock >= 500000000)
+	}
+	if (Tx::LocktimeTypeOf(tx.LockBlock) == Tx::LocktimeType::Timestamp)
 		tx.m_pimpl->LockTimestamp = DateTime::from_time_t(tx.LockBlock);
 	return rd;
 }
 
 void Tx::Check() const {
 	CoinEng& eng = Eng();
+	auto& txIns = TxIns();
 
-	if (TxIns().empty())
+	if (txIns.empty())
 		Throw(CoinErr::BadTxnsVinEmpty);
 	if (TxOuts().empty())
 		Throw(CoinErr::BadTxnsVoutEmpty);
@@ -772,7 +868,7 @@ void Tx::Check() const {
 	bool bIsCoinBase = IsCoinBase();
 	int64_t nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
-        if (!txOut.IsEmpty()) {
+		if (!txOut.IsEmpty()) {
 			if (txOut.Value < 0)
 				Throw(CoinErr::BadTxnsVoutNegative);
 			if (!bIsCoinBase && txOut.Value < eng.ChainParams.MinTxOutAmount)
@@ -781,72 +877,118 @@ void Tx::Check() const {
 		eng.CheckMoneyRange(nOut += eng.CheckMoneyRange(txOut.Value));
 	}
 	unordered_set<OutPoint> outPoints;
-	EXT_FOR(const TxIn& txIn, TxIns()) {									// Check for duplicate inputs
+	EXT_FOR(const TxIn& txIn, txIns) { // Check for duplicate inputs
 		if (!outPoints.insert(txIn.PrevOutPoint).second)
 			Throw(CoinErr::DupTxInputs);
 		if (!bIsCoinBase && txIn.PrevOutPoint.IsNull())
 			Throw(CoinErr::BadTxnsPrevoutNull);
 	}
-	if (bIsCoinBase && !between(int(TxIns()[0].Script().Size), 2, 100))
+	if (bIsCoinBase && !between(int(txIns[0].Script().size()), 2, 100))
 		Throw(CoinErr::BadCbLength);
 
 	eng.OnCheck(_self);
 }
 
 void CoinEng::UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx) {
-    if (minFee < baseFee) {                   // To limit dust spam, require MIN_TX_FEE/MIN_RELAY_TX_FEE if any output is less than 0.001		//!!! Bitcoin requires min 0.01
+	if (minFee < baseFee) { // To limit dust spam, require MIN_TX_FEE/MIN_RELAY_TX_FEE if any output is less than 0.001		//!!! Bitcoin requires min 0.01
 		const int64_t cent = ChainParams.CoinValue / 1000;
-		EXT_FOR (const TxOut txOut, tx.TxOuts()) {
-            if (txOut.Value < cent) {
-                minFee = baseFee;
+		EXT_FOR(const TxOut txOut, tx.TxOuts()) {
+			if (txOut.Value < cent) {
+				minFee = baseFee;
 				break;
 			}
 		}
 	}
 }
 
-uint32_t Tx::GetSerializeSize() const {
-	return EXT_BIN(_self).Size;
+int64_t Tx::CalcMinFee(uint32_t size, int64_t feeRate) {
+    auto r = size * feeRate / 1000;
+    return !feeRate || r || !size ? r
+        : feeRate > 0 ? 1 : -1;    //!!!?
 }
 
 int64_t Tx::GetMinFee(uint32_t blockSize, bool bAllowFree, MinFeeMode mode, uint32_t nBytes) const {
 	CoinEng& eng = Eng();
-    int64_t nBaseFee = mode==MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
+	int64_t nBaseFee = mode == MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
 
 	if (uint32_t(-1) == nBytes)
 		nBytes = GetSerializeSize();
-    uint32_t nNewBlockSize = blockSize + nBytes;
-    int64_t nMinFee = (1 + (int64_t)nBytes / 1000) * nBaseFee;
+	uint32_t nNewBlockSize = blockSize + nBytes;
+	int64_t nMinFee = (1 + (int64_t)nBytes / 1000) * nBaseFee;
 
-    if (bAllowFree) {
-        if (blockSize == 1) {          
-            if (nBytes < MAX_FREE_TRANSACTION_CREATE_SIZE)
-                nMinFee = 0;					// (about 4500bc if made of 50bc inputs)
-        } else if (nNewBlockSize < 27000)		// Free transaction area
+	if (bAllowFree) {
+		if (blockSize == 1) {
+			if (nBytes < MAX_FREE_TRANSACTION_CREATE_SIZE)
+				nMinFee = 0;			  // (about 4500bc if made of 50bc inputs)
+		} else if (nNewBlockSize < 27000) // Free transaction area
 			nMinFee = 0;
-    }
-    
+	}
+
 	eng.UpdateMinFeeForTxOuts(nMinFee, nBaseFee, _self);
-    
-    if (blockSize != 1 && nNewBlockSize >= MAX_BLOCK_SIZE_GEN/2) {					// Raise the price as the block approaches full
-        if (nNewBlockSize >= MAX_BLOCK_SIZE_GEN)
-            return eng.ChainParams.MaxMoney;
-        nMinFee *= MAX_BLOCK_SIZE_GEN / (MAX_BLOCK_SIZE_GEN - nNewBlockSize);
-    }
+
+	if (blockSize != 1 && nNewBlockSize >= MAX_BLOCK_SIZE_GEN / 2) { // Raise the price as the block approaches full
+		if (nNewBlockSize >= MAX_BLOCK_SIZE_GEN)
+			return eng.ChainParams.MaxMoney;
+		nMinFee *= MAX_BLOCK_SIZE_GEN / (MAX_BLOCK_SIZE_GEN - nNewBlockSize);
+	}
 
 	try {
 		eng.CheckMoneyRange(nMinFee);
 	} catch (RCExc) {
 		return eng.ChainParams.MaxMoney;
 	}
-    return nMinFee;
+	return nMinFee;
+}
+
+uint32_t Tx::GetSerializeSize(bool witnessAware) const {
+    MemoryStream stm;
+    ProtocolWriter wr(stm);
+    wr.WitnessAware = witnessAware;
+    Write(wr);
+    return (uint32_t)stm.Position;
+}
+
+uint32_t Tx::get_Weight() const {
+    return GetSerializeSize(false) * (WITNESS_SCALE_FACTOR - 1) + GetSerializeSize(true);
+}
+
+Tx::StandardStatus Tx::CheckStandard() const {
+    int32_t ver = (int32_t)m_pimpl->Ver;    //!!!
+    if (ver < 1 || ver > MAX_STANDARD_VERSION)
+        return StandardStatus::Version;
+    if (Weight > MAX_STANDARD_TX_WEIGHT)
+        return StandardStatus::TxSize;
+    for (auto& txIn : TxIns()) {
+        Span script = txIn.Script();
+        if (script.size() > MAX_STANDARD_SIGSCRIPT_SIZE)
+            return StandardStatus::ScriptSigSize;
+        if (!Script::IsPushOnly(script))
+            return StandardStatus::ScriptSigNotPushOnly;
+    }
+
+    int nDataOut = 0;
+    auto dustFee = Eng().ChainParams.DustRelayFee;
+    for (auto& txOut : TxOuts()) {
+        auto ps = TxOut::CheckStandardType(txOut.ScriptPubKey);
+		switch (ps.Type) {
+		case AddressType::NonStandard:
+			Throw(CoinErr::NonStandardTx);
+		case AddressType::NullData:
+			++nDataOut;
+			break;
+		default:
+			if (txOut.IsDust(dustFee))
+				return StandardStatus::Dust;
+		}
+    }
+    return nDataOut <= 1 ? StandardStatus::Standard : StandardStatus::MultiOpReturn;
 }
 
 int64_t Tx::get_ValueOut() const {
 	CoinEng& eng = Eng();
 
 	int64_t r = 0;
-	EXT_FOR (const TxOut& txOut, TxOuts()) {
+	EXT_FOR(const TxOut& txOut, TxOuts()) {
 		eng.CheckMoneyRange(r += eng.CheckMoneyRange(txOut.Value));
 	}
 	return r;
@@ -856,7 +998,7 @@ int64_t Tx::get_Fee() const {
 	if (IsCoinBase())
 		return 0;
 	int64_t sum = 0;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
+	EXT_FOR(const TxIn& txIn, TxIns()) {
 		sum += Tx::FromDb(txIn.PrevOutPoint.TxHash).TxOuts().at(txIn.PrevOutPoint.Index).Value;
 	}
 	return sum - ValueOut;
@@ -865,17 +1007,38 @@ int64_t Tx::get_Fee() const {
 int Tx::get_DepthInMainChain() const {
 	CoinEng& eng = Eng();
 	Block bestBlock = eng.BestBlock();
-	return Height >= 0 && bestBlock ? bestBlock.Height-Height+1 : 0;
+	return Height >= 0 && bestBlock ? bestBlock.Height - Height + 1 : 0;
 }
 
-int Tx::GetP2SHSigOpCount(const CTxMap& txMap) const {
+unsigned Tx::GetP2SHSigOpCount(const ITxMap& txMap) const {
 	if (IsCoinBase())
 		return 0;
 	int r = 0;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
+	EXT_FOR(const TxIn& txIn, TxIns()) {
 		const TxOut& txOut = txMap.GetOutputFor(txIn.PrevOutPoint);
-		if (IsPayToScriptHash(txOut.get_PkScript()))
-			r += CalcSigOpCount(txOut.get_PkScript(), txIn.Script());
+		Span scriptPubKey = txOut.get_ScriptPubKey();
+		if (Script::IsPayToScriptHash(scriptPubKey))
+			r += CalcSigOpCount(scriptPubKey, txIn.Script());
+	}
+	return r;
+}
+
+pair<int, DateTime> Tx::CalculateSequenceLocks(vector<int>& inHeights, const HashValue& hashBlock) const {
+	auto r = make_pair(0, DateTime(0));
+	if (m_pimpl->Ver >= 2 && t_features.CheckSequenceVerify) {
+		CoinEng& eng = Eng();
+		int i = 0;
+		EXT_FOR(const TxIn& txIn, TxIns()) {
+			if (!(txIn.Sequence & TxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG)) {
+				auto coinHeight = inHeights[i];
+				int val = txIn.Sequence & TxIn::SEQUENCE_LOCKTIME_MASK;
+				if (txIn.Sequence & TxIn::SEQUENCE_LOCKTIME_TYPE_FLAG)
+					r.second = (max)(r.second, eng.Tree.GetAncestor(hashBlock, (max)(0, coinHeight - 1)).GetMedianTimePast() + TimeSpan::FromSeconds(val << TxIn::SEQUENCE_LOCKTIME_GRANULARITY));
+				else
+					r.first = (max)(r.first, coinHeight + val);
+			}
+			++i;
+		}
 	}
 	return r;
 }
@@ -887,7 +1050,7 @@ void Tx::CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const
 	else {
 		if (nValueIn < valOut)
 			Throw(CoinErr::ValueInLessThanValueOut);
-		int64_t nTxFee = nValueIn-valOut;
+		int64_t nTxFee = nValueIn - valOut;
 		if (nTxFee < minFee)
 			Throw(CoinErr::TxFeeIsLow);
 		nFees = Eng().CheckMoneyRange(nFees + nTxFee);
@@ -898,26 +1061,34 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 	CoinEng& eng = Eng();
 
 	HashValue hashTx = Hash(_self);
-	int nSigOp = nBlockSigOps + SigOpCount;
+	int nSigOp = nBlockSigOps + SigOpCost(view);
+    if (nSigOp > MAX_BLOCK_SIGOPS_COST)
+        Throw(CoinErr::TxTooManySigOps);
+
 	if (!IsCoinBase()) {
 		vector<Tx> vTxPrev;
 		int64_t nValueIn = 0;
-		if (eng.Mode!=EngMode::Lite) {
-//			TRC(3, TxIns.size() << " TxIns");
+		if (eng.Mode != EngMode::Lite) {
+			//			TRC(3, TxIns.size() << " TxIns");
+			bool bVerifySignature = !bBlock || eng.BestBlockHeight() > eng.ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD;
+			SignatureHasher sigHasher(*m_pimpl);
+			if (bVerifySignature && m_pimpl->HasWitness())
+				sigHasher.CalcWitnessCache();
 
-			for (int i=0; i<TxIns().size(); ++i) {
+			for (uint32_t i = 0; i < TxIns().size(); ++i) {
 				const TxIn& txIn = TxIns()[i];
 				OutPoint op = txIn.PrevOutPoint;
-		
+
 				Tx txPrev;
 				if (bBlock || bMiner) {
-					CTxMap::iterator it = view.TxMap.find(op.TxHash);
-					txPrev = it!=view.TxMap.end() ? it->second : FromDb(op.TxHash);
+					txPrev = view.TxMap.Find(op.TxHash);
+					if (!txPrev)
+						txPrev = FromDb(op.TxHash);
 				} else {
-					EXT_LOCK (eng.TxPool.Mtx) {
-						CoinEng::CTxPool::CHashToTx::iterator it = eng.TxPool.m_hashToTx.find(op.TxHash);
-						if (it != eng.TxPool.m_hashToTx.end())
-							txPrev = it->second;
+					EXT_LOCK(eng.TxPool.Mtx) {
+						TxPool::CHashToTxInfo::iterator it = eng.TxPool.m_hashToTxInfo.find(op.TxHash);
+						if (it != eng.TxPool.m_hashToTxInfo.end())
+							txPrev = it->second.Tx;
 					}
 					if (!txPrev)
 						txPrev = FromDb(op.TxHash);
@@ -925,10 +1096,6 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 				if (op.Index >= txPrev.TxOuts().size())
 					Throw(E_FAIL);
 				const TxOut& txOut = txPrev.TxOuts()[op.Index];
-				if (t_bPayToScriptHash) {
-					if ((nSigOp += CalcSigOpCount(txOut.PkScript, txIn.Script())) > MAX_BLOCK_SIGOPS)
-						Throw(CoinErr::TxTooManySigOps);
-				}
 
 				if (txPrev.IsCoinBase())
 					eng.CheckCoinbasedTxPrev(height, txPrev);
@@ -937,8 +1104,13 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 					Throw(CoinErr::InputsAlreadySpent);
 				view.SpendInput(op);
 
-				if (!bBlock || eng.BestBlockHeight() > eng.ChainParams.LastCheckpointHeight-INITIAL_BLOCK_THRESHOLD)	// Skip ECDSA signature verification when connecting blocks (fBlock=true) during initial download
-					VerifySignature(txPrev, _self, i);
+				if (bVerifySignature) {
+					sigHasher.m_bWitness = false;
+					sigHasher.NIn = i;
+					sigHasher.m_amount = txOut.Value;
+					sigHasher.HashType = SigHashType::ZERO;
+					sigHasher.VerifySignature(txPrev);
+				}
 
 				eng.CheckMoneyRange(nValueIn += txOut.Value);
 				vTxPrev.push_back(txPrev);
@@ -948,36 +1120,41 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 		if (bBlock)
 			eng.OnConnectInputs(_self, vTxPrev, bBlock, bMiner);
 
-		if (eng.Mode!=EngMode::Lite)
+		if (eng.Mode != EngMode::Lite)
 			CheckInOutValue(nValueIn, nFees, minFee, target);
 	}
-	if (nSigOp > MAX_BLOCK_SIGOPS)
-		Throw(CoinErr::TxTooManySigOps);
 	nBlockSigOps = nSigOp;
-	view.TxMap[hashTx] = _self;
+	view.TxMap.Add(_self);
 }
 
-int Tx::get_SigOpCount() const {
-	int r = 0;
-	EXT_FOR (const TxIn& txIn, TxIns()) {
+unsigned Tx::SigOpCost(const ITxMap& txMap) const {
+    unsigned r = 0;
+	EXT_FOR(const TxIn& txIn, TxIns()) {
 		if (txIn.PrevOutPoint.Index >= 0)
 			r += CalcSigOpCount1(txIn.Script());
 	}
-	EXT_FOR (const TxOut& txOut, TxOuts()) {
-		try {																		//!!! should be more careful checking
+	EXT_FOR(const TxOut& txOut, TxOuts()) {
+		try { //!!! should be more careful checking
 			DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
-			
-			r += CalcSigOpCount1(txOut.get_PkScript());
-		} catch (RCExc) {			
+
+			r += CalcSigOpCount1(txOut.get_ScriptPubKey());
+		} catch (RCExc) {
 		}
 	}
+    r *= WITNESS_SCALE_FACTOR;
+    if (!IsCoinBase()) {
+        r += GetP2SHSigOpCount(txMap) * WITNESS_SCALE_FACTOR;
+
+        for (auto& txIn : TxIns())
+            r += txIn.CountWitnessSigOps();
+    }
 	return r;
 }
 
 DbWriter& operator<<(DbWriter& wr, const CTxes& txes) {
 	if (!wr.BlockchainDb)
-		Throw(E_NOTIMPL);	
-	EXT_FOR (const Tx& tx, txes) {
+		Throw(E_NOTIMPL);
+	EXT_FOR(const Tx& tx, txes) {
 		wr << tx;
 	}
 	return wr;
@@ -990,13 +1167,11 @@ const DbReader& operator>>(const DbReader& rd, CTxes& txes) {
 	while (!rd.BaseStream.Eof()) {
 		Tx tx;
 		rd >> tx;
-//!!!R		tx.m_pimpl->N = txes.size();
+		//!!!R		tx.m_pimpl->N = txes.size();
 		tx.Height = rd.PCurBlock->Height;
 		txes.push_back(tx);
 	}
 	return rd;
 }
 
-
-} // Coin::
-
+} // namespace Coin

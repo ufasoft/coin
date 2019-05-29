@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -9,30 +9,33 @@ namespace Ext { namespace DB { namespace KV {
 
 const int FILL_THRESHOLD_PERCENTS = 25;
 const size_t MAX_KEYS_PER_PAGE = 1024;
-const byte ENTRY_FLAG_BIGDATA = 1;
+const uint8_t ENTRY_FLAG_BIGDATA = 1;
 
-struct EntryDesc : Buf {
-	ConstBuf Key() {
-		return ConstBuf(P+1, P[0]);
+struct EntryDesc {
+    uint8_t *P;
+    size_t Size;
+
+	Span Key() {
+		return Span(P + 1, P[0]);
 	}
 
 	uint64_t DataSize;
-	ConstBuf LocalData;
+	Span LocalData;
 	uint32_t PgNo;
 	bool Overflowed;
 };
 
-LiteEntry GetLiteEntry(const PagePos& pp, byte keySize);
+LiteEntry GetLiteEntry(const PagePos& pp, uint8_t keySize);
 size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t dsize);
-void InsertCell(const PagePos& pagePos, const ConstBuf& cell, byte keySize);
-uint32_t DeleteEntry(const PagePos& pp, byte keySize);
+void InsertCell(const PagePos& pagePos, RCSpan cell, uint8_t keySize);
+uint32_t DeleteEntry(const PagePos& pp, uint8_t keySize);
 size_t CalculateLocalDataSize(uint64_t dataSize, size_t cbExtendedPrefix, size_t pageSize);
 
 struct LiteEntry {
-	byte *P;
+	uint8_t* P;
 
-	ConstBuf Key(byte keySize) {
-		return keySize ? ConstBuf(P, keySize) : ConstBuf(P+1, P[0]);
+	Span Key(uint8_t keySize) {
+		return keySize ? Span(P, keySize) : Span(P + 1, P[0]);
 	}
 
 	uint32_t PgNo() {
@@ -43,22 +46,22 @@ struct LiteEntry {
 		PutLeUInt32(P-4, v);
 	}
 
-	uint64_t DataSize(byte keySize, byte keyOffset) const {
-		const byte *p = P + (keySize ? keySize-keyOffset : 1+P[0]);
+	uint64_t DataSize(uint8_t keySize, uint8_t keyOffset) const {
+		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
 		return Read7BitEncoded(p);
 	}
 
-	ConstBuf LocalData(size_t pageSize, byte keySize, byte keyOffset) const {
-		const byte *p = P + (keySize ? keySize-keyOffset : 1+P[0]);
+	Span LocalData(size_t pageSize, uint8_t keySize, uint8_t keyOffset) const {
+		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
 		uint64_t dataSize = Read7BitEncoded(p);
-		return ConstBuf(p, CalculateLocalDataSize(dataSize, p - P + keyOffset, pageSize));
+		return Span(p, CalculateLocalDataSize(dataSize, p - P + keyOffset, pageSize));
 	}
 
 	uint32_t FirstBigdataPage() {
-		return (this+1)->PgNo();
+		return (this + 1)->PgNo();
 	}
 
-	byte *Upper() { return (this+1)->P; }
+	uint8_t* Upper() { return (this + 1)->P; }
 
 	size_t Size() { return Upper()-P; }
 };
@@ -77,11 +80,11 @@ public:
 	}
 
 	TableType Type() override { return TableType::BTree; }
-	static void AddEntry(void *p, bool bIsBranch, const ConstBuf& key, const ConstBuf& data, uint32_t pgno, byte flags);
-	void AddEntry(const PagePos& pagePos, const ConstBuf& key, const ConstBuf& data, uint32_t pgno, byte flags = 0);
+	static void AddEntry(void* p, bool bIsBranch, RCSpan key, RCSpan data, uint32_t pgno, uint8_t flags);
+	void AddEntry(const PagePos& pagePos, RCSpan key, RCSpan data, uint32_t pgno, uint8_t flags = 0);
 private:
 	void SetRoot(const Page& page);
-	void BalanceNonRoot(PagePos& ppParent, Page&, byte *tmpPage);
+	void BalanceNonRoot(PagePos& ppParent, Page&, uint8_t* tmpPage);
 
 	void Init(const TableData& td) override {
 		base::Init(td);
@@ -122,28 +125,28 @@ public:
 	bool SeekToFirst() override;
 	bool SeekToLast() override;
 	bool SeekToSibling(bool bToRight) override;
-	bool SeekToKey(const ConstBuf& k) override;	
+	bool SeekToKey(RCSpan k) override;
 
-	void Put(ConstBuf k, const ConstBuf& d, bool bInsert) override;
-	void PushFront(ConstBuf k, const ConstBuf& d) override;
+	void Put(Span k, RCSpan d, bool bInsert) override;
+	void PushFront(Span k, RCSpan d) override;
 	void Delete() override;
 
 private:
 	BTreeCursor(DbCursor& c, bool bRight, Page& pageSibling);				// make siblig cursor
 	BTreeCursor *Clone() override { return new BTreeCursor(*this); }
-	
-	void UpdateKey(const ConstBuf& key);
-	bool PageSearchRoot(const ConstBuf& k, bool bModify);
-	bool PageSearch(const ConstBuf& k, bool bModify = false);
+
+	void UpdateKey(RCSpan key);
+	bool PageSearchRoot(RCSpan k, bool bModify);
+	bool PageSearch(RCSpan k, bool bModify = false);
 	void Drop() override;
 	void Balance() override;
-	int CompareEntry(LiteEntry *entries, int idx, const ConstBuf& kk);
+	int CompareEntry(LiteEntry *entries, int idx, RCSpan kk);
 
 	Page FindLeftSibling();
 	Page FindRightSibling();
 
-	void InsertImp(ConstBuf k, const ConstBuf& d);
-	
+	void InsertImp(Span k, RCSpan d);
+
 	friend class BTree;
 	friend class DbTable;
 };

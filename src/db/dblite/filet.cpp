@@ -42,7 +42,7 @@ Page Filet::FindPath(uint64_t offset, PathVisitor& visitor) const {
 	return page;
 }
 
-byte *Filet::FindPathFlat(uint64_t offset, PathVisitor& visitor) const {
+uint8_t *Filet::FindPathFlat(uint64_t offset, PathVisitor& visitor) const {
 	uint32_t pn = PageRoot.N, pnPrev = 0;
 	uint32_t pgno = 0;
 	int prevIdx = 0;
@@ -63,7 +63,7 @@ byte *Filet::FindPathFlat(uint64_t offset, PathVisitor& visitor) const {
 		pn = pgno;
 		offset &= (1LL<<bits) - 1;
 	}
-	return pn ? (byte*)m_tx.Storage.ViewAddress + uint64_t(pn) * m_tx.Storage.PageSize : nullptr;
+	return pn ? (uint8_t*)m_tx.Storage.ViewAddress + uint64_t(pn) * m_tx.Storage.PageSize : nullptr;
 }
 
 bool Filet::TouchPage(Page& page) {
@@ -177,7 +177,7 @@ void Filet::put_Length(uint64_t v) {
 	if (v > prevLen) {
 		if (Page page = GetPageToModify(prevLen, true)) {
 			size_t off = size_t(prevLen & (tx.Storage.PageSize-1));
-			memset((byte*)page.get_Address() + off, 0, m_tx.Storage.PageSize-off);
+			memset((uint8_t*)page.get_Address() + off, 0, m_tx.Storage.PageSize-off);
 		}
 	}
 }
@@ -202,7 +202,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 				return bool(pgno);
 			}
 		} visitor;
-		byte *p = FindPathFlat(offset, visitor);
+		uint8_t *p = FindPathFlat(offset, visitor);
 #if UCFG_DB_TLB
 		TlbAddress.insert(make_pair(vpage, p));
 #endif
@@ -211,7 +211,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 #if UCFG_DB_TLB
 		CTlbPage::iterator it = TlbPage.find(vpage);
 		if (it != TlbPage.end())
-			return it->second.first ? letoh(*(uint32_t*)((byte*)it->second.first.get_Address() + off)) : 0;
+			return it->second.first ? letoh(*(uint32_t*)((uint8_t*)it->second.first.get_Address() + off)) : 0;
 #endif
 
 #if 1
@@ -225,7 +225,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 					int bits = PageSizeBits + level*(PageSizeBits-2);
 					m_tx.Storage.OnOpenPage(pgno);			
 					if (level == -1)
-						return letoh(*(uint32_t*)((byte*)pageAddress + off));
+						return letoh(*(uint32_t*)((uint8_t*)pageAddress + off));
 					if (!(pgno = letoh(((uint32_t*)pageAddress)[int(offset >> bits)])))
 						return 0;
 					PageObj *po = m_tx.Storage.OpenedPages.at(pgno);
@@ -246,7 +246,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 #if UCFG_DB_TLB
 		TlbPage.insert(make_pair(vpage, page));
 #endif
-		uint32_t r = page ? letoh(*(uint32_t*)((byte*)page.get_Address() + off)) : 0;
+		uint32_t r = page ? letoh(*(uint32_t*)((uint8_t*)page.get_Address() + off)) : 0;
 		return r; 
 #endif
 	}
@@ -257,7 +257,7 @@ void Filet::PutUInt32(uint64_t offset, uint32_t v) {
 		Length = offset+sizeof(uint32_t);
 	if (offset & 3)
 		Throw(errc::invalid_argument);
-	*(uint32_t*)((byte*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize-1))) = htole(v);
+	*(uint32_t*)((uint8_t*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize-1))) = htole(v);
 }
 
 

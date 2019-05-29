@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "param.h"
@@ -12,6 +17,20 @@
 namespace Coin {
 
 
+vector<BlockHeader> SqliteBlockChainDb::GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) {
+	vector<Block> r;
+	int idx = locators.FindIndexInMainChain();
+	EXT_LOCK(MtxSqlite) {
+		SqliteCommand cmd(EXT_STR("SELECT id, hash, data, txhashes FROM blocks WHERE id>" << idx << " ORDER BY id LIMIT " << MAX_HEADERS_RESULTS + locators.DistanceBack), m_db);
+		for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
+			BlockHeader header = LoadBlock(dr);
+			r.push_back(header);
+			if (Hash(header) == hashStop)
+				break;
+		}
+	}
+	return r;
+}
 
 Block SqliteBlockChainDb::LoadBlock(DbDataReader& sr) {
 	CoinEng& eng = Eng();
@@ -45,19 +64,19 @@ void SqliteBlockChainDb::LoadFromDb(Tx& tx, DbDataReader& sr) {
 
 /*!!!
 void InsertOrUpdateTx(const HashValue160& hash160, const HashValue& hashTx) {
-	Int64 id = Int64(CIdPk(hash160));
+	int64_t id = int64_t(CIdPk(hash160));
 
 	CPubToTxHashes::iterator it = m_lruPubToTxHashes.find(id);
 	if (it != m_lruPubToTxHashes.end()) {
 		TxHashes& txHashes = it->second;
-		txHashes.Vec.push_back(*(Int64*)hashTx.data());
+		txHashes.Vec.push_back(*(int64_t*)hashTx.data());
 		txHashes.Modified = true;
 	} else {
 		DbDataReader dr = CmdFindByHash160.Bind(1, id).ExecuteReader();
 		if (dr.Read()) {
 			ConstBuf cbuf = dr.GetBytes(0);
-			TxHashes txHashes(cbuf.Size/sizeof(Int64)+1);
-			memcpy((byte*)memcpy(&txHashes.Vec[0], cbuf.P, cbuf.Size) + cbuf.Size, hashTx.data(), sizeof(Int64));
+			TxHashes txHashes(cbuf.Size/sizeof(int64_t)+1);
+			memcpy((uint8_t*)memcpy(&txHashes.Vec[0], cbuf.P, cbuf.Size) + cbuf.Size, hashTx.data(), sizeof(int64_t));
 			m_lruPubToTxHashes.insert(make_pair(id, txHashes));
 		} else {
 			CmdInsertPkTxes
@@ -73,8 +92,8 @@ void SqliteBlockChainDb::InsertPubkeyToTxes(const Tx& tx) {
 	Throw(E_NOTIMPL);
 }
 
-vector<Int64> SqliteBlockChainDb::GetTxesByPubKey(const HashValue160& pubkey) {
-	vector<Int64> r;
+vector<int64_t> SqliteBlockChainDb::GetTxesByPubKey(const HashValue160& pubkey) {
+	vector<int64_t> r;
 	EXT_LOCK (MtxSqlite) {
 		SqliteCommand cmd("SELECT txhashes FROM pubkeys WHERE id=?", m_db);
 		DbDataReader dr = cmd.Bind(1, pubkey).ExecuteReader();

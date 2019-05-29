@@ -21,7 +21,7 @@ public:
 
 	HashTable(DbTransactionBase& tx);
 	TableType Type() override { return TableType::HashTable; }
-	uint32_t Hash(const ConstBuf& key) const;
+	uint32_t Hash(RCSpan key) const;
 	int BitsOfHash() const;
 	Page TouchBucket(uint32_t nPage);
 	uint32_t GetPgno(uint32_t nPage) const;
@@ -73,10 +73,10 @@ public:
 	bool SeekToSibling(bool bToRight) override;
 	bool SeekToNext() override;
 	bool SeekToPrev() override;
-	bool SeekToKey(const ConstBuf& k) override;	
-	bool Get(const ConstBuf& k) { return SeekToKey(k); }
-	void Put(ConstBuf k, const ConstBuf& d, bool bInsert = false) override;
-	void Update(const ConstBuf& d) override;
+	bool SeekToKey(RCSpan k) override;
+	bool Get(RCSpan k) { return SeekToKey(k); }
+	void Put(Span k, RCSpan d, bool bInsert = false) override;
+	void Update(RCSpan d) override;
 	void Delete() override;
 
 
@@ -87,14 +87,14 @@ private:
 	ptr<BTreeSubCursor> SubCursor;
 	PagePos m_pagePos;
 
-	bool SeekToKeyHash(const ConstBuf& k, uint32_t hash);				// returns bFound
+	bool SeekToKeyHash(RCSpan k, uint32_t hash);				// returns bFound
 	void UpdateFromSubCursor();
 
 	HtCursor *Clone() override { return new HtCursor(*this); }
 
 	friend class BTreeSubCursor;
 
-	bool UpdateImpl(const ConstBuf& k, const ConstBuf& d, bool bInsert);
+	bool UpdateImpl(RCSpan k, RCSpan d, bool bInsert);
 };
 
 

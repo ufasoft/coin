@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -10,12 +10,12 @@
 
 namespace Coin {
 
-BinaryWriter& operator<<(BinaryWriter& wr, const MinerBlock& block) {
+    ProtocolWriter& operator<<(ProtocolWriter& wr, const MinerBlock& block) {
 	block.WriteHeader(wr);
 
 	CoinSerialized::WriteVarInt(wr, block.Txes.size());
 	EXT_FOR (const MinerTx& mtx, block.Txes) {
-		wr.BaseStream.WriteBuf(mtx.Data);
+		wr.BaseStream.Write(mtx.Data);
 	}
 	return wr;
 }
@@ -29,7 +29,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 
 	DifficultyTargetBits = Convert::ToUInt32(json["bits"].ToString(), 16);
 	HashTarget = HashValue::FromDifficultyBits(DifficultyTargetBits);
-	
+
 	VarValue txes = json["transactions"];
 	Txes.resize(txes.size()+1);
 
@@ -39,7 +39,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 #endif
 
 	if (json.HasKey("mintime"))
-		MinTime = DateTime::from_time_t(json["mintime"].ToInt64());	
+		MinTime = DateTime::from_time_t(json["mintime"].ToInt64());
 
 	if (json.HasKey("sizelimit"))
 		SizeLimit = uint32_t(json["sizelimit"].ToInt64());
@@ -54,17 +54,17 @@ void MinerBlock::ReadJson(const VarValue& json) {
 		MemoryStream ms;
 		vector<String> keys = coinbaseAux.Keys();
 		EXT_FOR(RCString key, keys) {
-			ms.WriteBuf(Blob::FromHexString(coinbaseAux[key].ToString()));
+			ms.Write(Blob::FromHexString(coinbaseAux[key].ToString()));
 		}
-		CoinbaseAux = ConstBuf(ms);
+		CoinbaseAux = ms.AsSpan();
 	}
 
 	/*
-	byte arPfx[] = { 1, 0, 0, 0, 1,
+	uint8_t arPfx[] = { 1, 0, 0, 0, 1,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255,
-		9, 0x03, byte(Height), byte(Height >> 8), byte(Height >> 16), 4 };
+		9, 0x03, uint8_t(Height), uint8_t(Height >> 8), uint8_t(Height >> 16), 4 };
 	Coinb1 = Blob(arPfx, sizeof arPfx);
-	ExtraNonce2 = Blob(0, 4);		
+	ExtraNonce2 = Blob(0, 4);
 	*/
 
 	for (int i=0; i<txes.size(); ++i) {
@@ -101,14 +101,14 @@ void MinerBlock::ReadJson(const VarValue& json) {
 		CoinbaseTxn = blob;
 		if (blob.Size <= 36+4+1)
 			Throw(E_FAIL);
-		byte& lenScript = *(blob.data()+36+4+1);
+		uint8_t& lenScript = *(blob.data()+36+4+1);
 		lenScript += 4;
 		size_t cbFirst = 36+4+1+1+lenScript-4;
-		
+
 		Coinb1 = Blob(blob.data(), cbFirst);
 //		Extranonce1 = Blob(0, 0);
 		Coinb2 = Blob(blob.data()+cbFirst, blob.Size-cbFirst);
-	}	
+	}
 
 	if (json.HasKey("longpollid")) {
 		LongPollId = json["longpollid"].ToString();
@@ -145,38 +145,38 @@ HashValue MinerBlock::MerkleRoot(bool bSave) const {
 #endif
 
 	}
-	return m_merkleRoot.get();
+	return m_merkleRoot.value();
 }
 
 void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	MemoryStream msScript(64);
-	BinaryWriter wrScript(msScript);	
-	wrScript << BigInteger(Height) << byte(8);
+	BinaryWriter wrScript(msScript);
+	wrScript << BigInteger(Height) << uint8_t(8);
 	size_t coinb1Size = (size_t)msScript.Position;
 	wrScript << int64_t(0);					// place for ExtraNonce1, ExtraNonce2;
 	if (CoinbaseAux.Size) {
 		ASSERT(CoinbaseAux.Size < 75);	//!!!TODO
 
-		byte firstByte = CoinbaseAux.constData()[0];
+		uint8_t firstByte = CoinbaseAux.constData()[0];
 		if (firstByte==0 || firstByte!=CoinbaseAux.Size-1)
-			wrScript << byte(CoinbaseAux.Size);
-		msScript.WriteBuf(CoinbaseAux);
+			wrScript << uint8_t(CoinbaseAux.Size);
+		msScript.Write(CoinbaseAux);
 	}
-	Blob scriptIn = Blob(ConstBuf(msScript));
+	Blob scriptIn = Blob(msScript.AsSpan());
 
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
-	wr << uint32_t(1) << byte(1) << HashValue::Null() << uint32_t(-1);
+	wr << uint32_t(1) << uint8_t(1) << HashValue::Null() << uint32_t(-1);
 	CoinSerialized::WriteVarInt(wr, scriptIn.Size);
 	coinb1Size += int(ms.Position);
-	ms.WriteBuf(scriptIn);
-	wr << uint32_t(-1) << byte(1) << CoinbaseValue								// seq, NOut
-		<< byte(25)																// len(PkScript)
-		<< byte(0x76) << byte(0xA9) << byte(20);									// OP_DUP OP_HASH160, hash160Len
-	ms.WriteBuf(ConstBuf(ConvertFromBase58(address, false).constData()+1, 20));
-	wr << byte(0x88) << byte(0xAC);												//OP_EQUALVERIFY OP_CHECKSIG
+	ms.Write(scriptIn);
+	wr << uint32_t(-1) << uint8_t(1) << CoinbaseValue								// seq, NOut
+		<< uint8_t(25)																// len(PkScript)
+		<< uint8_t(0x76) << uint8_t(0xA9) << uint8_t(20);									// OP_DUP OP_HASH160, hash160Len
+	ms.Write(ConstBuf(ConvertFromBase58(address, false).constData()+1, 20));
+	wr << uint8_t(0x88) << uint8_t(0xAC);												//OP_EQUALVERIFY OP_CHECKSIG
 	wr << uint32_t(0);		// locktime;
-	Blob coinbasetxn = ms;
+	Blob coinbasetxn = ms.AsSpan();
 	Coinb1 = Blob(coinbasetxn.constData(), coinb1Size);
 	Coinb2 = Blob(coinbasetxn.constData()+coinb1Size+8, coinbasetxn.Size-coinb1Size-8);
 }

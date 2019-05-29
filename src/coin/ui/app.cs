@@ -106,7 +106,7 @@ namespace Coin {
 			int count = argsCollection.Count - 1;
 			string[] args = new string[count];
 			for (int i = 0; i < count; ++i)
-				args[i] = argsCollection[i + 1];				
+				args[i] = argsCollection[i + 1];
 			App.OnStartupNextInstance(args);
 		}
 	}

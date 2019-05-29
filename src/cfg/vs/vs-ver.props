@@ -1,25 +1,75 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<PropertyGroup>
-    	<PlatformToolset Condition="'$(PlatformToolset)' == '' AND '$(VisualStudioVersion)' == '12.0'">v120</PlatformToolset>
-	    <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V140') ">v140</PlatformToolset>
-    	<PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V120') ">v120</PlatformToolset>
-	    <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V110') ">v110</PlatformToolset>
+    <PropertyGroup>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND '$(VisualStudioVersion)' == '12.0'">v120</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\Platforms\Win32\PlatformToolsets\v142') ">v142</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\Platforms\Win32\PlatformToolsets\v141') ">v141</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V141') ">v141</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V140') ">v140</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V120') ">v120</PlatformToolset>
+        <PlatformToolset Condition="'$(PlatformToolset)' == '' AND Exists('$(VCTargetsPath)\..\V110') ">v110</PlatformToolset>
 
-		<YasmPath>$(MSBuildThisFileDirectory)..\..\..\tools\</YasmPath>
-  </PropertyGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup>
-   	<IntDir>$(SolutionDir)\obj\$(ProjectName)\$(PlatformShortName)_$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)$(PlatformShortName)_$(Configuration)\</OutDir>
-  </PropertyGroup>
-  <ItemDefinitionGroup>
-		<ClCompile>
-      		<DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-    	</ClCompile>
-	    <Link>
-    		<LargeAddressAware Condition="'$(Platform)'=='Win32'">true</LargeAddressAware>
-      		<MinimumRequiredVersion Condition="'$(Platform)'=='Win32'">5.01</MinimumRequiredVersion>
-      		<MinimumRequiredVersion Condition="'$(Platform)'=='x64'">5.2</MinimumRequiredVersion>
-    	</Link>
-  </ItemDefinitionGroup>
+        <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v140'">10.0.14393.0</WindowsTargetPlatformVersion>
+        <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v141'">10.0.14393.0</WindowsTargetPlatformVersion>
+        <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v142'">10.0.14393.0</WindowsTargetPlatformVersion>
+
+        <YasmPath>C:\UTIL\</YasmPath>
+        <SpectreMitigation>false</SpectreMitigation>
+        <GenerateManifest>false</GenerateManifest>
+        <EmbedManifest>false</EmbedManifest>
+        <LinkIncremental>false</LinkIncremental>
+	    <CLRSupport>false</CLRSupport>
+
+
+<!--
+        <WindowsSDK_LibraryPath_x86>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x86</WindowsSDK_LibraryPath_x86>
+        <WindowsSDK_LibraryPath_x64>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x64</WindowsSDK_LibraryPath_x64>
+-->
+
+    </PropertyGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+    <PropertyGroup>
+	    <IntDir>$(SolutionDir)\obj\$(ProjectName)\$(PlatformShortName)_$(Configuration)\</IntDir>
+    	<OutDir>$(SolutionDir)$(PlatformShortName)_$(Configuration)\</OutDir>
+    </PropertyGroup>
+    <ItemDefinitionGroup>
+        <ClCompile>
+			<RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+
+<!--            <LanguageStandard>stdcpp17</LanguageStandard>  -->
+            <LanguageStandard>stdcpplatest</LanguageStandard>
+
+            <BufferSecurityCheck>false</BufferSecurityCheck>
+            <Optimization>MinSpace</Optimization>
+            <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+            <IntrinsicFunctions>true</IntrinsicFunctions>
+            <WarningLevel>Level4</WarningLevel>
+            <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+            <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+
+<!--            <AdditionalIncludeDirectories>C:\P\Windows Kits\10\Include\10.0.10240.0\ucrt;C:\P\Windows Kits\10\Include\10.0.10240.0\shared;C:\P\Windows Kits\10\Include\10.0.10240.0\um;</AdditionalIncludeDirectories> -->
+            <EnableEnhancedInstructionSet Condition="$(PlatformToolsetVersion) > 120 AND '$(Platform)'=='Win32'">NoExtensions</EnableEnhancedInstructionSet>
+            <RemoveUnreferencedCodeData>true</RemoveUnreferencedCodeData>			
+			<AdditionalOptions>/d2FH4</AdditionalOptions>
+<!--            <AdditionalOptions>/J</AdditionalOptions> -->
+            <SupportJustMyCode>false</SupportJustMyCode>
+        </ClCompile>
+        <Link>
+<!--            <WindowsSDK_LibraryPath_x86>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x86</WindowsSDK_LibraryPath_x86> -->
+
+            <StackReserveSize>262144</StackReserveSize>
+
+            <GenerateDebugInformation>true</GenerateDebugInformation>
+            <ProgramDatabaseFile>$(OutDir)PDB/$(TargetName).pdb</ProgramDatabaseFile>
+            <RandomizedBaseAddress>false</RandomizedBaseAddress>
+            <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+            <AdditionalLibraryDirectories>$(OutDir)lib</AdditionalLibraryDirectories>
+            <SubSystem>Windows</SubSystem>
+            <LargeAddressAware Condition="'$(Platform)'=='Win32'">true</LargeAddressAware>
+            <MinimumRequiredVersion Condition="'$(Platform)'=='Win32'">5.01</MinimumRequiredVersion>
+            <MinimumRequiredVersion Condition="'$(Platform)'=='x64'">5.2</MinimumRequiredVersion>
+        </Link>
+        <Midl>
+<!--            <AdditionalIncludeDirectories>C:\P\Windows Kits\10\Include\10.0.10240.0\um;C:\P\Windows Kits\10\Include\10.0.10240.0\shared</AdditionalIncludeDirectories> -->
+        </Midl>
+    </ItemDefinitionGroup>
 </Project>

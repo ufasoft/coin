@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -12,25 +12,25 @@ using namespace Crypto;
 
 namespace Coin {
 
-HashValue SHA256_SHA256(const ConstBuf& cbuf) {
+HashValue SHA256_SHA256(RCSpan cbuf) {
 	SHA256 sha;
-	return ConstBuf(sha.ComputeHash(sha.ComputeHash(cbuf)));
+	return sha.ComputeHash(sha.ComputeHash(cbuf));
 }
 
-HashValue160 Hash160(const ConstBuf& mb) {
+HashValue160 Hash160(RCSpan mb) {
 	return HashValue160(RIPEMD160().ComputeHash(SHA256().ComputeHash(mb)));
 }
 
-HashValue ScryptHash(const ConstBuf& mb) {
+HashValue ScryptHash(RCSpan mb) {
 	CArray8UInt32 ar = CalcSCryptHash(mb);
 	return HashValue(ConstBuf(ar.data(), 32));
 }
 
-HashValue NeoSCryptHash(const ConstBuf& mb, int profile) {
+HashValue NeoSCryptHash(RCSpan mb, int profile) {
 	return HashValue(ConstBuf(CalcNeoSCryptHash(mb, profile).data(), 32));
 }
 
-HashValue GroestlHash(const ConstBuf& mb) {
+HashValue GroestlHash(RCSpan mb) {
 	Groestl512Hash hf;
 	return HashValue(ConstBuf(hf.ComputeHash(hf.ComputeHash(mb)).data(), 32));
 }

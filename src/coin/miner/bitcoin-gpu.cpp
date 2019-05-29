@@ -20,7 +20,7 @@
 #endif
 
 #if UCFG_BITCOIN_THERMAL_CONTROL
-#	include <el/comp/gpu-adl.h>
+#	include <el/comp/gpu-adl.cpp>
 using namespace Ext::Gpu;
 #endif
 
@@ -227,16 +227,16 @@ public:
 					static DateTime s_dtNext;
 					if (t > Miner.MaxGpuTemperature) {
 						int ms = std::min(Miner.GpuIdleMilliseconds + int(t - Miner.MaxGpuTemperature), 2000);
-						if (ms != Miner.GpuIdleMilliseconds && DateTime::UtcNow() > s_dtNext) {
+						if (ms != Miner.GpuIdleMilliseconds && Clock::now() > s_dtNext) {
 							*Miner.m_pTraceStream << "Thermal control decreases speed, T=" << (int)t << " C, delay=" << ms << endl;
-							s_dtNext = DateTime::UtcNow()+TimeSpan::FromSeconds(10);
+							s_dtNext = Clock::now()+TimeSpan::FromSeconds(10);
 						}
 						Miner.GpuIdleMilliseconds = ms;
 					} else if (t < Miner.MaxGpuTemperature*2/3) {
 						int ms = std::max(Miner.GpuIdleMilliseconds-1, 1);
-						if (ms != Miner.GpuIdleMilliseconds && DateTime::UtcNow() > s_dtNext) {
+						if (ms != Miner.GpuIdleMilliseconds && Clock::now() > s_dtNext) {
 							*Miner.m_pTraceStream << "Thermal control increases speed, T=" << (int)t << " C" << endl;
-							s_dtNext = DateTime::UtcNow()+TimeSpan::FromSeconds(10);
+							s_dtNext = Clock::now()+TimeSpan::FromSeconds(10);
 						}
 						Miner.GpuIdleMilliseconds = ms;
 					}
@@ -301,7 +301,7 @@ Buf FindTextSectionFromElf(const Buf& mb) {
 	if (0 == hdr.e_shoff)
 		Throw(E_FAIL);
 	Elf32_Shdr& sech = *(Elf32_Shdr*)(mb.P+hdr.e_shoff+hdr.e_shstrndx*hdr.e_shentsize);
-	const byte *sh = mb.P + hdr.e_shoff;
+	const uint8_t *sh = mb.P + hdr.e_shoff;
 
 	vector<Section> vSec;
 	for (int i=0; i<hdr.e_shnum; ++i) {

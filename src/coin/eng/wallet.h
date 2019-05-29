@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2012-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2012-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -8,6 +8,7 @@
 #include "coin-model.h"
 #include "eng.h"
 #include "script.h"
+#include "coin-rpc.h"
 
 namespace Coin {
 
@@ -22,9 +23,8 @@ public:
 
 	DateTime Timestamp;
 	Address To;
-	Blob ChangePubKey;
+	CanonicalPubKey ChangePubKey;
 	int64_t Amount;				// negative for Debits in COM transactions
-//!!!R	int Confirmations;
 	vector<Tx> PrevTxes;
 	String Comment;
 	CBool m_bFromMe;
@@ -39,7 +39,7 @@ public:
 	void LoadFromDb(DbDataReader& sr, bool bLoadExt = false);
 	bool IsConfirmed(Wallet& wallet) const;
 	String GetComment() const;
-	
+
 	String UniqueKey() const {		//!!!T
 		return Convert::ToString(Timestamp.Ticks)+To.ToString();
 	}
@@ -96,7 +96,7 @@ class RescanThread : public Thread {
 	typedef Thread base;
 public:
 	Coin::Wallet& Wallet;
-	int64_t m_i, m_count;	
+	int64_t m_i, m_count;
 	HashValue m_hashFrom;
 
 	RescanThread(Coin::Wallet& wallet, const HashValue& hashFrom);
@@ -109,7 +109,7 @@ class CompactThread : public Thread {
 public:
 	Coin::Wallet& Wallet;
 	atomic<int> m_ai;
-	uint32_t m_count;	
+	uint32_t m_count;
 	HashValue m_hashFrom;
 
 	CompactThread(Coin::Wallet& wallet);
@@ -128,7 +128,7 @@ public:
 	typedef unordered_map<OutPoint, TxOut> COutPointToTxOut;
 	COutPointToTxOut OutPointToTxOut;
 	ptr<Coin::RescanThread> RescanThread;
-	ptr<Coin::CompactThread> CompactThread;	
+	ptr<Coin::CompactThread> CompactThread;
 	vector<ptr<Alert>> Alerts;
 	ptr<CoinEng> m_peng;
 
@@ -146,7 +146,7 @@ public:
 
 	void Start();
 	void Stop();
-	
+
 	vector<Address> get_MyAddresses();
 	DEFPROP_GET(vector<Address>, MyAddresses);
 
@@ -173,17 +173,16 @@ public:
 	decimal64 CalcFee(const decimal64& amount);
 	void SendTo(const decimal64& decAmount, RCString saddr, RCString comment);
 	void Rescan();
-	void Close();	
+	void Close();
 //!!!	CngKey GetKey(const HashValue160& keyHash);
-	void Sign(ECDsa *randomDsa, const Blob& pkScript, Tx& txTo, uint32_t nIn, byte nHashType = SIGHASH_ALL, const Blob& scriptPrereq = Blob());
-	pair<WalletTx, decimal64> CreateTransaction(ECDsa *randomDsa, const vector<pair<Blob, int64_t>>& vSend);															// returns Fee
+	pair<WalletTx, decimal64> CreateTransaction(const KeyInfo& randomKey, const vector<pair<Address, int64_t>>& vSend);															// returns Fee
 	void Relay(const WalletTx& wtx);
-	int64_t Add(WalletTx& wtx, bool bPending);		
+	int64_t Add(WalletTx& wtx, bool bPending);
 	void Commit(WalletTx& wtx);
-	const MyKeyInfo *FindMine(const TxOut& txOut);
-	bool IsMine(const Tx& tx);
+
+	bool IsToMe(const Tx& tx);
 	bool IsFromMe(const Tx& tx) override;
-	void OnPeriodic() override;
+	void OnPeriodic(const DateTime& now) override;
 	void StartCompactDatabase();
 	void ExportWalletToBdb(const path& filepath);
 	void CancelPendingTxes();
@@ -193,31 +192,31 @@ public:
 			m_iiWalletEvents->OnStateChanged();
 	}
 protected:
-	pair<Blob, HashValue160> GetReservedPublicKey() override;
-	
-	void OnProcessBlock(const Block& block) override;	
+	pair<CanonicalPubKey, HashValue160> GetReservedPublicKey() override;
+
+	void OnProcessBlock(const Block& block) override;
 	void OnProcessTx(const Tx& tx) override;
 	void OnEraseTx(const HashValue& hashTx) override;
 	void ProcessPendingTxes();
 	void OnBlockchainChanged() override;
 	void SetNextResendTime(const DateTime& dt);
-	void ResendWalletTxes();
-	void OnPeriodicForLink(CoinLink& link) override;
-	
+	void ResendWalletTxes(const DateTime& now);
+	void OnPeriodicForLink(Link& link) override;
+
 private:
 	String DbFilePath;
 	DateTime m_dtNextResend;
 	DateTime m_dtLastResend;
-	
+
 	mutex m_mtxMyTxHashes;
 	unordered_set<HashValue> m_myTxHashes;
 
 	void Init();
-	void StartRescan(const HashValue& hashFrom = HashValue());
+	void StartRescan(const HashValue& hashFrom = HashValue::Null());
 	void TryRescanStep();
 
 	int64_t GetTxId(const HashValue& hashTx);
-	bool InsertUserTx(int64_t txid, int nout, int64_t value, const HashValue160& hash160);
+	bool InsertUserTx(int64_t txid, int nout, int64_t value);
 	void ProcessMyTx(WalletTx& wtx, bool bPending);
 
 //!!!R	void SaveBlockords();
@@ -232,19 +231,34 @@ private:
 		Progress = v;
 	}
 
-
 	void OnAlert(Alert *alert) override;
+	void CheckCreatedTransaction(const Tx& tx);
 
 	friend class RescanThread;
 };
 
-bool VerifyScript(const Blob& scriptSig, const Blob& scriptPk, const Tx& txTo, uint32_t nIn, int32_t nHashType);
+class WalletSigner : public Signer {
+	typedef Signer base;
+public:
+	Wallet& m_wallet;
+
+	WalletSigner(Wallet& wallet, Tx& tx)
+		: base(tx)
+		, m_wallet(wallet)
+	{}
+protected:
+	KeyInfo GetMyKeyInfo(const HashValue160& hash160) override;
+	KeyInfo GetMyKeyInfoByScriptHash(const HashValue160& hash160) override;
+	Blob GetMyRedeemScript(const HashValue160& hash160) override;
+};
+
 
 class COIN_CLASS WalletEng : public Object {
 public:
 	CoinDb m_cdb;
 	vector<ptr<Wallet>> Wallets;
-	
+	ptr<Coin::Rpc> Rpc;
+
 	WalletEng();
 	~WalletEng();
 };

@@ -19,9 +19,6 @@
     <Filter Include="comp\h">
       <UniqueIdentifier>{cd20eeff-2a07-43c4-a0cb-f17b3c72d610}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\p2p">
-      <UniqueIdentifier>{309d769e-0d6b-41a6-a90f-80edce3c5316}</UniqueIdentifier>
-    </Filter>
     <Filter Include="comp\crypto">
       <UniqueIdentifier>{02931251-a8c0-4d06-bd1b-8bd69ba95d11}</UniqueIdentifier>
     </Filter>
@@ -37,14 +34,17 @@
     <Filter Include="Source Files\currency">
       <UniqueIdentifier>{985db27c-9a5f-4e52-a867-322305289df2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="comp\p2p">
-      <UniqueIdentifier>{70d04523-1420-4a39-8298-96baa6739ce6}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\backend-sqlite">
-      <UniqueIdentifier>{56311435-2adf-4160-b7b4-d85dae621222}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\currency\excluded">
       <UniqueIdentifier>{a038683e-4e24-4a3b-82bb-0d19477f5859}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\COM">
+      <UniqueIdentifier>{63ce99f8-bb76-466e-a0d4-fd9191cfa889}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Obsolete">
+      <UniqueIdentifier>{c579b343-1fce-41e2-a018-08a00454d333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Obsolete\backend-sqlite">
+      <UniqueIdentifier>{56311435-2adf-4160-b7b4-d85dae621222}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -53,15 +53,6 @@
     </ClCompile>
     <ClCompile Include="..\..\el\comp\stdafx.cpp">
       <Filter>comp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\irc-client.cpp">
-      <Filter>comp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\p2p-net.cpp">
-      <Filter>comp\p2p</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\detect-global-ip.cpp">
-      <Filter>comp\p2p</Filter>
     </ClCompile>
     <ClCompile Include="coin-model.cpp">
       <Filter>Source Files</Filter>
@@ -72,19 +63,10 @@
     <ClCompile Include="wallet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="coin-com.cpp">
+    <ClCompile Include="protocol.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="coin-protocol.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\p2p-peers.cpp">
-      <Filter>comp\p2p</Filter>
     </ClCompile>
     <ClCompile Include="generate.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="irc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="block.cpp">
@@ -138,7 +120,7 @@
     <ClCompile Include="..\..\el\comp\json-writer.cpp">
       <Filter>comp</Filter>
     </ClCompile>
-    <ClCompile Include="coinrpc.cpp">
+    <ClCompile Include="rpc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\xml\xml-dom.cpp">
@@ -196,19 +178,13 @@
       <Filter>Source Files\currency</Filter>
     </ClCompile>
     <ClCompile Include="backend-sqlite.cpp">
-      <Filter>Source Files\backend-sqlite</Filter>
+      <Filter>Source Files\Obsolete\backend-sqlite</Filter>
     </ClCompile>
     <ClCompile Include="currency\ixcoin.cpp">
       <Filter>Source Files\currency</Filter>
     </ClCompile>
     <ClCompile Include="currency\litecoin.cpp">
       <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\proxy-client.cpp">
-      <Filter>comp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\el\inet\proxy.cpp">
-      <Filter>comp</Filter>
     </ClCompile>
     <ClCompile Include="bootstrap.cpp">
       <Filter>Source Files</Filter>
@@ -227,6 +203,24 @@
     </ClCompile>
     <ClCompile Include="..\..\el\elwin\dllmodul.cpp">
       <Filter>comp</Filter>
+    </ClCompile>
+    <ClCompile Include="download-blockchain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coin-com.cpp">
+      <Filter>Source Files\COM</Filter>
+    </ClCompile>
+    <ClCompile Include="irc.cpp">
+      <Filter>Source Files\Obsolete</Filter>
+    </ClCompile>
+    <ClCompile Include="sign.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="net.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="coinconf.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -253,15 +247,6 @@
     </ClInclude>
     <ClInclude Include="param.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\el\inet\p2p-net.h">
-      <Filter>Header Files\p2p</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\el\inet\p2p-peers.h">
-      <Filter>Header Files\p2p</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\el\inet\irc-client.h">
-      <Filter>comp\h</Filter>
     </ClInclude>
     <ClInclude Include="irc.h">
       <Filter>Header Files</Filter>
@@ -293,7 +278,7 @@
     <ClInclude Include="..\..\el\crypto\bloom-filter.h">
       <Filter>comp\h</Filter>
     </ClInclude>
-    <ClInclude Include="coinrpc.h">
+    <ClInclude Include="coin-rpc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="currency\namecoin.h">
@@ -303,9 +288,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="backend-sqlite.h">
-      <Filter>Source Files\backend-sqlite</Filter>
+      <Filter>Source Files\Obsolete\backend-sqlite</Filter>
     </ClInclude>
     <ClInclude Include="buggy-aes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="consensus.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -323,11 +311,11 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="coin-com.idl">
-      <Filter>Resource Files</Filter>
-    </Midl>
+    <Xml Include="coin-chains.xml" />
   </ItemGroup>
   <ItemGroup>
-    <Xml Include="coin-chains.xml" />
+    <Midl Include="coin-com.idl">
+      <Filter>Source Files\COM</Filter>
+    </Midl>
   </ItemGroup>
 </Project>

@@ -1,0 +1,39 @@
+LIBRARY dblite
+
+EXPORTS
+
+??0KVStorage@KV@DB@Ext@@QEAA@XZ                                             @ 1 NONAME
+??1KVStorage@KV@DB@Ext@@QEAA@XZ                                             @ 2 NONAME
+?Create@KVStorage@KV@DB@Ext@@QEAAXAEBVpath@filesystem@ExtSTL@@@Z            @ 3 NONAME
+?Open@KVStorage@KV@DB@Ext@@QEAAXAEBVpath@filesystem@ExtSTL@@@Z              @ 4 NONAME
+?Close@KVStorage@KV@DB@Ext@@QEAAX_N@Z                                       @ 5 NONAME
+?Vacuum@KVStorage@KV@DB@Ext@@QEAAXXZ                                        @ 6 NONAME
+?DoCheckpoint@KVStorage@KV@DB@Ext@@AEAA_N_N@Z                               @ 7 NONAME
+?get_Key@CursorObj@KV@DB@Ext@@IEAAAEBV?$span@$$CBE@ExtSTL@@XZ               @ 8 NONAME
+?get_Data@CursorObj@KV@DB@Ext@@IEAAAEBV?$span@$$CBE@ExtSTL@@XZ              @ 9 NONAME
+??0DbCursor@KV@DB@Ext@@QEAA@AEAVDbTransactionBase@123@AEAVDbTable@123@@Z    @ 10 NONAME
+?Main@DbTable@KV@DB@Ext@@SAAEAV1234@XZ                                      @ 11 NONAME
+?DoSeekToKey@CursorObj@KV@DB@Ext@@IEAA_NAEBV?$span@$$CBE@ExtSTL@@@Z            @ 12 NONAME
+?Delete@DbTable@KV@DB@Ext@@QEAA_NAEAVDbTransaction@234@AEBV?$span@$$CBE@ExtSTL@@@Z    @ 13 NONAME
+?DoPut@CursorObj@KV@DB@Ext@@IEAAXV?$span@$$CBE@ExtSTL@@AEBV56@_N@Z		     @ 14 NONAME
+?Open@DbTable@KV@DB@Ext@@QEAAXAEAVDbTransaction@234@_N@Z                    @ 15 NONAME
+?Rollback@DbTransaction@KV@DB@Ext@@UEAAXXZ                                  @ 16 NONAME
+?Commit@DbTransaction@KV@DB@Ext@@UEAAXXZ                                    @ 17 NONAME
+??1DbTransaction@KV@DB@Ext@@UEAA@XZ                                         @ 18 NONAME
+?Init@CursorStream@KV@DB@Ext@@QEAAXXZ                                       @ 19 NONAME
+?Seek@DbCursor@KV@DB@Ext@@QEAA_NW4CursorPos@34@AEBV?$span@$$CBE@ExtSTL@@@Z  @ 20 NONAME
+?DoUpdate@CursorObj@KV@DB@Ext@@IEAAXAEBV?$span@$$CBE@ExtSTL@@@Z             @ 21 NONAME
+??0DbTransaction@KV@DB@Ext@@QEAA@AEAVKVStorage@123@_N@Z                     @ 22 NONAME
+?DoDelete@CursorObj@KV@DB@Ext@@IEAAXXZ                                      @ 23 NONAME 
+??0DbTransactionBase@KV@DB@Ext@@QEAA@AEAVKVStorage@123@@Z                   @ 24 NONAME
+?OpenPage@DbTransaction@KV@DB@Ext@@UEAA?AVPage@234@I@Z                      @ 25 NONAME
+??1DbCursor@KV@DB@Ext@@QEAA@XZ                                              @ 26 NONAME
+?Put@DbTable@KV@DB@Ext@@QEAAXAEAVDbTransaction@234@AEBV?$span@$$CBE@ExtSTL@@1_N@Z         @ 27 NONAME
+??1DbTransactionBase@KV@DB@Ext@@UEAA@XZ                                     @ 28 NONAME
+
+
+DllRegisterServer  PRIVATE
+DllUnregisterServer PRIVATE
+
+
+

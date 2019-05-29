@@ -22,13 +22,13 @@ using Ext::DB::BdbReader;
 
 namespace Coin {
 
-static pair<String, Blob> SplitKey(const ConstBuf& cbuf) {
+static pair<String, Blob> SplitKey(RCSpan cbuf) {
 	pair<String, Blob> r;
 	CMemReadStream stm(cbuf);
 	BinaryReader rd(stm);
-	byte size;
+	uint8_t size;
 	stm.ReadBuffer(&size, 1);
-	if (size <= cbuf.Size-1) {
+	if (size <= cbuf.size() - 1) {
 		Blob blobKey(0, size);
 		stm.ReadBuffer(blobKey.data(), blobKey.Size);
 		String k = r.first = String((const char*)blobKey.data(), blobKey.Size);
@@ -57,7 +57,7 @@ static pair<String, Blob> SplitKey(const ConstBuf& cbuf) {
 }
 
 void CoinDb::ImportXml(const path& filepath) {
-	vector<MyKeyInfo> vKey;
+	vector<KeyInfo> vKey;
 
 #if UCFG_WIN32
 	XmlDocument doc = new XmlDocument;
@@ -67,11 +67,11 @@ void CoinDb::ImportXml(const path& filepath) {
 	ifstream ifs(filepath.c_str());
 	XmlTextReader rd(ifs);
 #endif
-	
+
 	rd.ReadToFollowing("PrivateKeys");
 	for (bool b=rd.ReadToDescendant("Key"); b; b=rd.ReadToNextSibling("Key")) {
-		MyKeyInfo ki;
-		ki.SetPrivData(PrivateKey(rd.GetAttribute("privkey")));
+		KeyInfo ki;
+		ki.m_pimpl->SetPrivData(PrivateKey(rd.GetAttribute("privkey")));
 		ki.Timestamp = DateTime::ParseExact(rd.GetAttribute("timestamp"), "u");
 
 		String s = rd.GetAttribute("comment");
@@ -96,8 +96,8 @@ void CoinDb::ImportXml(const path& filepath) {
 		TransactionScope dbtx(m_dbWallet);
 
 		for (int i=0l; i<vKey.size(); ++i) {
-			MyKeyInfo& ki = vKey[i];
-			if (!SetPrivkeyComment(ki.Hash160, ki.Comment))
+			KeyInfo& ki = vKey[i];
+			if (!SetPrivkeyComment(ki.PubKey.Hash160, ki.Comment))
 				AddNewKey(ki);
 		}
 	}
@@ -105,13 +105,13 @@ void CoinDb::ImportXml(const path& filepath) {
 
 void CoinDb::ImportDat(const path& filepath, RCString password) {
 	set<Blob> setPrivKeys;
-	vector<MyKeyInfo> myKeys;
+	vector<KeyInfo> myKeys;
 	unordered_map<HashValue160, Address> pubkeyToAddress;
 	unordered_map<uint32_t, CMasterKey> masterKeys;
 	vector<pair<Blob, Blob>> ckeys;
 	unordered_set<HashValue160> setReserved;
-	
-	BdbReader rd(filepath);	
+
+	BdbReader rd(filepath);
 	Blob key, val;
 	while (rd.Read(key, val)) {
 		try {
@@ -120,11 +120,10 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				String sa = Encoding::UTF8.GetChars(pp.second);
 				IPAddress ip;
 				if (IPAddress::TryParse(sa, ip)) {
-					//!!!TODO  implement IP-address destinations				
+					//!!!TODO  implement IP-address destinations
 				} else {
-					Address a(Eng(), sa);	//!!!? Eng was nullptr
+					Address a(Eng(), sa, Encoding::UTF8.GetChars(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val)))));	//!!!? Eng was nullptr
 					HashValue160 h160(a);
-					a.Comment = Encoding::UTF8.GetChars(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val))));
 					pubkeyToAddress.insert(make_pair(h160, a));
 				}
 			} else if (pp.first == "mkey") {
@@ -133,20 +132,17 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				BinaryReader(CMemReadStream(val)) >> mkey;
 				masterKeys.insert(make_pair(id, mkey));
 			} else if (pp.first == "key") {
-				CngKey cng = CngKey::Import(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val))), CngKeyBlobFormat::OSslEccPrivateBlob);
-				MyKeyInfo ki;
-				ki.SetPrivData(cng.Export(CngKeyBlobFormat::OSslEccPrivateBignum), pp.second.Size == 33);
-				if (ki.PubKey != pp.second)
-					Throw(E_FAIL);
+				KeyInfo ki;
+				ki.m_pimpl->FromDER(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val))), pp.second);
 				if (setPrivKeys.insert(ki.PrivKey).second)
 					myKeys.push_back(ki);
 			} else if (pp.first == "wkey") {
 				CWalletKey wkey;
 				BinaryReader(CMemReadStream(val)) >> wkey;
-				MyKeyInfo ki;
+				KeyInfo ki;
 				ki.Timestamp = DateTime::from_time_t(wkey.nTimeCreated);
-				ki.SetPrivData(wkey.vchPrivKey, pp.second.Size == 33);
-				if (ki.PubKey != pp.second)
+				ki.m_pimpl->SetPrivData(wkey.vchPrivKey, pp.second.Size == 33);
+				if (!Equal(ki.PubKey.Data, pp.second))
 					Throw(E_FAIL);
 
 				ki.Comment = wkey.strComment;
@@ -166,33 +162,32 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 
 	if (!masterKeys.empty()) {
 		if (password.empty())
-			Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
+			Throw(ExtErr::InvalidPassword);
 
 		CCrypter crypter;
 	    CKeyingMaterial vMasterKey;
 		for (auto it=masterKeys.begin(); it!=masterKeys.end(); ++it) {
 			const CMasterKey& mkey = it->second;
-            if(!crypter.SetKeyFromPassphrase(explicit_cast<string>(password), mkey.vchSalt, mkey.nDeriveIterations, mkey.nDerivationMethod))
-                Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
-            if (!crypter.Decrypt(mkey.vchCryptedKey, vMasterKey))
-                Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
+			if (!crypter.SetKeyFromPassphrase(explicit_cast<string>(password), mkey.vchSalt, mkey.nDeriveIterations, mkey.nDerivationMethod) ||
+					!crypter.Decrypt(mkey.vchCryptedKey, vMasterKey))
+				Throw(ExtErr::InvalidPassword);
 
 			for (int i=ckeys.size(); i--;) {
 				Blob& pubKey = ckeys[i].first,
 					&vchCryptedSecret = ckeys[i].second;
 				Blob vchSecret;
 				if(DecryptSecret(vMasterKey, vchCryptedSecret, Hash(pubKey), vchSecret)) {
-					MyKeyInfo ki;
-					ki.SetPrivData(vchSecret, pubKey.Size == 33);
-					if (ki.PubKey == pubKey) {
-						Blob privKey = ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);
+					KeyInfo ki;
+					ki.m_pimpl->SetPrivData(vchSecret, pubKey.Size == 33);
+					if (Equal(ki.PubKey.Data, pubKey)) {
+						Blob privKey = ki.PrivKey; //!!!R ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);
 						for (int j=0; j<myKeys.size(); ++j) {
-							if (myKeys[j].PubKey == pubKey) {
-								myKeys[j].SetPrivData(privKey, pubKey.Size == 33);
+							if (Equal(myKeys[j].PubKey.Data, pubKey)) {
+								myKeys[j].m_pimpl->SetPrivData(privKey, pubKey.Size == 33);
 								goto LAB_DECRYPTED;
 							}
 						}
-						myKeys.push_back(ki);						
+						myKeys.push_back(ki);
 LAB_DECRYPTED:
 						ckeys.erase(ckeys.begin()+i);
 					}
@@ -200,7 +195,7 @@ LAB_DECRYPTED:
 			}
 		}
 		if (!ckeys.empty())
-			Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
+ 			Throw(ExtErr::InvalidPassword);
 	}
 
 	EXT_FOR (const HashValue160& hash160, setReserved) {
@@ -213,32 +208,30 @@ LAB_DECRYPTED:
 		TransactionScope dbtx(m_dbWallet);
 
 		for (int i=0; i<myKeys.size(); ++i) {
-			MyKeyInfo& ki = myKeys[i];
-			auto it = pubkeyToAddress.find(ki.Hash160);
+			KeyInfo& ki = myKeys[i];
+			auto it = pubkeyToAddress.find(ki.PubKey.Hash160);
 			if (it != pubkeyToAddress.end()) {
 				ki.Comment = it->second.Comment;
-				pubkeyToAddress.erase(ki.Hash160);
+				pubkeyToAddress.erase(ki.PubKey.Hash160);
 			}
-			if (!SetPrivkeyComment(ki.Hash160, ki.Comment))
+			if (!SetPrivkeyComment(ki.PubKey.Hash160, ki.Comment))
 				AddNewKey(ki);
 		}
 
-		for (auto it=pubkeyToAddress.begin(); it!=pubkeyToAddress.end(); ++it) {
+		for (auto it = pubkeyToAddress.begin(); it != pubkeyToAddress.end(); ++it) {
 			const Address& a = it->second;
 			EXT_LOCK (MtxNets) {
-				for (int i=0; i<m_nets.size(); ++i) {
+				for (int i = 0; i < m_nets.size(); ++i) {
 					CoinEng& eng = *static_cast<CoinEng*>(m_nets[i]);
-					if (eng.ChainParams.AddressVersion == a.Ver) {
-						if (eng.m_iiEngEvents) {
-							try {
-								TRC(2, a.Comment);
-								DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecipientAlreadyPresents);
-								DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, 19));
-								eng.m_iiEngEvents->AddRecipient(a);
-							} catch (Exception& ex) {
-								if (ex.code() != CoinErr::RecipientAlreadyPresents)
-									throw;
-							}
+					if (a.Type == AddressType::P2PKH) {
+						try {
+							TRC(2, a.Comment);
+							DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecipientAlreadyPresents);
+							DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SQLITE, 19));
+							eng.Events.AddRecipient(a);
+						} catch (Exception& ex) {
+							if (ex.code() != CoinErr::RecipientAlreadyPresents)
+								throw;
 						}
 						break;
 					}
@@ -253,14 +246,14 @@ void CoinDb::ImportWallet(const path& filepath, RCString password) {
 		ImportXml(filepath);
 	else
 		ImportDat(filepath, password);
-	//TODO Start rescans	
+	//TODO Start rescans
 }
 
 void CoinDb::ExportWalletToXml(const path& filepath) {
 	if (NeedPassword)
-		Throw(HRESULT_FROM_WIN32(ERROR_PWD_TOO_SHORT));
-	
-	ofstream ofs(String(filepath).ToOsString());	
+		Throw(ExtErr::PasswordTooShort);
+
+	ofstream ofs(filepath);
 	XmlTextWriter w(ofs);
 	w.Formatting = XmlFormatting::Indented;
 	w.WriteStartDocument();
@@ -272,9 +265,9 @@ void CoinDb::ExportWalletToXml(const path& filepath) {
 			SqliteCommand cmd("SELECT pubkey, reserved FROM privkeys ORDER BY id", m_dbWallet);
 			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
 				XmlOut xoKey(w, "Key");
-				const MyKeyInfo& ki = Hash160ToMyKey[Hash160(ToUncompressedKey(dr.GetBytes(0)))];
+				KeyInfo ki = Hash160ToKey[Hash160(CanonicalPubKey::FromCompressed(dr.GetBytes(0)).Data)];
 
-				xoKey["privkey"] = PrivateKey(ki.get_PrivKey(), ki.PubKey.Size == 33).ToString();
+				xoKey["privkey"] = PrivateKey(ki.get_PrivKey(), ki.PubKey.IsCompressed()).ToString();
 				xoKey["timestamp"] = ki.Timestamp.ToString("u");
 				if (dr.GetInt32(1))
 					xoKey["reserved"] = "1";
@@ -311,6 +304,22 @@ void CoinDb::ExportWalletToXml(const path& filepath) {
 	}
 }
 
+void ExportKeysThread::Execute() {
+	Name = "ExportKeysThread";
+	CCoinEngThreadKeeper engKeeper(&Eng);
+	CEngStateDescription stateDesc(Eng, EXT_STR("Exporting keys to " << Path));
+
+	vector<KeyInfo> keys;
+	EXT_LOCK(Eng.m_cdb.MtxDb) {
+		keys.reserve(Eng.m_cdb.Hash160ToKey.size());
+		EXT_FOR(const CoinDb::CHash160ToKey::value_type& pp, Eng.m_cdb.Hash160ToKey) {
+			keys.push_back(pp.second);
+		}
+	}
+	ofstream ofs(Path);
+	for (size_t i = 0; i < keys.size() && !m_bStop; ++i)
+		ofs << keys[i].m_pimpl->ToString(Password) << endl;
+}
 
 } // Coin::
 

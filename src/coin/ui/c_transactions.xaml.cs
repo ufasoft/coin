@@ -77,9 +77,16 @@ namespace Coin {
 				return;
 			var dlg = new DialogTextInfo();
 			dlg.Title = "Transaction Info";
-			dlg.textInfo.Text = string.Format("DateTime:  {0}\nValue:   {1}\nFee:  {6}\nConfirmations: {2}\nTo:   {3}\nComment:  {4}\nHash:   {5}", tx.Timestamp, tx.m_iTx.Amount, tx.Confirmations.ToString(), tx.Address + " " + tx.m_iTx.Address.Comment, tx.m_iTx.Comment, tx.Hash, tx.Fee);
-			dlg.Width = 600;
-			dlg.Height = 200;
+			dlg.textInfo.Text =
+                    $"Date Time: {tx.Timestamp}"
+                + $"\nValue:     {tx.m_iTx.Amount}"
+                + $"\nFee:       {tx.Fee}"
+                + $"\nConfirmations: {tx.Confirmations}"
+                + $"\nTo:        {tx.Address} [{tx.m_iTx.Address.Comment}]"
+                + $"\nComment:   {tx.m_iTx.Comment}"
+                + $"\nHash:      {tx.Hash}";
+			dlg.Width = 800;
+			dlg.Height = 300;
 
 			switch (Wallet.CurrencySymbol) {
 				case "GRS":

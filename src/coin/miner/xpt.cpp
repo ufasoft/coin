@@ -26,7 +26,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 	EXT_LOCK (client.MtxData) {
 		if (client.ProtocolVersion != 4) {
 			ostringstream os;
-			os << DateTime::Now() << " WorkData. Height: " << int(MinerBlock->Height) << " tx count: " << MinerBlock->Txes.size()-1;
+			os << Clock::now().ToLocalTime() << " WorkData. Height: " << int(MinerBlock->Height) << " tx count: " << MinerBlock->Txes.size()-1;
 			switch (client.Miner.HashAlgo) {
 			case HashAlgo::Prime:
 				os <<  "  Diff: " << setprecision(5) << double(BitsForShare)/0x1000000 << "/" << double(MinerBlock->DifficultyTargetBits)/0x1000000 << (EarnedShareValue!=0 ? EXT_STR(", ShareValue: " << EarnedShareValue) : String());
@@ -60,7 +60,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 #ifdef X_DEBUG//!!!D
 				HashValue h1("a747369c975f0d5186d7594ec695a7ccbe6e5219ef55c01a5bfe7cccd4670d5b");
 				HashValue h2("418bcb30996c3ff3db2ed8a2ed36477afafafd4322c8d93b0f4a5cb39aa8ddcf");
-				byte buf[64];
+				uint8_t buf[64];
 				memcpy(buf, h1.data(), h1.size());
 				memcpy(buf+32, h2.data(), h2.size());
 				SHA256 sha;
@@ -116,14 +116,14 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 			for (int i=0; i<Bundles.size(); ++i) {
 				const ShareBundle& b = Bundles[i];
 
-				*client.Miner.m_pTraceStream << EXT_STR(DateTime::Now() << " WorkData. Height: " << int(b.Height) << "  Diff: " << setprecision(5) << double(b.BitsForShare)/0x1000000 << "/" << double(b.Bits)/0x1000000 << (EarnedShareValue!=0 ? EXT_STR(", ShareValue: " << EarnedShareValue) : String()) << "         \n") << flush;
+				*client.Miner.m_pTraceStream << EXT_STR(Clock::now().ToLocalTime() << " WorkData. Height: " << int(b.Height) << "  Diff: " << setprecision(5) << double(b.BitsForShare)/0x1000000 << "/" << double(b.Bits)/0x1000000 << (EarnedShareValue!=0 ? EXT_STR(", ShareValue: " << EarnedShareValue) : String()) << "         \n") << flush;
 
 				if (b.SieveSizeMin > MAX_SIEVE_SIZE) {
 					*client.Miner.m_pTraceStream << EXT_STR("MinSieveSize: " << b.SieveSizeMin << " violates client's max " << MAX_SIEVE_SIZE << "\n") << flush;
 					Throw(E_FAIL);
 				}
 
-				client.Miner.MaxHeight = max((uint32_t)client.Miner.MaxHeight, b.Height);
+				client.Miner.MaxHeight = (max)((uint32_t)client.Miner.MaxHeight, b.Height);
 				for (int j=0; j<b.PayloadMerkles.size(); ++j) {
 					if (client.JobQueue.size() >= MAX_JOB_QUEUE_SIZE)
 						return;
@@ -181,7 +181,7 @@ void PingXptMessage::Process(P2P::Link& link) {
 XptClient::XptClient(Coin::BitcoinMiner& miner)
 	:	base()
 	,	ConnectionClient(miner)
-	,	DtNextSendPow(DateTime::UtcNow() + TimeSpan::FromSeconds(70))
+	,	DtNextSendPow(Clock::now() + TimeSpan::FromSeconds(70))
 {
 	switch (miner.HashAlgo) {
 	case HashAlgo::Metis:
@@ -200,7 +200,7 @@ ptr<XptMessage> XptClient::Recv() {
    	Blob blob(0, opSize >> 8);
    	R.BaseStream.ReadBuffer(blob.data(), blob.Size);
    	ptr<XptMessage> m;
-   	switch (byte opcode = (byte)opSize) {
+   	switch (uint8_t opcode = (uint8_t)opSize) {
    	case XPT_OPC_C_AUTH_REQ:		m = new AuthXptMessage;			break;
    	case XPT_OPC_S_AUTH_ACK:		m = new AuthAckXptMessage;		break;
    	case XPT_OPC_S_WORKDATA1:		m = new Workdata1XptMessage;	break;
@@ -235,7 +235,7 @@ void XptClient::PrintStats() {
 }
 
 void XptClient::OnPeriodic() {
-	DateTime dt = DateTime::UtcNow();
+	DateTime dt = Clock::now();
 	if (dt > DtNextSendPow) {
 		if (ProtocolVersion == 4) {
 			ptr<SubmitPowXptMessage> m = new SubmitPowXptMessage;
@@ -276,10 +276,10 @@ void XptClient::Execute() {
 				Throw(ExtErr::Protocol_Violation);
 			if (ack->ErrorCode)
 				throw Exception(0x8FFF0000 | ack->ErrorCode, ack->Reason);
-			DateTime dtNextPing = DateTime::UtcNow() + XPT_PING_PERIOD;
+			DateTime dtNextPing = Clock::now() + XPT_PING_PERIOD;
 			while (!m_bStop) {
 				XptClient::Recv()->Process(_self);
-				DateTime now = DateTime::UtcNow();
+				DateTime now = Clock::now();
 				if (now > dtNextPing) {
 					dtNextPing = now + XPT_PING_PERIOD;
 					Send(new PingXptMessage(to_time_t(now)*1000));

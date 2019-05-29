@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -9,6 +9,9 @@
 
 #include EXT_HEADER_DECIMAL
 using namespace std::decimal;
+
+#include EXT_HEADER_FUTURE
+#include EXT_HEADER_OPTIONAL
 
 #include <el/bignum.h>
 #include <el/db/ext-sqlite.h>
@@ -23,44 +26,47 @@ using Ext::DB::sqlite_(NS)::SqliteException;
 using Ext::DB::sqlite_(NS)::SqliteMalloc;
 using Ext::DB::sqlite_(NS)::SqliteVfs;
 
-
 #include <el/inet/p2p-net.h>
 using namespace Ext::Inet;
-using P2P::Link;
 using P2P::Peer;
 
-
-
 #ifndef UCFG_COIN_GENERATE
-#	define UCFG_COIN_GENERATE (!UCFG_WCE)
+#	define UCFG_COIN_GENERATE 0 //!!!T (!UCFG_WCE)
 #endif
 
 #ifndef UCFG_COIN_GENERATE_TXES_FROM_POOL
 #	define UCFG_COIN_GENERATE_TXES_FROM_POOL 0
 #endif
 
-
 #include "param.h"
 
 #include "../util/util.h"
+#include "crypter.h"
 
 namespace Coin {
 
-ENUM_CLASS(NodeServices) {
-	NODE_NETWORK = 1,
-	NODE_GETUTXO = 2
-} END_ENUM_CLASS(NodeServices)
+class Link;
 
-
+class NodeServices {
+public:
+	static const uint64_t
+		NODE_NETWORK = 1,
+		NODE_GETUTXO = 2,
+		NODE_WITNESS = 8;
+};
 
 const int BLOCK_VERSION_AUXPOW = 256;
 
-enum {
-    SIGHASH_ALL = 1,
-    SIGHASH_NONE = 2,
-    SIGHASH_SINGLE = 3,
-    SIGHASH_ANYONECANPAY = 0x80
-};
+const uint32_t LOCKTIME_THRESHOLD = 500000000; // Year 1985. Pre-Bitcoin time
+
+ENUM_CLASS(SigHashType) {
+	ZERO = 0,
+	SIGHASH_ALL = 1,
+	SIGHASH_NONE = 2,
+	SIGHASH_SINGLE = 3,
+	SIGHASH_ANYONECANPAY = 0x80,
+	MASK = 0x1F,
+} END_ENUM_CLASS(SigHashType)
 
 class CoinEng;
 class Block;
@@ -68,6 +74,16 @@ class Tx;
 class TxObj;
 class TxHashesOutNums;
 class CConnectJob;
+class CoinsView;
+class TxOut;
+struct OutPoint;
+
+interface ITxMap {
+	virtual Tx Find(const HashValue& hash) const = 0;
+	virtual const Tx& Get(const HashValue& hash) const = 0;
+	virtual const TxOut& GetOutputFor(const OutPoint& prev) const = 0;
+	virtual void Add(const Tx& tx) = 0;
+};
 
 struct PeerInfoBase {
 	IPEndPoint Ep;
@@ -86,8 +102,9 @@ struct PeerInfo : public PeerInfoBase {
 	void Read(const BinaryReader& rd);
 };
 
-class DbWriter : public BinaryWriter {
-	typedef BinaryWriter base;
+class DbWriter : public ProtocolWriter {
+	typedef ProtocolWriter base;
+
 public:
 	observer_ptr<TxHashesOutNums> PTxHashesOutNums;
 	observer_ptr<const Block> PCurBlock;
@@ -96,29 +113,30 @@ public:
 	bool ForHeader;
 
 	DbWriter(Stream& stm)
-		:	base(stm)
-		,	BlockchainDb(true)
-		,	ForHeader(false)
-	{
+		: base(stm)
+		, BlockchainDb(true)
+		, ForHeader(false) {
 	}
 };
 
-class DbReader : public BinaryReader {
-	typedef BinaryReader base;
+class DbReader : public ProtocolReader {
+	typedef ProtocolReader base;
+
 public:
-	CoinEng *Eng;
+	CoinEng* Eng;
+	observer_ptr<const Block> PCurBlock;
+	int NOut;
 	bool BlockchainDb;
 	bool ForHeader;
 	bool ReadTxHashes;
-	observer_ptr<const Block> PCurBlock;
 
-	DbReader(const Stream& stm, CoinEng *eng = 0)
-		:	base(stm)
-		,	Eng(eng)
-		,	BlockchainDb(true)
-		,	ForHeader(false)
-		,	ReadTxHashes(true)
-	{
+	DbReader(const Stream& stm, CoinEng* eng = 0)
+		: base(stm)
+		, Eng(eng)
+		, NOut(-1)
+		, BlockchainDb(true)
+		, ForHeader(false)
+		, ReadTxHashes(true) {
 	}
 };
 
@@ -127,9 +145,9 @@ struct OutPoint {
 	int32_t Index;
 
 	OutPoint(const HashValue& txHash = HashValue::Null(), int32_t idx = -1)
-		:	TxHash(txHash)
-		,	Index(idx)
-	{}
+		: TxHash(txHash)
+		, Index(idx) {
+	}
 
 	bool operator==(const OutPoint& v) const {
 		return TxHash == v.TxHash && Index == v.Index;
@@ -140,108 +158,124 @@ struct OutPoint {
 	}
 
 	bool IsNull() const {
-		return TxHash==HashValue::Null() && -1==Index;
+		return TxHash == HashValue::Null() && -1 == Index;
 	}
 
 	void Write(BinaryWriter& wr) const {
-		wr << TxHash << Index;
+		uint32_t buf[9];
+		memcpy(buf, TxHash.data(), 32);
+		buf[8] = htole32(Index);
+		wr.Write(buf, sizeof buf);
 	}
 
 	void Read(const BinaryReader& rd) {
 		rd >> TxHash >> Index;
 	}
 
-	array<byte, 36> ToArray() const {
-		array<byte, 36> r;
+	array<uint8_t, 36> ToArray() const {
+		array<uint8_t, 36> r;
 		memcpy(r.data(), TxHash.data(), 32);
-		*(uint32_t*)(r.data()+32) = htole(Index);
+		*(uint32_t*)(r.data() + 32) = htole(Index);
 		return r;
 	}
 };
 
-} namespace std {
-	template<> struct hash<Coin::OutPoint> {
-		size_t operator()(const Coin::OutPoint& op) const {
-			return hash<Coin::HashValue>()(op.TxHash)+hash<int32_t>()(op.Index);
-		}
-	};
-} namespace Coin {
+} // namespace Coin
+namespace std {
+template <> struct hash<Coin::OutPoint> {
+	size_t operator()(const Coin::OutPoint& op) const {
+		return hash<Coin::HashValue>()(op.TxHash) + hash<int32_t>()(op.Index);
+	}
+};
+} // namespace std
+namespace Coin {
 
-class COIN_CLASS TxIn {		// Keep this struct small without VTBL
-private:
-	mutable Blob m_script;
-	Blob m_sig;
+COIN_CLASS uint8_t TryParseDestination(RCSpan pkScript, Span& hash160, Span& pubkey);
+
+class COIN_CLASS TxOutBase {
+	typedef TxOutBase class_type;
+
 public:
-	OutPoint PrevOutPoint;
-	uint32_t Sequence;
-	byte RecoverPubKeyType;
+	mutable CIdPk m_idPk; // changed when saving/locading Tx. Referenced by TxIn reading.
+	mutable Blob m_scriptPubKey;
 
-	TxIn()
-		:	Sequence(UINT_MAX)
-		,	m_script(nullptr)
-		,	RecoverPubKeyType(0)
-		,	N(-1)
-		,	m_pTxo(0)
-	{}
-
-	bool IsFinal() const {
-		return Sequence == numeric_limits<uint32_t>::max();
+	TxOutBase(const Blob& script = Blob())
+		: m_scriptPubKey(script) {
 	}
 
-	const Blob& Script() const;
-
-	void put_Script(const ConstBuf& script) { m_script = script; }
-
-	void Write(BinaryWriter& wr) const;
-	void Read(const BinaryReader& rd);
-private:
-	const TxObj *m_pTxo;
-	int N;
-
-	friend class TxObj;
+	Span get_ScriptPubKey() const;
+	DEFPROP_GET(Span, ScriptPubKey);
+protected:
+	uint8_t m_typ;
 };
 
-COIN_CLASS byte TryParseDestination(const ConstBuf& pkScript, HashValue160& hash160, Blob& pubkey);
-
-class COIN_CLASS TxOut : public CPersistent {
+class COIN_CLASS TxOut : public TxOutBase, public CPersistent {
 	typedef TxOut class_type;
-
-//	DBG_OBJECT_COUNTER(class_type);
+	typedef TxOutBase base;
 public:
 	int64_t Value;
-	mutable CIdPk m_idPk;									// changed when saving/locading Tx. Referenced by TxIn reading.
-	mutable Blob m_pkScript;
 
 	TxOut(int64_t val = -1, const Blob& script = Blob())
-		:	m_pkScript(script)
-		,	Value(val)
-	{}
+		: base(script)
+		, Value(val) {
+	}
 
 	void Write(BinaryWriter& wr) const override;
 	void Read(const BinaryReader& rd) override;
 
-	const Blob& get_PkScript() const;
-	DEFPROP_GET(const Blob&, PkScript);
-
+    int64_t DustThreshold(int64_t feeRate) const;
+    bool IsDust(int64_t feeRate) const { return Value < DustThreshold(feeRate); }
 	void CheckForDust() const;
 
-	bool IsEmpty() const {
-		return Value==0 && get_PkScript().Size==0;
-	}
+    static Address CheckStandardType(RCSpan scriptPubKey);
 
-	byte TryParseDestination(HashValue160& hash160, Blob& pubkey) const {
-		return Coin::TryParseDestination(get_PkScript(), hash160, pubkey);
+	bool IsEmpty() const {
+		return Value == 0 && get_ScriptPubKey().empty();
 	}
-private:
-	byte m_typ;
 
 	friend interface WalletBase;
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 };
 
-class Tx;
-class CTxMap;
-class CoinsView;
+class COIN_CLASS TxIn { // Keep this struct small without VTBL
+private:
+	mutable Blob m_script;
+	Blob m_sig;
+	const TxObj* m_pTxo;
+	TxOutBase PrevTxOut;
+
+public:
+	static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = 1U << 31, SEQUENCE_LOCKTIME_TYPE_FLAG = 1 << 22, SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
+	static const int SEQUENCE_LOCKTIME_GRANULARITY = 9;
+
+    vector<Blob> Witness;
+    OutPoint PrevOutPoint;
+	uint32_t Sequence;
+	uint8_t RecoverPubKeyType;
+
+	TxIn()
+		: m_script(nullptr)
+		, m_pTxo(0)
+		, Sequence(UINT_MAX)
+		, RecoverPubKeyType(0) {
+	}
+
+	bool IsFinal() const {
+		return Sequence == numeric_limits<uint32_t>::max();
+	}
+
+	Span Script() const;
+
+	void put_Script(RCSpan script) {
+		m_script = script;
+	}
+
+    unsigned CountWitnessSigOps() const;
+	void Write(ProtocolWriter& wr, bool writeForSigHash = false) const;
+	void Read(const BinaryReader& rd);
+
+	friend class TxObj;
+};
 
 class COIN_CLASS Target {
 public:
@@ -260,13 +294,12 @@ public:
 
 	void Read(const BinaryReader& rd) {
 		_self = Target(rd.ReadUInt32());
-	}	
+	}
 };
 
-class COIN_CLASS TxObj : public Object, public CoinSerialized  {
+class COIN_CLASS TxObj : public Object, public CoinSerialized {
 	typedef TxObj class_type;
 
-//	DBG_OBJECT_COUNTER(class_type);
 public:
 	typedef InterlockedPolicy interlocked_policy;
 
@@ -277,101 +310,156 @@ public:
 	mutable Coin::HashValue m_hash;
 	uint32_t LockBlock;
 	int32_t Height;
-	mutable volatile byte m_nBytesOfHash;
+	mutable volatile uint8_t m_nBytesOfHash;
 	CBool m_bIsCoinBase;
 	mutable volatile bool m_bLoadedIns;
 
+#if UCFG_COIN_TXES_IN_BLOCKTABLE
+	uint32_t OffsetInBlock;
+#endif
+
 	TxObj();
 
-	virtual TxObj *Clone() const { return new TxObj(_self); }
+	virtual TxObj* Clone() const {
+		return new TxObj(_self);
+	}
 
-	virtual void Write(BinaryWriter& wr) const;
-	virtual void Read(const BinaryReader& rd);
-	virtual void WritePrefix(BinaryWriter& wr) const {}
-	virtual void ReadPrefix(const BinaryReader& rd) {}
-	virtual void WriteSuffix(BinaryWriter& wr) const {}
-	virtual void ReadSuffix(const BinaryReader& rd) {}
-    bool IsFinal(int height, const DateTime dt) const;
-	virtual int64_t GetCoinAge() const { Throw(E_NOTIMPL); }
+	virtual void Write(ProtocolWriter& wr) const;
+	virtual void Read(const ProtocolReader& rd);
+	virtual void WritePrefix(BinaryWriter& wr) const {
+	}
+	virtual void ReadPrefix(const BinaryReader& rd) {
+	}
+	virtual void WriteSuffix(BinaryWriter& wr) const {
+	}
+	virtual void ReadSuffix(const BinaryReader& rd) {
+	}
+	bool HasWitness() const;
+	bool IsFinal(int height, const DateTime dt) const;
+	virtual int64_t GetCoinAge() const {
+		Throw(E_NOTIMPL);
+	}
 	void ReadTxIns(const DbReader& rd) const;
-	virtual String GetComment() const { return nullptr; }
+	virtual String GetComment() const {
+		return nullptr;
+	}
+
+	bool IsCoinBase() const {
+		return m_txIns.empty() ? bool(m_bIsCoinBase) : m_txIns.size() == 1 && m_txIns[0].PrevOutPoint.IsNull();
+	}
 protected:
+	virtual bool IsCoinStake() const { return false; }
+
 	const vector<TxIn>& TxIns() const;
-	virtual void CheckCoinStakeReward(int64_t reward, const Target& target) const  {}
+	virtual void CheckCoinStakeReward(int64_t reward, const Target& target) const {
+	}
+
 private:
 	friend class Tx;
-	friend HashValue SignatureHash(const ConstBuf& script, const TxObj& txoTo, int nIn, int32_t nHashType);
+	friend class SignatureHasher;
+	friend class Vm;
 };
 
-ENUM_CLASS(MinFeeMode) {
-	Block,
-	Tx,
-	Relay
-} END_ENUM_CLASS(MinFeeMode);
-
-
-class COIN_CLASS Tx : public Pimpl<TxObj>, public CPersistent {
-	typedef Tx class_type;
-
-//	DBG_OBJECT_COUNTER(class_type);
+class SignatureHasher {
 public:
+	const TxObj& m_txoTo;
+	HashValue m_hashPrevOuts, m_hashSequence, m_hashOuts;
+	uint64_t m_amount;
+	uint32_t NIn;
+	SigHashType HashType;
+	bool m_bWitness;
+
+	SignatureHasher(const TxObj& txoTo);
+	void CalcWitnessCache();
+	HashValue Hash(RCSpan script);
+	bool VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan witnessProgram);
+	bool VerifyScript(RCSpan scriptSig, RCSpan scriptPk);
+	void VerifySignature(const Tx& txFrom);
+	bool CheckSig(Span sig, RCSpan pubKey, RCSpan script);
+};
+
+ENUM_CLASS(MinFeeMode){Block, Tx, Relay} END_ENUM_CLASS(MinFeeMode);
+
+class COIN_CLASS Tx : public Pimpl<TxObj>, public IPersistent<ProtocolWriter, ProtocolReader> {
+	typedef Tx class_type;
+public:
+    enum class StandardStatus {
+        Standard
+        , Version
+        , TxSize
+        , ScriptSigSize
+        , ScriptSigNotPushOnly
+        , ScriptPubKey
+        , BareMultiSig
+        , Dust
+        , MultiOpReturn
+    };
+
 	Tx() {
 	}
 
-/*!!!	Tx(std::nullptr_t) {
+	/*!!!	Tx(std::nullptr_t) {
 	}*/
 
-	Tx(TxObj *txObj) {
+	Tx(TxObj* txObj) {
 		m_pimpl = txObj;
 	}
 
-	static bool AllowFree(double priority);	
-	static bool TryFromDb(const HashValue& hash, Tx *ptx);
-	static Tx FromDb(const HashValue& hash);	
+	static bool AllowFree(double priority);
+	static bool TryFromDb(const HashValue& hash, Tx* ptx);
+	static Tx FromDb(const HashValue& hash);
+
+	enum class LocktimeType { Block, Timestamp };
+
+	static LocktimeType LocktimeTypeOf(uint32_t nLockTime) {
+		return nLockTime >= LOCKTIME_THRESHOLD ? LocktimeType::Timestamp : LocktimeType::Block;
+	}
 
 	void EnsureCreate();
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
+	virtual void Write(ProtocolWriter& wr) const override;
+    virtual void Read(const ProtocolReader& rd) override;
 	void Check() const;
-	uint32_t GetSerializeSize() const;
+    static int64_t CalcMinFee(uint32_t size, int64_t feeRate);
 	int64_t GetMinFee(uint32_t blockSize = 1, bool bAllowFree = true, MinFeeMode mode = MinFeeMode::Block, uint32_t nBytes = uint32_t(-1)) const;
 
 	int32_t get_Height() const { return m_pimpl->Height; }
 	void put_Height(int32_t v) { m_pimpl->Height = v; }
 	DEFPROP(int32_t, Height);
 
+    uint32_t GetSerializeSize(bool witnessAware = false) const;
+
+    uint32_t get_Weight() const;
+    DEFPROP_GET(uint32_t, Weight);
+
+    StandardStatus CheckStandard() const;
+
 	uint32_t get_LockBlock() const { return m_pimpl->LockBlock; }
-	void put_LockBlock(uint32_t v) { m_pimpl->LockBlock = v; }
+	void put_LockBlock(uint32_t v) {
+		m_pimpl->LockBlock = v;
+	}
 	DEFPROP(uint32_t, LockBlock);
 
 	int64_t get_ValueOut() const;
 	DEFPROP_GET(int64_t, ValueOut);
 
 	int get_DepthInMainChain() const;
-	DEFPROP_GET(int, DepthInMainChain);	
+	DEFPROP_GET(int, DepthInMainChain);
 
-	int get_SigOpCount() const;
-	DEFPROP_GET(int, SigOpCount);	
+	unsigned SigOpCost(const ITxMap& txMap) const;
 
+	pair<int, DateTime> CalculateSequenceLocks(vector<int>& inHeights, const HashValue& hashBlock) const;
 	void CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const Target& target) const;
 	void ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64_t& nFees, bool bBlock, bool bMiner, int64_t minFee, const Target& target) const;
-	int GetP2SHSigOpCount(const CTxMap& txMap) const;
-	bool IsFinal(int height = 0, const DateTime dt = DateTime(0)) const { return m_pimpl->IsFinal(height, dt); }
+	unsigned GetP2SHSigOpCount(const ITxMap& txMap) const;
 	bool IsNewerThan(const Tx& txOld) const;
-	void SpendInputs() const;
 	void WriteTxIns(DbWriter& wr) const;
 
 	const vector<TxOut>& TxOuts() const { return m_pimpl->TxOuts; }
 	vector<TxOut>& TxOuts() { return m_pimpl->TxOuts; }
 	const vector<TxIn>& TxIns() const { return m_pimpl->TxIns(); }
-
-	bool IsCoinBase() const {
-		return m_pimpl->m_txIns.empty() ? bool(m_pimpl->m_bIsCoinBase) : m_pimpl->m_txIns.size()==1 && m_pimpl->m_txIns[0].PrevOutPoint.IsNull();
-	}
-
-	bool IsCoinStake() const {
-		return !TxIns().empty() && !TxIns()[0].PrevOutPoint.IsNull() && TxOuts().size()>=2 && TxOuts()[0].IsEmpty();
-	}
+	bool IsFinal(int height = 0, const DateTime dt = DateTime(0)) const { return m_pimpl->IsFinal(height, dt); }
+	bool IsCoinBase() const { return m_pimpl->IsCoinBase(); }
+	bool IsCoinStake() const { return m_pimpl->IsCoinStake(); }
 
 	int64_t get_Fee() const;
 	DEFPROP_GET(int64_t, Fee);
@@ -381,11 +469,11 @@ public:
 		m_pimpl->m_nBytesOfHash = 32;
 	}
 
-	void SetReducedHash(const ConstBuf& txid8) const {
-		memcpy(m_pimpl->m_hash.data(), txid8.P, m_pimpl->m_nBytesOfHash = 8);
+	void SetReducedHash(RCSpan txid8) const {
+		memcpy(m_pimpl->m_hash.data(), txid8.data(), m_pimpl->m_nBytesOfHash = 8);
 	}
-private:
 
+private:
 	friend interface WalletBase;
 	friend class Wallet;
 	friend class CoinDb;
@@ -394,19 +482,41 @@ private:
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 };
 
+class Signer {
+public:
+	SignatureHasher Hasher;
+	KeyInfo Key;
+	Tx& m_tx;
+
+	Signer(Tx& tx)
+		: Hasher(*tx.m_pimpl)
+		, Key(nullptr)
+		, m_tx(tx)
+	{}
+
+	Blob SignHash(const HashValue& hash);
+	void Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHashType hashType = SigHashType::SIGHASH_ALL, Span scriptPrereq = Span());
+protected:
+	virtual KeyInfo GetMyKeyInfo(const HashValue160& hash160) = 0;
+	virtual KeyInfo GetMyKeyInfoByScriptHash(const HashValue160& hash160) = 0;
+	virtual Blob GetMyRedeemScript(const HashValue160& hash160) = 0;
+};
+
+
+HashValue WitnessHash(const Tx& tx);
+
 COIN_EXPORT HashValue Hash(const CPersistent& pers);
 
 DbWriter& operator<<(DbWriter& wr, const Tx& tx);
 COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 
-
 class AuxPow;
 
-} namespace Ext {
-	template <> struct ptr_traits<Coin::AuxPow> {
-		typedef InterlockedPolicy interlocked_policy;
-	};
-} namespace Coin {
+} // namespace Coin
+namespace Ext {
+template <> struct ptr_traits<Coin::AuxPow> { typedef InterlockedPolicy interlocked_policy; };
+} // namespace Ext
+namespace Coin {
 
 struct TxHashOutNum {
 	HashValue HashTx;
@@ -415,11 +525,13 @@ struct TxHashOutNum {
 
 class TxHashesOutNums : public vector<TxHashOutNum> {
 	typedef vector<TxHashOutNum> base;
+
 public:
-	TxHashesOutNums() {}
-	explicit TxHashesOutNums(const ConstBuf& buf);
-	pair<int, int> StartingTxOutIdx(const HashValue& hashTx) const;			// return pair<TxIdxInBlock, OutIdxInBlock>
-	pair<int, OutPoint> OutPointByIdx(int idx) const;						// return pair<TxIdxInBlock, OutPoint>
+	TxHashesOutNums() {
+	}
+	explicit TxHashesOutNums(RCSpan buf);
+	pair<int, int> StartingTxOutIdx(const HashValue& hashTx) const; // return pair<TxIdxInBlock, OutIdxInBlock>
+	pair<int, OutPoint> OutPointByIdx(int idx) const;				// return pair<TxIdxInBlock, OutPoint>
 };
 
 BinaryWriter& operator<<(BinaryWriter& wr, const TxHashesOutNums& hons);
@@ -427,14 +539,15 @@ const BinaryReader& operator>>(const BinaryReader& rd, TxHashesOutNums& hons);
 
 class CTxes : public vector<Tx> {
 	typedef vector<Tx> base;
+
 public:
 	CTxes() {
 	}
 
-	CTxes(const CTxes& txes);												// Cloning ctor
-	pair<int, int> StartingTxOutIdx(const HashValue& hashTx) const;			// return pair<TxIdxInBlock, OutIdxInBlock>
-	pair<int, OutPoint> OutPointByIdx(int idx) const;						// return pair<TxIdxInBlock, OutPoint>
-	
+	CTxes(const CTxes& txes);										// Cloning ctor
+	pair<int, int> StartingTxOutIdx(const HashValue& hashTx) const; // return pair<TxIdxInBlock, OutIdxInBlock>
+	pair<int, OutPoint> OutPointByIdx(int idx) const;				// return pair<TxIdxInBlock, OutPoint>
+
 	using base::operator[];
 
 	const Tx& operator[](const HashValue& hashTx) const {
@@ -445,83 +558,103 @@ public:
 DbWriter& operator<<(DbWriter& wr, const CTxes& txes);
 COIN_EXPORT const DbReader& operator>>(const DbReader& rd, CTxes& txes);
 
-ENUM_CLASS(ProofOf) {
-	Work,
-	Stake
-} END_ENUM_CLASS(ProofOf);
-
+ENUM_CLASS(ProofOf){Work, Stake} END_ENUM_CLASS(ProofOf);
 
 class COIN_CLASS BlockObj : public BlockBase {
 	typedef BlockBase base;
 	typedef BlockObj class_type;
 
-//	DBG_OBJECT_COUNTER(class_type);
 public:
 	ptr<Coin::AuxPow> AuxPow;
-	
+
 	TxHashesOutNums m_txHashesOutNums;
 	mutable uint64_t OffsetInBootstrap;
-	
+
 	mutable volatile bool m_bTxesLoaded;
 	mutable optional<Coin::HashValue> m_hash;
 
 	BlockObj()
-		:	m_bTxesLoaded(false)
-		,	OffsetInBootstrap(0)
-	{}
+		: OffsetInBootstrap(0)
+		, m_bTxesLoaded(false)
+		, m_pMtx(0) {
+	}
 
 	~BlockObj();
 	virtual Coin::HashValue Hash() const;
 	virtual Coin::HashValue PowHash() const;
-	Coin::HashValue MerkleRoot(bool bSave=true) const override;
+	Coin::HashValue MerkleRoot(bool bSave = true) const override;
 
 	virtual void Write(DbWriter& wr) const;
 	virtual void Read(const DbReader& rd);
-	
-	Target get_DifficultyTarget() const { return Target(DifficultyTargetBits); }
+
+	Target get_DifficultyTarget() const {
+		return Target(DifficultyTargetBits);
+	}
 	DEFPROP_GET(Target, DifficultyTarget);
 
-	virtual ProofOf ProofType() const { return ProofOf::Work; }
+	virtual ProofOf ProofType() const {
+		return ProofOf::Work;
+	}
 	const Coin::CTxes& get_Txes() const;
 	virtual HashValue HashFromTx(const Tx& tx, int n) const;
 
-	void WriteHeader(BinaryWriter& wr) const override;
-	virtual void ReadHeader(const BinaryReader& rd, bool bParent, const HashValue *pMerkleRoot);
-	virtual void WriteHeaderInMessage(BinaryWriter& wr) const;
-	virtual void ReadHeaderInMessage(const BinaryReader& rd);
+	void WriteHeader(ProtocolWriter& wr) const override;
+	virtual void ReadHeader(const ProtocolReader& rd, bool bParent, const HashValue* pMerkleRoot);
+	virtual void WriteHeaderInMessage(ProtocolWriter& wr) const;
+	virtual void ReadHeaderInMessage(const ProtocolReader& rd);
 
-	virtual void WriteSuffix(BinaryWriter& wr) const {}
-	virtual void WriteDbSuffix(BinaryWriter& wr) const {}
-	virtual void ReadDbSuffix(const BinaryReader& rd) {}
-	bool IsHeaderOnly() const { return !m_bTxesLoaded && m_txHashesOutNums.empty(); }
+	virtual void WriteSuffix(BinaryWriter& wr) const {
+	}
+	virtual void WriteDbSuffix(BinaryWriter& wr) const {
+	}
+	virtual void ReadDbSuffix(const BinaryReader& rd) {
+	}
+	bool IsHeaderOnly() const {
+		return !m_bTxesLoaded && m_txHashesOutNums.empty();
+	}
 	virtual void CheckHeader();
-protected:
-	mutable mutex m_mtx;
+
 	mutable CTxes m_txes;
 
-	BlockObj(BlockObj& bo)
-		:	base(bo)
-		,	m_hash(bo.m_hash)
-		,	m_txes(bo.m_txes)
-		,	AuxPow(bo.AuxPow)
-		,	m_merkleTree(bo.m_merkleTree)
-		,	m_bTxesLoaded(bo.m_bTxesLoaded)
-		,	m_txHashesOutNums(bo.m_txHashesOutNums)
-		,	OffsetInBootstrap(bo.OffsetInBootstrap)
-	{
+protected:
+	mutex& Mtx() const {
+		if (!m_pMtx) {
+			auto pMtx = new mutex;
+			if (Interlocked::CompareExchange(m_pMtx, pMtx, (mutex*)0) != 0)
+				delete pMtx;
+		}
+		return *m_pMtx;
 	}
 
-	virtual BlockObj *Clone() { return new BlockObj(*this); }
-	virtual void Write(BinaryWriter& wr) const;
-	virtual void Read(const BinaryReader& rd);
+	BlockObj(BlockObj& bo)
+		: base(bo)
+		, AuxPow(bo.AuxPow)
+		, m_txHashesOutNums(bo.m_txHashesOutNums)
+		, OffsetInBootstrap(bo.OffsetInBootstrap)
+		, m_bTxesLoaded(bo.m_bTxesLoaded)
+		, m_hash(bo.m_hash)
+		, m_txes(bo.m_txes)
+		, m_pMtx(0)
+		, m_merkleTree(bo.m_merkleTree) {
+	}
+
+	virtual BlockObj* Clone() {
+		return new BlockObj(*this);
+	}
+	virtual void Write(ProtocolWriter& wr) const;
+	virtual void Read(const ProtocolReader& rd);
 	virtual BigInteger GetWork() const;
 	virtual void CheckPow(const Target& target);
-	virtual void CheckSignature() {}
+	virtual void CheckSignature() {
+	}
 	virtual void Check(bool bCheckMerkleRoot);
-	virtual void CheckCoinbaseTx(int64_t nFees);	
+	virtual void CheckCoinbaseTx(int64_t nFees);
 	int GetBlockHeightFromCoinbase() const;
-	virtual void ComputeAttributes() {}
+	virtual void ComputeAttributes() {
+	}
+
 private:
+	mutable mutex* volatile m_pMtx;
 	mutable CCoinMerkleTree m_merkleTree;
 
 	friend class Block;
@@ -530,16 +663,22 @@ private:
 	friend class MerkleBlockMessage;
 };
 
-class COIN_CLASS BlockHeader : public Pimpl<BlockObj>, public CPersistent {
+class COIN_CLASS BlockHeader : public Pimpl<BlockObj> , public IPersistent<ProtocolWriter, ProtocolReader> {
 	typedef Pimpl<BlockObj> base;
 	typedef BlockHeader class_type;
+
 public:
-	BlockHeader(BlockObj *pimpl = nullptr) {
+	BlockHeader(BlockObj* pimpl = nullptr) {
 		m_pimpl = pimpl;
 	}
 
-	void WriteHeader(BinaryWriter& wr) const { m_pimpl->WriteHeader(wr); }
-	void ReadHeader(const BinaryReader& rd, bool bParent = false, const HashValue *pMerkleRoot = 0) { m_pimpl->ReadHeader(rd, bParent, pMerkleRoot); }
+	void WriteHeader(ProtocolWriter& wr) const {
+		m_pimpl->WriteHeader(wr);
+	}
+
+	void ReadHeader(const ProtocolReader& rd, bool bParent = false, const HashValue* pMerkleRoot = 0) {
+		m_pimpl->ReadHeader(rd, bParent, pMerkleRoot);
+	}
 
 	int get_Height() const {
 		return m_pimpl->Height;
@@ -551,12 +690,20 @@ public:
 	}
 	DEFPROP_GET(int, SafeHeight);
 
-	uint32_t get_Ver() const { return m_pimpl->Ver; }
-	void put_Ver(uint32_t v) { m_pimpl->Ver = v; }
+	uint32_t get_Ver() const {
+		return m_pimpl->Ver;
+	}
+	void put_Ver(uint32_t v) {
+		m_pimpl->Ver = v;
+	}
 	DEFPROP(uint32_t, Ver);
 
-	int get_ChainId() const { return Ver >> 16; }
-	void put_ChainId(int v) { Ver = (Ver & 0xFFFF) | (v << 16); }
+	int get_ChainId() const {
+		return Ver >> 16;
+	}
+	void put_ChainId(int v) {
+		Ver = (Ver & 0xFFFF) | (v << 16);
+	}
 	DEFPROP(int, ChainId);
 
 	DateTime get_Timestamp() const {
@@ -584,9 +731,13 @@ public:
 	}
 	DEFPROP_GET(Target, DifficultyTarget);
 
-	BigInteger GetWork() const { return m_pimpl->GetWork(); }
+	BigInteger GetWork() const {
+		return m_pimpl->GetWork();
+	}
 
-	bool get_IsHeaderOnly() const { return m_pimpl->IsHeaderOnly(); }
+	bool get_IsHeaderOnly() const {
+		return m_pimpl->IsHeaderOnly();
+	}
 	DEFPROP_GET(bool, IsHeaderOnly);
 
 	bool IsInMainChain() const;
@@ -603,57 +754,71 @@ public:
 class COIN_CLASS Block : public BlockHeader {
 	typedef BlockHeader base;
 	typedef Block class_type;
+
 public:
 	Block();
 
 	Block(std::nullptr_t) {
 	}
 
-	Block(BlockObj *pimpl)
+	Block(BlockObj* pimpl)
 		: base(pimpl) {
 	}
 
-	void Write(BinaryWriter& wr) const override { m_pimpl->Write(wr); }
-	void Read(const BinaryReader& rd) override { m_pimpl->Read(rd); }
+	void Write(ProtocolWriter& wr) const override { m_pimpl->Write(wr); }
+    void Read(const ProtocolReader& rd) override { m_pimpl->Read(rd); }
+
 	uint32_t OffsetOfTx(const HashValue& hashTx) const;
 
 	void LoadToMemory();
 
-	uint32_t GetSerializeSize() const {
-		return (uint32_t)EXT_BIN(_self).Size;
+    uint32_t GetSerializeSize(bool bWitnessAware = false) const;
+
+    size_t Weight() const { return GetSerializeSize(true); }
+
+	ProofOf get_ProofType() const {
+		return m_pimpl->ProofType();
 	}
-	
-	ProofOf get_ProofType() const { return m_pimpl->ProofType(); }
 	DEFPROP_GET(ProofOf, ProofType);
 
-	const CTxes& get_Txes() const { return m_pimpl->get_Txes(); }
+	const CTxes& get_Txes() const {
+		return m_pimpl->get_Txes();
+	}
 	DEFPROP_GET(const CTxes&, Txes);
 
-	const Coin::TxHashesOutNums& get_TxHashesOutNums() const { return m_pimpl->m_txHashesOutNums; }
+	const Coin::TxHashesOutNums& get_TxHashesOutNums() const {
+		return m_pimpl->m_txHashesOutNums;
+	}
 	DEFPROP_GET(const Coin::TxHashesOutNums&, TxHashesOutNums);
 
 	void Add(const Tx& tx) {
 		m_pimpl->m_merkleRoot.reset();
 		m_pimpl->m_hash.reset();
 		m_pimpl->m_bTxesLoaded = true;
-		m_pimpl->m_txes.push_back(tx);	
+		m_pimpl->m_txes.push_back(tx);
 	}
-		
-	Tx& GetFirstTxRef() { return m_pimpl->m_txes[0]; }
-	void CheckPow(const Target& target) const { return m_pimpl->CheckPow(target); }
-		
+
+	Tx& GetFirstTxRef() {
+		return m_pimpl->m_txes[0];
+	}
+	void CheckPow(const Target& target) const {
+		return m_pimpl->CheckPow(target);
+	}
+
 	Block GetOrphanRoot() const;
 	void Check(bool bCheckMerkleRoot) const;
 	void Check() const;
+    const uint8_t *GetWitnessCommitment() const;
+    void ContextualCheck(const BlockHeader& blockPrev);
 	void Connect() const override;
 	void Disconnect() const;
 	void Accept() override;
-	void Process(Link *link = 0, bool bRequested = true);
+	void Process(Link* link = 0, bool bRequested = true);
 
 	Block Clone() const {
 		return Block(m_pimpl->Clone());
 	}
-	
+
 protected:
 	friend class BlockObj;
 	friend class MerkleBlockMessage;
@@ -665,41 +830,44 @@ inline HashValue Hash(const BlockHeader& block) {
 
 class MerkleTx : public Tx {
 	typedef Tx base;
+
 public:
-    HashValue BlockHash;
-    CCoinMerkleBranch MerkleBranch;
+	HashValue BlockHash;
+	CCoinMerkleBranch MerkleBranch;
 
 	MerkleTx() {
 		MerkleBranch.m_h2 = &HashValue::Combine;
 	}
 
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
+	void Write(ProtocolWriter& wr) const override;
+	void Read(const ProtocolReader& rd) override;
 };
 
 class CoinPartialMerkleTree : public PartialMerkleTree<HashValue, PFN_Combine> {
 	typedef PartialMerkleTree<HashValue, PFN_Combine> base;
+
 public:
 	CoinPartialMerkleTree()
-		:	base(&HashValue::Combine)
-	{}
+		: base(&HashValue::Combine) {
+	}
 
-	void Init(const vector<HashValue>& vHash, const dynamic_bitset<byte>& bsMatch);
-	pair<HashValue, vector<HashValue>> ExtractMatches() const;		// returns pair<MerkleRoot, matches[]>
+	void Init(const vector<HashValue>& vHash, const dynamic_bitset<uint8_t>& bsMatch);
+	pair<HashValue, vector<HashValue>> ExtractMatches() const; // returns pair<MerkleRoot, matches[]>
 };
 
 class AuxPow : public Object, public MerkleTx {
 	typedef MerkleTx base;
+
 public:
-    CCoinMerkleBranch ChainMerkleBranch;
+	CCoinMerkleBranch ChainMerkleBranch;
 	Block ParentBlock;
 
 	AuxPow() {
 		ChainMerkleBranch.m_h2 = &HashValue::Combine;
 	}
 
-	void Write(BinaryWriter& wr) const override;
-	void Read(const BinaryReader& rd) override;
+	void Write(ProtocolWriter& wr) const override;
+	void Read(const ProtocolReader& rd) override;
 	void Write(DbWriter& wr) const;
 	void Read(const DbReader& rd);
 	void Check(const Block& blockAux);
@@ -710,36 +878,43 @@ struct PubKeyHash160 {
 	HashValue160 Hash160;
 
 	PubKeyHash160()
-		:	PubKey(nullptr)
-	{}
+		: PubKey(nullptr) {
+	}
 
 	explicit PubKeyHash160(const CanonicalPubKey& pubKey)
-		:	PubKey(pubKey)
-		,	Hash160(pubKey.Hash160)
-	{}
+		: PubKey(pubKey)
+		, Hash160(pubKey.Hash160) {
+	}
 
 	PubKeyHash160(const CanonicalPubKey& pubKey, const HashValue160& hash160)
-		:	PubKey(pubKey)
-		,	Hash160(hash160)
-	{}
+		: PubKey(pubKey)
+		, Hash160(hash160) {
+	}
 };
 
-PubKeyHash160 DbPubKeyToHashValue160(const ConstBuf& mb);
+PubKeyHash160 DbPubKeyToHashValue160(RCSpan mb);
+
+struct SpentTx {
+	HashValue HashTx;
+	uint32_t Height;
+	uint32_t Offset;
+	uint16_t N; //!!!S may be not enough for 32MB blocks
+};
 
 class ChainCaches {
 public:
 	mutex Mtx;
 
-//!!!R	unordered_map<HashValue, Block> HashToAlternativeChain;		//!!! can grow to huge size
+	//!!!R	unordered_map<HashValue, Block> HashToAlternativeChain;		//!!! can grow to huge size
 
 	LruMap<HashValue, Block> HashToBlockCache;
-	
+
 	typedef LruMap<uint32_t, HashValue> CHeightToHashCache;
-	CHeightToHashCache HeightToHashCache;	
+	CHeightToHashCache HeightToHashCache;
 
 	typedef LruMap<HashValue, Tx> CHashToTxCache;
 	CHashToTxCache HashToTxCache;
-	
+
 	DateTime DtBestReceived;
 
 	typedef LruMap<HashValue, Block> COrphanMap;
@@ -747,7 +922,7 @@ public:
 
 	typedef LruMap<HashValue, Tx> CRelayHashToTx;
 	CRelayHashToTx m_relayHashToTx;
-	
+
 	typedef LruMap<int64_t, PubKeyHash160> CCachePkIdToPubKey;
 	CCachePkIdToPubKey m_cachePkIdToPubKey;
 	bool PubkeyCacheEnabled;
@@ -755,13 +930,8 @@ public:
 	BlockHeader m_bestHeader;
 	Block m_bestBlock;
 
-	struct SpentTx {
-		HashValue HashTx;
-		uint32_t Height;
-		uint32_t Offset;
-	};
 	typedef list<SpentTx> CCacheSpentTxes;
-	CCacheSpentTxes m_cacheSpentTxes;											// used for fast Reorganize()
+	CCacheSpentTxes m_cacheSpentTxes; // used for fast Reorganize()
 	static const size_t MAX_LAST_SPENT_TXES = 5000;
 
 	ChainCaches();
@@ -769,28 +939,91 @@ public:
 	friend class CoinEng;
 };
 
+struct EnabledFeatures {
+	bool PayToScriptHash, CheckLocktimeVerify, VerifyDerEnc, CheckSequenceVerify, SegWit;
 
-extern const byte s_mergedMiningHeader[4];
+	EnabledFeatures(bool bSet = false) {
+		if (bSet)
+			memset(this, 0xFF, sizeof(*this));
+		else
+			ZeroStruct(*this);
+	}
+};
+
+struct ScriptPolicy {
+	bool CleanStack, DiscourageUpgradableWidnessProgram;
+
+	ScriptPolicy(bool bSet = false) {
+		if (bSet)
+			memset(this, 0xFF, sizeof(*this));
+		else
+			ZeroStruct(*this);
+	}
+};
+
+extern const uint8_t s_mergedMiningHeader[4];
 int CalcMerkleIndex(int merkleSize, int chainId, uint32_t nonce);
-ConstBuf FindStandardHashAllSigPubKey(const ConstBuf& cbuf);
-
+Span FindStandardHashAllSigPubKey(RCSpan cbuf);
 
 class ConnectTask : public Object {
 public:
 	vector<Tx> Txes;
 };
 
-class CTxMap : public unordered_map<HashValue, Tx> {
+class CTxMap : public ITxMap {
 public:
-	const TxOut& GetOutputFor(const OutPoint& prev) const;
+	Tx Find(const HashValue& hash) const override;
+	const Tx& Get(const HashValue& hash) const override;
+	const TxOut& GetOutputFor(const OutPoint& prev) const override;
+	void Add(const Tx& tx) override;
+private:
+	unordered_map<HashValue, Tx> m_map;
+
+	friend class CoinsView;
 };
 
-class CoinsView {
-public:
-	CTxMap TxMap;
+struct TxFeeTuple{
+	Tx Tx;
+	int64_t Fee;
 
+	TxFeeTuple()
+		: Fee(0)
+	{}
+
+	TxFeeTuple(const Coin::Tx& tx)
+		: Tx(tx)
+		, Fee(0)
+	{}
+};
+
+class CFutureTxMap : public ITxMap {
+public:
+	CFutureTxMap(CoinEng& eng) : m_eng(eng) {}
+	const Tx& Get(const HashValue& hash) const override;
+	void Add(const HashValue& hash, const shared_future<TxFeeTuple> ft);
+	void Ensure(const HashValue& hash);
+	bool Contains(const HashValue& hash) const;
+	Tx Find(const HashValue& hash) const override;
+	const TxOut& GetOutputFor(const OutPoint& prev) const override;
+	void Add(const Tx& tx) override;
+private:
+	CoinEng& m_eng;
+	unordered_map<HashValue, shared_future<TxFeeTuple>> m_map;
+	mutable mutex m_mtx;
+};
+
+class CoinsView : public ITxMap {
+public:
+	CoinEng& Eng;
+	mutable CTxMap TxMap;
+
+	CoinsView(CoinEng& eng) : Eng(eng) {}
 	bool HasInput(const OutPoint& op) const;
 	void SpendInput(const OutPoint& op);
+	Tx Find(const HashValue& hash) const override;
+	const Tx& Get(const HashValue& hash) const override;
+	const TxOut& GetOutputFor(const OutPoint& prev) const override;
+	void Add(const Tx& tx) override;
 private:
 	mutable unordered_map<OutPoint, bool> m_outPoints;
 
@@ -798,21 +1031,20 @@ private:
 };
 
 inline void swap(CoinsView& x, CoinsView& y) {
-	swap(x.TxMap, y.TxMap);
+	std::swap(x.TxMap, y.TxMap);
 	swap(x.m_outPoints, y.m_outPoints);
 }
 
 class CConnectJob : noncopyable {
 public:
 	CoinEng& Eng;
-	
-	typedef unordered_map<HashValue, ptr<ConnectTask>> CHashToTask;
-	CHashToTask HashToTask;	
 
-	unordered_set<ptr<ConnectTask>> Tasks;
-	CBool PayToScriptHash;
+//!!!R	typedef unordered_map<HashValue, ptr<ConnectTask>> CHashToTask;
+//!!!R	CHashToTask HashToTask;
+//!!!R	unordered_set<ptr<ConnectTask>> Tasks;
+	EnabledFeatures Features;
 	int32_t Height;
-	CTxMap TxMap;
+	CFutureTxMap TxMap;
 	int64_t Fee;
 	Target DifficultyTarget;
 
@@ -821,8 +1053,8 @@ public:
 		CBool Insert, Update, IsTask;
 
 		PubKeyData()
-			:	PubKey(nullptr)
-		{}
+			: PubKey(nullptr) {
+		}
 	};
 
 	typedef unordered_map<HashValue160, PubKeyData> CMap;
@@ -834,20 +1066,18 @@ public:
 	mutable volatile bool Failed;
 
 	CConnectJob(CoinEng& eng)
-		:	Eng(eng)
+		: Eng(eng)
+		, TxMap(eng)
+		, Fee(0)
 		, aSigOps(0)
-		,	Fee(0)
-		,	Failed(false)
-	{}
+		, Failed(false) {
+	}
 
-	void AsynchCheckAll(const vector<Tx>& txes);
+	void AsynchCheckAll(const vector<Tx>& txes);	//!!!Obsolete
+	void AsynchCheckAllSharedFutures(const vector<Tx>& txes);
 	void Prepare(const Block& block);
 	void Calculate();
 	void PrepareTask(const HashValue160& hash160, const CanonicalPubKey& pubKey);
 };
 
-
-
-} // Coin::
-
-
+} // namespace Coin

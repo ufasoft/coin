@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -8,15 +8,17 @@
 #include <el/crypto/hash.h>
 using namespace Ext::Crypto;
 
+#include EXT_HEADER_OPTIONAL
+
 #ifndef UCFG_COIN_ECC
-#	define UCFG_COIN_ECC 'S'			// Secp256k1
+#	define UCFG_COIN_ECC 'S' // Secp256k1
 #endif
 
 #ifndef UCFG_COIN_USE_OPENSSL
 #	define UCFG_COIN_USE_OPENSSL 1
 #endif
 
-#if UCFG_COIN_ECC!='S' && UCFG_COIN_USE_OPENSSL
+#if UCFG_COIN_ECC != 'S' && UCFG_COIN_USE_OPENSSL
 #	include <el/crypto/ecdsa.h>
 #endif
 
@@ -71,28 +73,20 @@ using namespace Ext::Crypto;
 #	define UCFG_COIN_PRIME 1
 #endif
 
-
 namespace Coin {
 
-ENUM_CLASS(HashAlgo) {
-	Sha256,
-	Sha3,
-	SCrypt,
-	Prime,
-	Momentum,
-	Solid,
-	Metis,
-	NeoSCrypt,
-	Groestl
-} END_ENUM_CLASS(HashAlgo);
+const size_t MAX_WITNESS_PROGRAM = 40;
+const size_t MAX_PUBKEY = 65;
+
+ENUM_CLASS(HashAlgo){Sha256, Sha3, SCrypt, Prime, Momentum, Solid, Metis, NeoSCrypt, Groestl} END_ENUM_CLASS(HashAlgo);
 
 HashAlgo StringToAlgo(RCString s);
 String AlgoToString(HashAlgo algo);
 
 class HashValue : totally_ordered<HashValue> {
 public:
-	typedef byte *iterator;
-	typedef const byte *const_iterator;
+	typedef uint8_t* iterator;
+	typedef const uint8_t* const_iterator;
 
 	typedef std::reverse_iterator<iterator> reverse_iterator;
 	typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
@@ -101,27 +95,39 @@ public:
 		memset(data(), 0, 32);
 	}
 
-	explicit HashValue(const byte ar[32]) {
+	explicit HashValue(const uint8_t ar[32]) {
 		memcpy(data(), ar, 32);
 	}
 
 	HashValue(const hashval& hv);
-	HashValue(const ConstBuf& mb);
+	explicit HashValue(RCSpan mb);
 	explicit HashValue(RCString s);
+    explicit HashValue(const char *s);
 
 	static const HashValue& Null();
 
-	byte *data() { return (byte*)m_data; }
-	const byte *data() const { return (const byte*)m_data; }
-
-	const_iterator begin() const { return data(); }
-	const_iterator end() const { return data()+32; }
-	const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
-	const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
-
-	ConstBuf ToConstBuf() const {
-		return ConstBuf(data(), 32);
+	uint8_t* data() {
+		return (uint8_t*)m_data;
 	}
+	const uint8_t* data() const {
+		return (const uint8_t*)m_data;
+	}
+
+	const_iterator begin() const {
+		return data();
+	}
+	const_iterator end() const {
+		return data() + 32;
+	}
+	const_reverse_iterator rbegin() const {
+		return const_reverse_iterator(end());
+	}
+	const_reverse_iterator rend() const {
+		return const_reverse_iterator(begin());
+	}
+
+	explicit operator Span() const { return Span(data(), 32); }
+	Span ToSpan() const { return Span(data(), 32); }
 
 	static HashValue FromDifficultyBits(uint32_t bits);
 	uint32_t ToDifficultyBits() const;
@@ -131,7 +137,9 @@ public:
 		return *this == Null() ? 0 : EXT_CONVERTIBLE_TO_TRUE;
 	}
 
-	bool operator!() const { return !bool(*this); }
+	bool operator!() const {
+		return !bool(*this);
+	}
 
 	bool operator==(const HashValue& v) const {
 		return !memcmp(data(), v.data(), 32);
@@ -148,42 +156,55 @@ public:
 	void Read(const BinaryReader& rd) {
 		rd.Read(data(), 32);
 	}
+
 private:
 	uint64_t m_data[4];
 };
 
-
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
+COIN_UTIL_API wostream& operator<<(wostream& os, const HashValue& hash);
+
+inline String ToString(const HashValue& hash) {
+	ostringstream os;
+	os << hash;
+	return os.str();
+}
+
+/*!!!?
+inline wostream& operator<<(wostream& os, const HashValue& hash) {
+	ostringstream oss;
+	oss << hash;
+	return os << String(oss.str());
+}*/
 
 class BlockHashValue : public HashValue {
 	typedef HashValue base;
+
 public:
-	BlockHashValue(const ConstBuf& mb);
+	BlockHashValue(RCSpan mb);
 };
 
-class COIN_CLASS HashValue160 : public std::array<byte, 20> {
+class COIN_CLASS HashValue160 : public std::array<uint8_t, 20> {
 public:
 	HashValue160() {
 		memset(data(), 0, 20);
 	}
 
-	explicit HashValue160(const ConstBuf& mb) {
-		ASSERT(mb.Size == 20);
-		memcpy(data(), mb.P, mb.Size);
+	explicit HashValue160(RCSpan mb) {
+		ASSERT(mb.size() == 20);
+		memcpy(data(), mb.data(), mb.size());
 	}
 
 	explicit HashValue160(RCString s);
 };
 
-
 class ReducedHashValue {
 public:
 	ReducedHashValue(const HashValue& hash)
-		:	m_val(letoh(*(int64_t*)hash.data()))
-	{
+		: m_val(letoh(*(int64_t*)hash.data())) {
 	}
 
-/*	ReducedHashValue(const HashValue160& hash)
+	/*	ReducedHashValue(const HashValue160& hash)
 		:	m_val(letoh(*(int64_t*)hash.data()))
 	{
 	} */
@@ -192,75 +213,78 @@ public:
 		return m_val == v.m_val;
 	}
 
-	operator int64_t() const { return m_val; }
+	operator int64_t() const {
+		return m_val;
+	}
+
 private:
 	int64_t m_val;
 };
 
 #if UCFG_COIN_PUBKEYID_36BITS
-	const int64_t PUBKEYID_MASK = 0xFFFFFFFFFLL;
+const int64_t PUBKEYID_MASK = 0xFFFFFFFFFLL;
 #else
-	const int64_t PUBKEYID_MASK = 0x7FFFFFFFFLL;
+const int64_t PUBKEYID_MASK = 0x7FFFFFFFFLL;
 #endif
 
 class CIdPk {
 public:
 	explicit CIdPk(const HashValue160& hash)
-		:	m_val(letoh(*(int64_t*)(hash.data()+12)) & PUBKEYID_MASK)				//	Use last bytes. First bytes are not random, because many generated addresses are like "1ReadableWord..."
+		: m_val(letoh(*(int64_t*)(hash.data() + 12)) & PUBKEYID_MASK) //	Use last bytes. First bytes are not random, because many generated addresses are like "1ReadableWord..."
 	{
 	}
 
 	explicit CIdPk(int64_t val = -1)
-		:	m_val(val)
-	{
+		: m_val(val) {
 	}
 
 	bool operator==(const CIdPk& v) const {
 		return m_val == v.m_val;
 	}
 
-	operator int64_t() const { 
+	operator int64_t() const {
 		if (IsNull())
 			Throw(E_FAIL);
 		return m_val;
 	}
 
-	bool IsNull() const { return m_val == -1; }
+	bool IsNull() const {
+		return m_val == -1;
+	}
+
 private:
 	int64_t m_val;
 };
 
-
 class ReducedBlockHash {
 public:
 	ReducedBlockHash(const HashValue& hash)
-		:	m_buf(hash.ToConstBuf())
+		: m_buf(hash.ToSpan())
 	{
-		while (m_buf.Size > 1 && !m_buf.P[m_buf.Size-1])
-			m_buf.Size--;
+		while (m_buf.size() > 1 && !m_buf[m_buf.size() - 1])
+			m_buf = m_buf.first(m_buf.size() - 1);
 	}
 
-	operator ConstBuf() const { return m_buf; }
+    const uint8_t *data() const { return m_buf.data(); }
+    size_t size() const { return m_buf.size(); }
 private:
-	ConstBuf m_buf;
+	Span m_buf;
 };
 
-
-
-COIN_UTIL_EXPORT  HashValue Hash(const ConstBuf& mb);
-COIN_UTIL_EXPORT  HashValue160 Hash160(const ConstBuf& mb);
-COIN_UTIL_EXPORT String ConvertToBase58(const ConstBuf& cbuf);
+COIN_UTIL_EXPORT HashValue Hash(RCSpan mb);
+COIN_UTIL_EXPORT HashValue160 Hash160(RCSpan mb);
+COIN_UTIL_EXPORT String ConvertToBase58(RCSpan cbuf);
 COIN_UTIL_EXPORT Blob ConvertFromBase58(RCString s, bool bCheckHash = true);
-String ConvertToBase58ShaSquare(const ConstBuf& cbuf);
+String ConvertToBase58ShaSquare(RCSpan cbuf);
 Blob ConvertFromBase58ShaSquare(RCString s);
-COIN_UTIL_EXPORT Blob CalcSha256Midstate(const ConstBuf& mb);
+COIN_UTIL_EXPORT Blob CalcSha256Midstate(RCSpan mb);
 
-COIN_UTIL_EXPORT HashValue SHA256_SHA256(const ConstBuf& cbuf);
-COIN_UTIL_EXPORT HashValue ScryptHash(const ConstBuf& mb);
-COIN_UTIL_EXPORT HashValue NeoSCryptHash(const ConstBuf& mb, int profile);
-HashValue SolidcoinHash(const ConstBuf& cbuf);
-HashValue MetisHash(const ConstBuf& cbuf);
-COIN_UTIL_EXPORT HashValue GroestlHash(const ConstBuf& mb);
+COIN_UTIL_EXPORT HashValue SHA256_SHA256(RCSpan cbuf);
+COIN_UTIL_EXPORT HashValue ScryptHash(RCSpan mb);
+COIN_UTIL_EXPORT HashValue NeoSCryptHash(RCSpan mb, int profile);
+HashValue SolidcoinHash(RCSpan cbuf);
+HashValue MetisHash(RCSpan cbuf);
+COIN_UTIL_EXPORT HashValue GroestlHash(RCSpan mb);
 
 bool MomentumVerify(const HashValue& hash, uint32_t a, uint32_t b);
 
@@ -270,36 +294,90 @@ struct SCoinMessageHeader {
 	uint32_t PayloadSize;
 };
 
+class ProtocolWriter : public BinaryWriter {
+    typedef BinaryWriter base;
+public:
+	// Used in SignatureHash only
+	int NIn;
+	Span ClearedScript;
+	CBool ForSignatureHash, HashTypeSingle, HashTypeNone, HashTypeAnyoneCanPay;
+	CBool WitnessAware;
 
+    explicit ProtocolWriter(Stream& stm)
+        : base(stm)
+		, WitnessAware(true)
+	{
+    }
+
+    ProtocolWriter& Ref() { return *this; }
+};
+
+class ProtocolReader : public BinaryReader {
+    typedef BinaryReader base;
+public:
+    CBool WitnessAware;
+
+    explicit ProtocolReader(const Stream& stm, bool witnessAware = false)
+		: base(stm)
+		, WitnessAware(witnessAware)
+	{
+    }
+};
 
 class CoinSerialized {
 public:
 	uint32_t Ver;
 
 	CoinSerialized()
-		:	Ver(1)
-	{}
+		: Ver(1) {
+	}
 
 	static void WriteVarInt(BinaryWriter& wr, uint64_t v);
 	static uint64_t ReadVarInt(const BinaryReader& rd);
 	static String ReadString(const BinaryReader& rd);
 	static void WriteString(BinaryWriter& wr, RCString s);
-	static void WriteBlob(BinaryWriter& wr, const ConstBuf& mb);
+	static void WriteSpan(BinaryWriter& wr, RCSpan mb);
 	static Blob ReadBlob(const BinaryReader& rd);
 
-	template <class T>
-	static void Write(BinaryWriter& wr, const vector<T>& ar) {
-		WriteVarInt(wr, ar.size());
-		for (size_t i=0; i<ar.size(); ++i)
-			wr << ar[i];
-	}
+    template <int N>
+    static void WriteEl(ProtocolWriter& wr, const array<uint8_t, N>& ar) {
+        wr.Write(Span(ar));
+    }
+
+    template <class T>
+    static void WriteEl(ProtocolWriter& wr, const T& v) { v.Write(wr); }
 
 	template <class T>
-	static void Read(const BinaryReader& rd, vector<T>& ar) {
-		ar.resize((size_t)ReadVarInt(rd));
-		for (size_t i=0; i<ar.size(); ++i)
-			ar[i].Read(rd);
+    static void Write(ProtocolWriter& wr, const vector<T>& ar) {
+		WriteVarInt(wr, ar.size());
+        for (size_t i = 0; i < ar.size(); ++i)
+            WriteEl(wr, ar[i]);
 	}
+
+    template <int N>
+    static void ReadEl(const ProtocolReader& rd, array<uint8_t, N>& ar) {
+        rd.Read(ar.data(), N);
+    }
+
+    template <class T>
+    static void ReadEl(const ProtocolReader& rd, T& v) { v.Read(rd); }
+
+	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = SIZE_MAX) {
+        auto size = ReadVarInt(rd);
+        if (size > maxSize)
+            Throw(ExtErr::Protocol_Violation);
+		ar.resize((size_t)size);
+		for (size_t i = 0; i < ar.size(); ++i)
+			ReadEl(rd, ar[i]);
+	}
+};
+
+struct BlockHeaderBinary {
+	int32_t Ver;
+	uint32_t
+		PrevBlockHash[8],
+		MerkleRoot[8],
+		Timestamp, DifficultyTargetBits, Nonce;
 };
 
 class COIN_UTIL_CLASS BlockBase : public Object {
@@ -307,26 +385,24 @@ public:
 	typedef InterlockedPolicy interlocked_policy;
 
 	HashValue PrevBlockHash;
+	mutable optional<HashValue> m_merkleRoot;
 	DateTime Timestamp;
 	uint32_t DifficultyTargetBits;
-	uint32_t Ver;
+	int32_t Ver;
 	uint32_t Height;
 	uint32_t Nonce;
-	mutable optional<Coin::HashValue> m_merkleRoot;
-	
-//!!!R	mutable CBool m_bMerkleCalculated;
 
 	BlockBase()
-		:	Ver(2)
-		,	Height(uint32_t(-1))
-	{}
+		: Ver(3)
+		, Height(uint32_t(-1)) {
+	}
 
-	virtual void WriteHeader(BinaryWriter& wr) const;
-	virtual Coin::HashValue MerkleRoot(bool bSave = true) const =0;
+	virtual void WriteHeader(ProtocolWriter& wr) const;
+	virtual Coin::HashValue MerkleRoot(bool bSave = true) const = 0;
 	virtual Coin::HashValue GetHash() const;
 };
 
-COIN_UTIL_EXPORT Blob Swab32(const ConstBuf& buf);
+COIN_UTIL_EXPORT Blob Swab32(RCSpan buf);
 COIN_UTIL_EXPORT void FormatHashBlocks(void* pbuffer, size_t len);
 
 typedef HashValue (*PFN_Combine)(const HashValue& h1, const HashValue& h2);
@@ -334,179 +410,239 @@ typedef HashValue (*PFN_Combine)(const HashValue& h1, const HashValue& h2);
 typedef MerkleBranch<HashValue, PFN_Combine> CCoinMerkleBranch;
 typedef MerkleTree<HashValue, PFN_Combine> CCoinMerkleTree;
 
-BinaryWriter& operator<<(BinaryWriter& wr, const CCoinMerkleBranch& branch);
-const BinaryReader& operator>>(const BinaryReader& rd, CCoinMerkleBranch& branch);
+ProtocolWriter& operator<<(ProtocolWriter& wr, const CCoinMerkleBranch& branch);
+const ProtocolReader& operator>>(const ProtocolReader& rd, CCoinMerkleBranch& branch);
 
 struct ShaConstants {
-	const uint32_t *pg_sha256_hinit,
-		*pg_sha256_k;
+	const uint32_t *pg_sha256_hinit, *pg_sha256_k;
 	const uint32_t (*pg_4sha256_k)[4];
 };
 
 ShaConstants GetShaConstants();
 
-void BitsToTargetBE(uint32_t bits, byte target[32]);
+void BitsToTargetBE(uint32_t bits, uint8_t target[32]);
 
 pair<uint32_t, uint32_t> FromOptionalNonceRange(const VarValue& json);
 
-const int PASSWORD_ENCRYPT_ROUNDS_A = 1000,
-			PASSWORD_ENCRYPT_ROUNDS_B = 100*1000;
+const int PASSWORD_ENCRYPT_ROUNDS_A = 1000, PASSWORD_ENCRYPT_ROUNDS_B = 100 * 1000;
 
 const char DEFAULT_PASSWORD_ENCRYPT_METHOD = 'B';
 
-
 class HasherEng : public Object {
 public:
-	byte AddressVersion, ScriptAddressVersion;
+	uint8_t AddressVersion, ScriptAddressVersion;
+	String Hrp;
 
 	HasherEng()
 		: AddressVersion(0)
-		, ScriptAddressVersion(5) {
-	}
+		, ScriptAddressVersion(5)
+    {
+		Hrp = "bc";
+    }
 
-	virtual HashValue HashBuf(const ConstBuf& cbuf);
-	virtual HashValue HashForAddress(const ConstBuf& cbuf);
-	static HasherEng *GetCurrent();
+	virtual HashValue HashBuf(RCSpan cbuf);
+	virtual HashValue HashForAddress(RCSpan cbuf);
+	static HasherEng* GetCurrent();
+
 protected:
-	static void SetCurrent(HasherEng *heng);
+	static void SetCurrent(HasherEng* heng);
 };
 
-
 class CHasherEngThreadKeeper {
-	HasherEng *m_prev;
+	HasherEng* m_prev;
+
 public:
-	CHasherEngThreadKeeper(HasherEng *cur);
+	CHasherEngThreadKeeper(HasherEng* cur);
 	~CHasherEngThreadKeeper();
 };
 
 class PrivateKey : public CPrintable {
 public:
-	PrivateKey() {}
-	PrivateKey(const ConstBuf& cbuf, bool bCompressed);
+	PrivateKey() {
+	}
+	PrivateKey(RCSpan cbuf, bool bCompressed);
 	explicit PrivateKey(RCString s);
 	pair<Blob, bool> GetPrivdataCompressed() const;
 	String ToString() const override;
+
 private:
-	Blob m_blob;
+	typedef vararray<uint8_t, 33> CData;
+	CData m_data;
 };
 
 class CanonicalPubKey {
 	typedef CanonicalPubKey class_type;
+
 public:
-	Blob Data;
+	typedef vararray<uint8_t, 65> CData;
+	CData Data;
 
 	CanonicalPubKey() {
 	}
 
 	CanonicalPubKey(nullptr_t)
-		: Data(nullptr) {
+		: Data(0) {
 	}
 
-	CanonicalPubKey(const ConstBuf& cbuf)
-		: Data(cbuf) {
+	CanonicalPubKey(RCSpan cbuf)
+		: Data(cbuf.data(), cbuf.size()) {
 	}
 
-	bool IsCompressed() const { return Data.Size == 33; }
+	bool IsCompressed() const {
+		return Data.size() == 33;
+	}
 
 	HashValue160 get_Hash160() const {
 		return Coin::Hash160(Data);
 	}
 	DEFPROP_GET(HashValue160, Hash160);
-	
+
 	bool IsValid() const {
-		byte b0 = Data.constData()[0];
-		return (Data.Size == 33 && (b0==2 || b0==3)) ||
-			(Data.Size == 65 || b0==4);
+		uint8_t b0 = Data.constData()[0];
+		return (Data.size() == 33 && (b0 == 2 || b0 == 3)) || (Data.size() == 65 || b0 == 4);
 	}
 
 	Blob ToCompressed() const;
-	static CanonicalPubKey FromCompressed(const ConstBuf& cbuf);
+	static CanonicalPubKey FromCompressed(RCSpan cbuf);
 };
 
-class COIN_CLASS Address : public HashValue160, public CPrintable {
+enum class AddressType : uint8_t {				// Used in WalletDb in pubkeys.type field
+	P2PKH = 0
+	, Legacy = P2PKH //!!!R
+	, P2SH = 1
+	, Bech32 = 2
+	, PubKey = 3
+	, MultiSig = 4
+	, NullData = 5
+	, WitnessV0ScriptHash = 6
+	, WitnessV0KeyHash = 7
+	, WitnessUnknown = 8
+	, NonStandard = 9
+};
+
+class COIN_CLASS AddressObj : public Object {
 public:
 	HasherEng& Hasher;
 	String Comment;
-	byte Ver;
 
-	Address(HasherEng& hasher);
-	explicit Address(HasherEng& hasher, const HashValue160& hash, RCString comment = "");
-	explicit Address(HasherEng& hasher, const HashValue160& hash, byte ver);
-	explicit Address(HasherEng& hasher, RCString s);
+	typedef vararray<uint8_t, MAX_PUBKEY> CData;
+	CData Data;
+	uint8_t WitnessVer;
+	uint8_t RequiredSigs;
+	vector<Blob> Datas;
+	AddressType Type;
 
-	Address& operator=(const Address& a) {
-		if (&Hasher != &a.Hasher)
-			Throw(errc::invalid_argument);
-		HashValue160::operator=(a);
-		Comment = a.Comment;
-		Ver = a.Ver;
-		return *this;
+	AddressObj(HasherEng& hasher);
+	AddressObj(HasherEng& hasher, AddressType typ, RCSpan data, uint8_t witnessVer, RCString comment);
+	AddressObj(HasherEng& hasher, RCString s, RCString comment);
+	String ToString() const;
+	Blob ToScriptPubKey() const;
+	void DecodeBech32(HasherEng& hasher, RCString s);
+	void CheckVer(HasherEng& hasher) const;
+};
+
+class COIN_CLASS Address : public Pimpl<AddressObj>, public CPrintable {
+	typedef Address class_type;
+public:
+	static const size_t MAX_LEN = 90;
+
+	Address(HasherEng& hasher) {
+		m_pimpl = new AddressObj(hasher);
 	}
 
-	void CheckVer(HasherEng& hasher) const;
-	String ToString() const override;
+	explicit Address(HasherEng& hasher, AddressType typ, RCSpan data, uint8_t witnessVer = 0, RCString comment = "") {
+		m_pimpl = new AddressObj(hasher, typ, data, witnessVer, comment);
+	}
+
+	explicit Address(HasherEng& hasher, RCString s, RCString comment = "") {
+		m_pimpl = new AddressObj(hasher, s, comment);
+	}
+
+	Address& operator=(const Address& a);
+
+	AddressType get_Type() const { return m_pimpl->Type; }
+	DEFPROP_GET(AddressType, Type);
+
+	uint8_t WitnessVer() const { return m_pimpl->WitnessVer; }
+	String ToString() const override { return m_pimpl->ToString(); }
+	Blob ToScriptPubKey() const { return m_pimpl->ToScriptPubKey(); }
+	explicit operator HashValue160() const;
+	explicit operator HashValue() const;
+
+	String get_Comment() const { return m_pimpl->Comment; }
+	void put_Comment(RCString comment) { m_pimpl->Comment = comment; }
+	DEFPROP(String, Comment);
+
+	Span Data() const { return m_pimpl->Data; }
+
+	bool operator==(const Address& a) const {
+		return m_pimpl->Type == a.m_pimpl->Type && Equal(m_pimpl->Data, a.m_pimpl->Data);
+	}
 
 	bool operator<(const Address& a) const {
-		return Ver < a.Ver ||
-			(Ver == a.Ver && memcmp(data(), a.data(), 20) < 0);
+		return m_pimpl->Type < a.m_pimpl->Type || (m_pimpl->Type == a.m_pimpl->Type && memcmp(m_pimpl->Data.data(), a.m_pimpl->Data.data(), m_pimpl->Data.size()) < 0); //!!!TODO: use WitnessVer & maybe Comment
 	}
 };
 
-class KeyInfoBase {
+class KeyInfoBase : public Object {
 	typedef KeyInfoBase class_type;
+
+	Blob m_privKey;
 public:
 	CanonicalPubKey PubKey;
 
-#if UCFG_COIN_ECC!='S'
+#if UCFG_COIN_ECC != 'S'
 	CngKey Key;
 #endif
 
 	DateTime Timestamp;
 	String Comment;
+	AddressType AddressType;
 
-	static KeyInfoBase GenRandom(bool bCompressed = true);
+	KeyInfoBase()
+		: AddressType(AddressType::Legacy)
+	{
+	}
+
+	void GenRandom(bool bCompressed = true);
 
 	Blob PlainPrivKey() const;
 
-	Blob get_PrivKey() const { return m_privKey; }
+	Blob get_PrivKey() const {
+		return m_privKey;
+	}
 	DEFPROP_GET(Blob, PrivKey);
 
-
+	vararray<uint8_t, 25> ToPubScript() const;
 	Address ToAddress() const;
-	void SetPrivData(const ConstBuf& cbuf, bool bCompressed);
+	void SetPrivData(RCSpan cbuf, bool bCompressed);
 	void SetPrivData(const PrivateKey& privKey);
 	void SetKeyFromPubKey();
-	String ToString(RCString password) const;					// To WIF / BIP0038 formats
-	Blob SignHash(const ConstBuf& cbuf);
-	static bool VerifyHash(const ConstBuf& pubKey, const HashValue& hash, const ConstBuf& sig);
-	
+	String ToString(RCString password) const; // To WIF / BIP0038 formats
+	Blob SignHash(RCSpan cbuf);
+	static bool VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig);
+
 	Blob ToPrivateKeyDER() const;
-	static KeyInfoBase FromDER(const ConstBuf& privKey, const ConstBuf& pubKey);
-private:
-	Blob m_privKey;
+	void FromDER(RCSpan privKey, RCSpan pubKey);
+	void FromBIP38(RCString bip38, RCString password);
 };
 
-
-} // Coin::
+} // namespace Coin
 
 namespace std {
 
-template<> struct hash<Coin::HashValue> {
+template <> struct hash<Coin::HashValue> {
 	size_t operator()(const Coin::HashValue& v) const {
 		return *(size_t*)v.data();
-//		return hash<std::array<byte, 32>>()(v);
+		//		return hash<std::array<uint8_t, 32>>()(v);
 	}
 };
 
-template<> struct hash<Coin::HashValue160> {
+template <> struct hash<Coin::HashValue160> {
 	size_t operator()(const Coin::HashValue160& v) const {
 		return *(size_t*)v.data();
-//		return hash<std::array<byte, 20>>()(v);
+		//		return hash<std::array<uint8_t, 20>>()(v);
 	}
 };
 
-} // std::
-
-
-
-
+} // namespace std

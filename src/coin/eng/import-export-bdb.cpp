@@ -25,13 +25,13 @@ namespace Coin {
 
 static const int CLIENT_VERSION =
                            1000000 * CLIENT_VERSION_MAJOR
-                         +   10000 * CLIENT_VERSION_MINOR 
+                         +   10000 * CLIENT_VERSION_MINOR
                          +     100 * CLIENT_VERSION_REVISION
                          +       1 * CLIENT_VERSION_BUILD;
 
 struct KeyPool {
 	DateTime Timestamp;
-	Blob PubKey;
+	CanonicalPubKey PubKey;
 };
 
 class BdbWriter : protected BinaryWriter {
@@ -44,13 +44,13 @@ public:
 
 	void WriteCompactSize(size_t v) {
 		if (v < 253)
-			_self << byte(v);
+			_self << uint8_t(v);
 		else if (v < numeric_limits<uint16_t>::max())
-			_self << byte(253) << uint16_t(v);
+			_self << uint8_t(253) << uint16_t(v);
 		else if (v < numeric_limits<uint32_t>::max())
-			_self << byte(254) << uint32_t(v);
+			_self << uint8_t(254) << uint32_t(v);
 		else
-			_self << byte(255) << uint64_t(v);
+			_self << uint8_t(255) << uint64_t(v);
 	}
 
 	void Write(int32_t v) {
@@ -70,7 +70,7 @@ public:
 		Write(explicit_cast<string>(s));
 	}
 
-	void Write(const vector<byte>& v) {
+	void Write(const vector<uint8_t>& v) {
 		WriteCompactSize(v.size());
 		if (!v.empty())
 			base::Write(&v[0], v.size());
@@ -90,7 +90,7 @@ public:
 	void Write(const KeyPool& pool) {
 		Write(CLIENT_VERSION);
 		Write(to_time_t(pool.Timestamp));
-		Write(pool.PubKey);
+		Write(Span(pool.PubKey.Data));
 	}
 };
 
@@ -111,13 +111,13 @@ public:
 	void Write(const K& key, const V& val) {
 		MemoryStream stmKey;
 		BdbWriter(stmKey).Write(key);
-		Blob blobKey = stmKey;
+		Blob blobKey = Span(stmKey);
 
 		MemoryStream stmVal;
 		BdbWriter(stmVal).Write(val);
-		Blob blobVal = stmVal;
+		Blob blobVal = Span(stmVal);
 
-		Dbt datKey(blobKey.data(), blobKey.Size),
+		Dbt datKey(blobKey.data(), blobKey.size()),
 			datVal(blobVal.data(), blobVal.Size);
         m_db.put(0, &datKey, &datVal, 0);
 	}
@@ -125,9 +125,9 @@ public:
 
 void Wallet::ExportWalletToBdb(const path& filepath) {
 	CCoinEngThreadKeeper engKeeper(&Eng);
-	
+
 	if (Eng.m_cdb.NeedPassword)
-		Throw(HRESULT_FROM_WIN32(ERROR_PWD_TOO_SHORT));
+		Throw(ExtErr::PasswordTooShort);
 	if (exists(filepath))
 		Throw(HRESULT_FROM_WIN32(ERROR_FILE_EXISTS));
 
@@ -138,7 +138,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
     dbenv.set_flags(DB_TXN_WRITE_NOSYNC, 1);
 	dbenv.log_set_config(DB_LOG_AUTO_REMOVE, 1);
 
-	int ret = dbenv.open(dir.string().c_str(), 
+	int ret = dbenv.open(dir.string().c_str(),
 					DB_CREATE     |
                      DB_INIT_LOCK  |
                      DB_INIT_LOG   |
@@ -155,10 +155,8 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 			SqliteCommand cmd("SELECT pubkey, reserved FROM privkeys ORDER BY id", Eng.m_cdb.m_dbWallet);
 			int64_t nPool = 0;
 			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
-				const MyKeyInfo& ki = Eng.m_cdb.Hash160ToMyKey[Hash160(ToUncompressedKey(dr.GetBytes(0)))];
-				CngKey key = ki.Key;
-				Blob blobPrivateKey = key.Export(ki.IsCompressed() ? CngKeyBlobFormat::OSslEccPrivateCompressedBlob : CngKeyBlobFormat::OSslEccPrivateBlob);
-				w.Write(make_pair(string("key"), ki.PubKey), blobPrivateKey);
+				KeyInfo ki = Eng.m_cdb.Hash160ToKey[Hash160(CanonicalPubKey::FromCompressed(dr.GetBytes(0)).Data)];
+				w.Write(make_pair(string("key"), Span(ki.PubKey.Data)), ki.m_pimpl->ToPrivateKeyDER());
 
 				if (dr.GetInt32(1)) {
 					KeyPool pool = { ki.Timestamp, ki.PubKey };
@@ -172,11 +170,11 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 			}
 		}
 		{
-			SqliteCommand cmd("SELECT hash160, comment, nets.name FROM pubkeys JOIN nets ON pubkeys.netid=nets.netid", Eng.m_cdb.m_dbWallet);
+			SqliteCommand cmd("SELECT hash160, type, comment, nets.name FROM pubkeys JOIN nets ON pubkeys.netid=nets.netid", Eng.m_cdb.m_dbWallet);
 			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
-				String comment = dr.GetString(1);
+				String comment = dr.GetString(2);
 				if (!comment.empty()) {
-					Address addr(*m_eng, HashValue160(dr.GetBytes(0)), comment);
+					Address addr(*m_eng, AddressType(dr.GetInt32(1)), HashValue160(dr.GetBytes(0)), 0, comment);
 					w.Write(make_pair(string("name"), addr.ToString()), comment);
 				}
 			}
@@ -190,7 +188,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 	dbenv.close(0);
 	if (listp) {
 		for (; *listp; ++listp)
-			sys::remove(*listp);
+			filesystem::remove(*listp);
 	}
 
 	DbEnv dbenv2(0);

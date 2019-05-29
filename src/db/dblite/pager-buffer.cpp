@@ -60,7 +60,7 @@ private:
 class BufferView : public ViewBase {
 	typedef ViewBase base;
 public:
-	atomic<byte*> aAddress;
+	atomic<uint8_t*> aAddress;
 
 	BufferView(KVStorage& storage)
 		:	base(storage)
@@ -77,8 +77,8 @@ public:
 #endif
 				MemoryMappedView::Protect(vmem.get(), Storage.ViewSize, MemoryMappedFileAccess::Read);
 		}
-		byte *prev = 0;
-		if (aAddress.compare_exchange_strong(prev, (byte*)vmem.get())) {
+		uint8_t *prev = 0;
+		if (aAddress.compare_exchange_strong(prev, (uint8_t*)vmem.get())) {
 			m_vmem.Attach(vmem.Detach(), vmem.size());
 			Loaded = true;
 			Flushed = true;	
@@ -98,7 +98,7 @@ public:
 	}
 
 	PageObj *AllocPage(uint32_t pgno) override {
-		AllocatedPageObj *r = new AllocatedPageObj(Storage, Loaded ? (byte*)m_vmem.get() + uint64_t(pgno & ((1<<Storage.m_bitsViewPageRatio) - 1))*Storage.PageSize : nullptr);
+		AllocatedPageObj *r = new AllocatedPageObj(Storage, Loaded ? (uint8_t*)m_vmem.get() + uint64_t(pgno & ((1<<Storage.m_bitsViewPageRatio) - 1))*Storage.PageSize : nullptr);
 		r->View = this;
 		return r;
 	}
@@ -113,7 +113,7 @@ void AllocatedPageObj::Flush() {
 			BufferView *view = static_cast<BufferView*>(View.get());
 			KVStorage& stg = View->Storage;
 			if (view->Loaded) {
-				byte *newAddress = (byte*)view->aAddress + uint64_t(N & ((1<<stg.m_bitsViewPageRatio) - 1))*stg.PageSize;
+				uint8_t *newAddress = (uint8_t*)view->aAddress + uint64_t(N & ((1<<stg.m_bitsViewPageRatio) - 1))*stg.PageSize;
 				memcpy(newAddress, exchange(m_address, newAddress), stg.PageSize);
 				View->Flushed = false;
 			} else

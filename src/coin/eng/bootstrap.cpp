@@ -16,6 +16,9 @@ void BootstrapDbThread::BeforeStart() {
 		Eng.UpgradingDatabaseHeight = CoinEng::HEIGHT_BOOTSTRAPING;
 }
 
+TRC_GLOBAL_CUT_PREFIX("Ext::");
+TRC_GLOBAL_CUT_PREFIX("Coin::");
+
 void BootstrapDbThread::Execute() {
 	Name = "BootstrapDbThread";
 	CCoinEngThreadKeeper engKeeper(&Eng);
@@ -26,14 +29,15 @@ void BootstrapDbThread::Execute() {
 
 	DBG_LOCAL_IGNORE_CONDITION(ExtErr::EndOfStream);
 	DBG_LOCAL_IGNORE_CONDITION(CoinErr::InvalidBootstrapFile);
-    	
+
 	CEngStateDescription stateDesc(Eng, EXT_STR("Bootstrapping from " << PathBootstrap));
 
 	FileStream stm(PathBootstrap, FileMode::Open, FileAccess::Read, FileShare::ReadWrite, Stream::DEFAULT_BUF_SIZE, FileOptions::SequentialScan);
 #ifdef _DEBUG//!!!
 	stm.Position = Eng.OffsetInBootstrap;
 #endif
-	BinaryReader rd(stm);
+	ProtocolReader rd(stm);
+	rd.WitnessAware = true;
 	try {
 		while (!m_bStop && !stm.Eof()) {
 			if (rd.ReadUInt32() != Eng.ChainParams.ProtocolMagic)
@@ -45,7 +49,7 @@ void BootstrapDbThread::Execute() {
 			Eng.NextOffsetInBootstrap = stm.Position;
 			block.m_pimpl->OffsetInBootstrap = pos;
 			block.Process(nullptr);
-			if (stm.Position != pos+size)
+			if (stm.Position != pos + size)
 				Throw(CoinErr::InvalidBootstrapFile);
 			Eng.OffsetInBootstrap = Eng.NextOffsetInBootstrap;
 			TRC(9, "Pos: " << stm.Position);
@@ -58,7 +62,7 @@ void BootstrapDbThread::Execute() {
 
 void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 	uint32_t n = Db->GetMaxHeight()+1;
-	
+
 #ifndef X_DEBUG//!!!T
 	if (Mode == EngMode::Bootstrap) {
 		CEngStateDescription stateDesc(_self, EXT_STR("Copying " << GetBootstrapPath() << " -> " << pathBoostrap));
@@ -80,13 +84,13 @@ void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 //!!!?		block.LoadToMemory();
 //!!!?		EXT_FOR (const Tx& tx, block.Txes) {
 //!!!?			//			tx.m_pimpl->m_nBytesOfHash = 0;
-//!!!?		}	
+//!!!?		}
 //!!!?		block.m_pimpl->m_hash.reset();
 //!!!?block.m_pimpl->m_txHashesOutNums.clear();
 
-		block.Write(BinaryWriter(ms).Ref());
+		block.Write(ProtocolWriter(ms).Ref());
 		wr << uint32_t(ms.Position);
-		fs.WriteBuf(ms);
+		fs.Write(ms);
 	}
 }
 
