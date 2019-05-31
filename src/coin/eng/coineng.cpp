@@ -384,7 +384,7 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 		InitBlockValue = CoinValue * stoll(a);
 
 	if (!(a = xml.GetAttribute("MaxMoney")).empty())
-		MaxMoney = stoull(a.c_str()) * CoinValue;
+		MaxMoney = stoull(a) * CoinValue;
 
 	if (!(a = xml.GetAttribute("PowOfDifficultyToHalfSubsidy")).empty())
 		PowOfDifficultyToHalfSubsidy = 1.0 / stoi(a);

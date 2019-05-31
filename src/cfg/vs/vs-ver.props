@@ -10,20 +10,14 @@
 
         <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v140'">10.0.14393.0</WindowsTargetPlatformVersion>
         <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v141'">10.0.14393.0</WindowsTargetPlatformVersion>
-        <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v142'">10.0.14393.0</WindowsTargetPlatformVersion>
+        <WindowsTargetPlatformVersion Condition="'$(PlatformToolset)' == 'v142'">10.0.17763.0</WindowsTargetPlatformVersion>
 
-        <YasmPath>C:\UTIL\</YasmPath>
+		<YasmPath>$(MSBuildThisFileDirectory)..\..\..\tools\</YasmPath>
         <SpectreMitigation>false</SpectreMitigation>
         <GenerateManifest>false</GenerateManifest>
         <EmbedManifest>false</EmbedManifest>
         <LinkIncremental>false</LinkIncremental>
 	    <CLRSupport>false</CLRSupport>
-
-
-<!--
-        <WindowsSDK_LibraryPath_x86>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x86</WindowsSDK_LibraryPath_x86>
-        <WindowsSDK_LibraryPath_x64>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x64</WindowsSDK_LibraryPath_x64>
--->
 
     </PropertyGroup>
     <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -46,15 +40,12 @@
             <BasicRuntimeChecks>Default</BasicRuntimeChecks>
             <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
 
-<!--            <AdditionalIncludeDirectories>C:\P\Windows Kits\10\Include\10.0.10240.0\ucrt;C:\P\Windows Kits\10\Include\10.0.10240.0\shared;C:\P\Windows Kits\10\Include\10.0.10240.0\um;</AdditionalIncludeDirectories> -->
             <EnableEnhancedInstructionSet Condition="$(PlatformToolsetVersion) > 120 AND '$(Platform)'=='Win32'">NoExtensions</EnableEnhancedInstructionSet>
             <RemoveUnreferencedCodeData>true</RemoveUnreferencedCodeData>			
 			<AdditionalOptions>/d2FH4</AdditionalOptions>
-<!--            <AdditionalOptions>/J</AdditionalOptions> -->
             <SupportJustMyCode>false</SupportJustMyCode>
         </ClCompile>
         <Link>
-<!--            <WindowsSDK_LibraryPath_x86>C:\P\Windows Kits\10\Lib\10.0.10240.0\um\x86</WindowsSDK_LibraryPath_x86> -->
 
             <StackReserveSize>262144</StackReserveSize>
 
@@ -69,7 +60,6 @@
             <MinimumRequiredVersion Condition="'$(Platform)'=='x64'">5.2</MinimumRequiredVersion>
         </Link>
         <Midl>
-<!--            <AdditionalIncludeDirectories>C:\P\Windows Kits\10\Include\10.0.10240.0\um;C:\P\Windows Kits\10\Include\10.0.10240.0\shared</AdditionalIncludeDirectories> -->
         </Midl>
     </ItemDefinitionGroup>
 </Project>
