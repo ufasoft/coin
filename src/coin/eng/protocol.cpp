@@ -690,7 +690,7 @@ void FilterAddMessage::Write(ProtocolWriter& wr) const {
 
 void FilterAddMessage::Read(const ProtocolReader& rd) {
 	Data = CoinSerialized::ReadBlob(rd);
-	if (Data.Size > MAX_SCRIPT_ELEMENT_SIZE)
+	if (Data.size() > MAX_SCRIPT_ELEMENT_SIZE)
 		throw PeerMisbehavingException(100);
 }
 
@@ -797,8 +797,8 @@ void MerkleBlockMessage::Read(const ProtocolReader& rd) {
 	CoinSerialized::Read(rd, PartialMT.Items);
 	Blob blob = CoinSerialized::ReadBlob(rd);
 	const uint8_t *p = blob.constData();
-	PartialMT.Bitset.resize(blob.Size*8);
-	for (int i = 0; i < blob.Size; ++i)
+	PartialMT.Bitset.resize(blob.size() * 8);
+	for (int i = 0; i < blob.size(); ++i)
 		for (int j = 0; j < 8; ++j) {
 			PartialMT.Bitset.replace(i * 8 + j, (p[i] >> j) & 1);
 		}
@@ -1006,7 +1006,7 @@ CompactBlockMessage::CompactBlockMessage(const Block& block, bool bUseWtxid)
 ShortTxId CompactBlockMessage::GetShortTxId(const HashValue& hash, const uint64_t keys[2]) {
 	hashval hv = SipHash2_4(keys[0], keys[1]).ComputeHash(hash.ToSpan());
 	ShortTxId r;
-	memcpy(r.data(), hv.data(), 6);
+	memcpy(r.Data, hv.data(), 6);
 	return r;
 }
 

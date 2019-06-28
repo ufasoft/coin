@@ -33,6 +33,9 @@ const int INITIAL_BLOCK_THRESHOLD = 120;
 
 const int SECONDS_RESEND_PERIODICITY = 15 * 60;
 
+const size_t MAX_LAST_SPENT_TXES = 5000;
+
+const int PRUNE_UPTO_LAST_BLOCKS = 1000;	// # Max depth of Blockchain Reorganization after fork
 
 } // Coin::
 
@@ -69,6 +72,10 @@ const int SECONDS_RESEND_PERIODICITY = 15 * 60;
 
 #ifndef UCFG_COIN_USE_IRC
 #	define UCFG_COIN_USE_IRC 0
+#endif
+
+#ifndef UCFG_COIN_USE_NORMAL_MODE
+#	define UCFG_COIN_USE_NORMAL_MODE 0
 #endif
 
 #define UCFG_COIN_TXES_IN_BLOCKTABLE 1

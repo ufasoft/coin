@@ -29,15 +29,14 @@ static bool InitUseLargePages() {
 	return false;
 }
 
-static bool s_UseLargePages = InitUseLargePages();
-
+bool g_UseLargePages = InitUseLargePages();
 
 
 class AllocatedPageObj : public PageObj {
 	typedef PageObj base;
 public:
 	AllocatedPageObj(KVStorage& storage, void *a)
-		:	base(storage)
+		: base(storage)
 	{
 		if (a)
 			m_address = a;
@@ -45,7 +44,7 @@ public:
 			m_ownMem.Alloc(storage.PageSize, max(storage.PageSize, storage.PhysicalSectorSize));
 			m_address = m_ownMem.get();
 		}
-		Flushed = false;		
+		Flushed = false;
 	}
 
 	~AllocatedPageObj() {
@@ -59,21 +58,23 @@ private:
 
 class BufferView : public ViewBase {
 	typedef ViewBase base;
+
+	VirtualMem m_vmem;
 public:
 	atomic<uint8_t*> aAddress;
 
 	BufferView(KVStorage& storage)
-		:	base(storage)
-		,	aAddress(0)
+		: base(storage)
+		, aAddress(0)
 	{
 	}
 
 	void LoadOnDemand() {
-		VirtualMem vmem(Storage.ViewSize, MemoryMappedFileAccess::ReadWrite, s_UseLargePages);
-		Storage.DbFile.Read(vmem.get(), Storage.ViewSize, uint64_t(N)*Storage.ViewSize);
+		VirtualMem vmem(Storage.ViewSize, MemoryMappedFileAccess::ReadWrite, Storage.AllowLargePages);
+		Storage.DbFile.Read(vmem.get(), Storage.ViewSize, uint64_t(N) * Storage.ViewSize);
 		if (Storage.ReadOnly) {
 #if UCFG_WIN32
-			if (!s_UseLargePages)																				// Win32: Large Pages don't support ReadOnly access
+			if (!Storage.AllowLargePages)																				// Win32: Large Pages don't support ReadOnly access
 #endif
 				MemoryMappedView::Protect(vmem.get(), Storage.ViewSize, MemoryMappedFileAccess::Read);
 		}
@@ -81,7 +82,7 @@ public:
 		if (aAddress.compare_exchange_strong(prev, (uint8_t*)vmem.get())) {
 			m_vmem.Attach(vmem.Detach(), vmem.size());
 			Loaded = true;
-			Flushed = true;	
+			Flushed = true;
 		}
 	}
 
@@ -102,8 +103,6 @@ public:
 		r->View = this;
 		return r;
 	}
-private:
-	VirtualMem m_vmem;
 };
 
 void AllocatedPageObj::Flush() {
@@ -164,5 +163,3 @@ class CDbliteDllServer : public CDllServer {
 
 
 }}} // Ext::DB::KV::
-
-

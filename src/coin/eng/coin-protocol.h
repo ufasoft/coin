@@ -500,7 +500,9 @@ ENUM_CLASS(RejectReason) {
 	NonStandard	= 0x40,
 	Dust		= 0x41,
 	InsufficientFee	= 0x42,
-	CheckPoint		= 0x43
+	CheckPoint		= 0x43,
+	TxMissingInputs = 0x44,
+		TxPrematureSpend = 0x45
 } END_ENUM_CLASS(RejectReason);
 
 class RejectMessage : public CoinMessage {
@@ -556,8 +558,6 @@ protected:
     void Read(const ProtocolReader& rd) override;
     void Process(Link& link) override;
 };
-
-typedef array<uint8_t, 6> ShortTxId;
 
 class CompactSize {
 public:

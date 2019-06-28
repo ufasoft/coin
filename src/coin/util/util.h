@@ -84,6 +84,7 @@ HashAlgo StringToAlgo(RCString s);
 String AlgoToString(HashAlgo algo);
 
 class HashValue : totally_ordered<HashValue> {
+	uint64_t m_data[4];
 public:
 	typedef uint8_t* iterator;
 	typedef const uint8_t* const_iterator;
@@ -156,9 +157,6 @@ public:
 	void Read(const BinaryReader& rd) {
 		rd.Read(data(), 32);
 	}
-
-private:
-	uint64_t m_data[4];
 };
 
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
@@ -228,6 +226,8 @@ const int64_t PUBKEYID_MASK = 0x7FFFFFFFFLL;
 #endif
 
 class CIdPk {
+private:
+	int64_t m_val;
 public:
 	explicit CIdPk(const HashValue160& hash)
 		: m_val(letoh(*(int64_t*)(hash.data() + 12)) & PUBKEYID_MASK) //	Use last bytes. First bytes are not random, because many generated addresses are like "1ReadableWord..."
@@ -251,9 +251,6 @@ public:
 	bool IsNull() const {
 		return m_val == -1;
 	}
-
-private:
-	int64_t m_val;
 };
 
 class ReducedBlockHash {
@@ -324,6 +321,10 @@ public:
     }
 };
 
+struct ShortTxId {
+	uint8_t Data[6];
+};
+
 class CoinSerialized {
 public:
 	uint32_t Ver;
@@ -344,6 +345,10 @@ public:
         wr.Write(Span(ar));
     }
 
+	static void WriteEl(ProtocolWriter& wr, const ShortTxId& txId) {
+		wr.Write(txId.Data, sizeof(txId.Data));
+	}
+
     template <class T>
     static void WriteEl(ProtocolWriter& wr, const T& v) { v.Write(wr); }
 
@@ -358,6 +363,10 @@ public:
     static void ReadEl(const ProtocolReader& rd, array<uint8_t, N>& ar) {
         rd.Read(ar.data(), N);
     }
+
+	static void ReadEl(const ProtocolReader& rd, ShortTxId txId) {
+		rd.Read(txId.Data, sizeof(txId.Data));
+	}
 
     template <class T>
     static void ReadEl(const ProtocolReader& rd, T& v) { v.Read(rd); }
@@ -428,10 +437,10 @@ const int PASSWORD_ENCRYPT_ROUNDS_A = 1000, PASSWORD_ENCRYPT_ROUNDS_B = 100 * 10
 
 const char DEFAULT_PASSWORD_ENCRYPT_METHOD = 'B';
 
-class HasherEng : public Object {
+class HasherEng : public InterlockedObject {
 public:
-	uint8_t AddressVersion, ScriptAddressVersion;
 	String Hrp;
+	uint8_t AddressVersion, ScriptAddressVersion;
 
 	HasherEng()
 		: AddressVersion(0)
@@ -520,16 +529,16 @@ enum class AddressType : uint8_t {				// Used in WalletDb in pubkeys.type field
 	, NonStandard = 9
 };
 
-class COIN_CLASS AddressObj : public Object {
+class COIN_CLASS AddressObj : public InterlockedObject {
 public:
 	HasherEng& Hasher;
 	String Comment;
 
 	typedef vararray<uint8_t, MAX_PUBKEY> CData;
 	CData Data;
+	vector<Blob> Datas;
 	uint8_t WitnessVer;
 	uint8_t RequiredSigs;
-	vector<Blob> Datas;
 	AddressType Type;
 
 	AddressObj(HasherEng& hasher);
@@ -584,7 +593,7 @@ public:
 	}
 };
 
-class KeyInfoBase : public Object {
+class KeyInfoBase : public InterlockedObject {
 	typedef KeyInfoBase class_type;
 
 	Blob m_privKey;

@@ -254,6 +254,7 @@
       <PrecompiledHeaderFile>el/ext.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>.;../inc;$(OutDir)\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

@@ -172,6 +172,26 @@ void EngEvents::AddRecipient(const Address& a) {
 		s->AddRecipient(a);
 }
 
+CoinEngTransactionScope::CoinEngTransactionScope(CoinEng& eng)
+	: Eng(eng)
+	, m_db(Eng.Db->GetSavepointObject())
+{
+	Eng.BeginTransaction();
+	m_db.BeginTransaction();
+}
+
+CoinEngTransactionScope::~CoinEngTransactionScope() {
+	if (!m_bCommitted) {
+		if (InException) {
+			m_db.Rollback();
+			Eng.Rollback();
+		} else {
+			m_db.Commit();
+			Eng.Commit();
+		}
+	}
+}
+
 COIN_EXPORT CoinEng& ExternalEng() {
 	return *dynamic_cast<CoinEng*>(HasherEng::GetCurrent());
 }
@@ -272,9 +292,9 @@ void CoinEng::Close() {
 
 ptr<IBlockChainDb> CoinEng::CreateBlockChainDb() {
 #if UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE
-	return new DbliteBlockChainDb;
+	return new DbliteBlockChainDb(_self);
 #else
-	return new SqliteBlockChainDb;
+	return new SqliteBlockChainDb(_self);
 #endif
 }
 
@@ -625,6 +645,10 @@ void CoinEng::put_Mode(EngMode mode) {
 	if (!ChainParams.AllowLiteMode && mode == EngMode::Lite)
 		Throw(errc::invalid_argument);
 
+#if !UCFG_COIN_USE_NORMAL_MODE
+	if (mode == EngMode::Normal || mode == EngMode::BlockExplorer)
+		Throw(errc::not_supported);
+#endif
 	bool bRunned = Runned;
 	if (bRunned)
 		Stop();
@@ -736,7 +760,7 @@ void CoinEng::OnMessage(P2P::Message* m) {
 	CCoinEngThreadKeeper engKeeper(this);
 	P2P::Link& link = *m->LinkPtr;
 	try {
-		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecentCoinbase);
+//		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxPrematureSpend);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::IncorrectProofOfWork);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RejectedByCheckpoint);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::AlertVerifySignatureFailed);
@@ -793,6 +817,8 @@ void CoinEng::OnMessage(P2P::Message* m) {
 			case CoinErr::BadTxnsVoutEmpty:					Misbehaving(m, 10, "block", "bad-txns-vout-empty"); break;
 			case CoinErr::BadTxnsPrevoutNull:				Misbehaving(m, 10, "block", "bad-txns-prevout-null"); break;
 			case CoinErr::BadPrevBlock:						Misbehaving(m, 10, "block", "bad-prevblk"); break;
+			case CoinErr::TxMissingInputs: link.Send(new RejectMessage(RejectReason::TxMissingInputs, "tx", "bad-txns-inputs-missingorspent")); break;
+			case CoinErr::TxPrematureSpend: link.Send(new RejectMessage(RejectReason::TxPrematureSpend, "tx", "bad-txns-premature-spend-of-coinbase")); break;
 			case CoinErr::TxFeeIsLow: link.Send(new RejectMessage(RejectReason::InsufficientFee, "tx", "insufficient fee")); break;
 			case CoinErr::ContainsNonFinalTx:
 				if (dynamic_cast<TxMessage*>(m))
@@ -803,7 +829,6 @@ void CoinEng::OnMessage(P2P::Message* m) {
 			case CoinErr::VersionMessageMustBeFirst: Misbehaving(m, 1, "", ""); throw;
 			case CoinErr::TxNotFound:
 			case CoinErr::AllowedErrorDuringInitialDownload: break;
-			case CoinErr::RecentCoinbase: //!!!? not misbehavig
 			case CoinErr::AlertVerifySignatureFailed: break;
 			case CoinErr::IncorrectProofOfWork: goto LAB_MIS;
 			case CoinErr::DupVersionMessage: link.Send(new RejectMessage(RejectReason::Duplicate, "version", "Duplicate version message"));
@@ -1148,6 +1173,7 @@ void CoinEng::Start() {
 	m_cdb.Start();
 
 	TryStartBootstrap();
+	TryStartPruning();
 
 	if (g_conf.Connect.empty())	   // Don't use seeds when we have "connect=" option
 		AddSeeds();
@@ -1301,9 +1327,9 @@ int64_t CoinEng::GetSubsidy(int height, const HashValue& prevBlockHash, double d
 	return ChainParams.InitBlockValue >> (height / ChainParams.HalfLife);
 }
 
-void CoinEng::CheckCoinbasedTxPrev(int height, const Tx& txPrev) {
-	if (height - txPrev.Height < ChainParams.CoinbaseMaturity)
-		Throw(CoinErr::RecentCoinbase);
+void CoinEng::CheckCoinbasedTxPrev(int hCur, int hOut) {
+	if (hCur - hOut < ChainParams.CoinbaseMaturity)
+		Throw(CoinErr::TxPrematureSpend);
 }
 
 void IBlockChainDb::Recreate() {
@@ -1313,7 +1339,7 @@ void IBlockChainDb::Recreate() {
 	eng.CreateDb();
 }
 
-void IBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend) {
+void IBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend, int32_t heightCur) {
 	vector<bool> vSpend = GetCoinsByTxHash(op.TxHash);
 	if (!bSpend)
 		vSpend.resize(std::max(vSpend.size(), size_t(op.Index + 1)));

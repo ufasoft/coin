@@ -42,7 +42,7 @@ public:
 	}
 };
 
-class MappedFile : public Object {
+class MappedFile : public InterlockedObject {
 public:
 	Ext::MemoryMappedFile MemoryMappedFile;
 };
@@ -60,6 +60,7 @@ public:
 protected:
 
 	void AddFullMapping(uint64_t fileLength) override {
+		TRC(2, "File resizing to " << fileLength / (1024 * 1024) << " MiB")
     	EXT_LOCK (Storage.MtxViews) {
     		ptr<MappedFile> m = new MappedFile;
     		MemoryMappedFileAccess acc = Storage.ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite;
@@ -99,7 +100,7 @@ void MMView::Load() {
 		if (Storage.ReadOnly && uint64_t(N+1)*Storage.ViewSize > Storage.FileLength)
 			viewSize = Storage.FileLength % Storage.ViewSize;
 
-		View = Pager.Mappings.back()->MemoryMappedFile.CreateView(uint64_t(N)*Storage.ViewSize, viewSize); //!!!R , Storage.ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite);
+		View = Pager.Mappings.back()->MemoryMappedFile.CreateView(uint64_t(N) * Storage.ViewSize, viewSize); //!!!R , Storage.ReadOnly ? MemoryMappedFileAccess::Read : MemoryMappedFileAccess::ReadWrite);
 		if (Storage.ProtectPages && !Storage.ReadOnly)
 			MemoryMappedView::Protect(View.Address, viewSize, MemoryMappedFileAccess::Read);
 		Loaded = true;

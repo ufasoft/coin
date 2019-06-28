@@ -11,6 +11,9 @@ const int FILL_THRESHOLD_PERCENTS = 25;
 const size_t MAX_KEYS_PER_PAGE = 1024;
 const uint8_t ENTRY_FLAG_BIGDATA = 1;
 
+struct LiteEntry;
+struct PagePos;
+
 struct EntryDesc {
     uint8_t *P;
     size_t Size;
@@ -29,42 +32,6 @@ LiteEntry GetLiteEntry(const PagePos& pp, uint8_t keySize);
 size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t dsize);
 void InsertCell(const PagePos& pagePos, RCSpan cell, uint8_t keySize);
 uint32_t DeleteEntry(const PagePos& pp, uint8_t keySize);
-size_t CalculateLocalDataSize(uint64_t dataSize, size_t cbExtendedPrefix, size_t pageSize);
-
-struct LiteEntry {
-	uint8_t* P;
-
-	Span Key(uint8_t keySize) {
-		return keySize ? Span(P, keySize) : Span(P + 1, P[0]);
-	}
-
-	uint32_t PgNo() {
-		return GetLeUInt32(P-4);
-	}
-
-	void PutPgNo(uint32_t v) {
-		PutLeUInt32(P-4, v);
-	}
-
-	uint64_t DataSize(uint8_t keySize, uint8_t keyOffset) const {
-		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
-		return Read7BitEncoded(p);
-	}
-
-	Span LocalData(size_t pageSize, uint8_t keySize, uint8_t keyOffset) const {
-		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
-		uint64_t dataSize = Read7BitEncoded(p);
-		return Span(p, CalculateLocalDataSize(dataSize, p - P + keyOffset, pageSize));
-	}
-
-	uint32_t FirstBigdataPage() {
-		return (this + 1)->PgNo();
-	}
-
-	uint8_t* Upper() { return (this + 1)->P; }
-
-	size_t Size() { return Upper()-P; }
-};
 
 class BTree : public PagedMap {
 	typedef PagedMap base;
@@ -72,7 +39,7 @@ public:
 	Page Root;
 
 	BTree(DbTransactionBase& tx)
-		:	base(tx)
+		: base(tx)
 	{}
 
 	~BTree() {

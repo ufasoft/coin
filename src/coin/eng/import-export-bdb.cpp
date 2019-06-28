@@ -77,8 +77,8 @@ public:
 	}
 
 	void Write(const Blob& blob) {
-		WriteCompactSize(blob.Size);
-		base::Write(blob.constData(), blob.Size);
+		WriteCompactSize(blob.size());
+		base::Write(blob.constData(), blob.size());
 	}
 
 	template <typename T, typename U>
@@ -118,7 +118,7 @@ public:
 		Blob blobVal = Span(stmVal);
 
 		Dbt datKey(blobKey.data(), blobKey.size()),
-			datVal(blobVal.data(), blobVal.Size);
+			datVal(blobVal.data(), blobVal.size());
         m_db.put(0, &datKey, &datVal, 0);
 	}
 };

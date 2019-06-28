@@ -20,21 +20,21 @@ namespace Coin {
 int MAX_OP_COUNT = 201;
 
 BigInteger ToBigInteger(const Vm::Value& v) {
-	Blob blob = v;
-	uint8_t& msb = blob.data()[blob.Size - 1];
+	Blob blob = Span(v);
+	uint8_t& msb = blob.data()[blob.size() - 1];
 	bool bNeg = msb & 0x80;
 	msb &= 0x7F;
-	BigInteger r = BigInteger(blob.constData(), blob.Size);
+	BigInteger r = BigInteger(blob.constData(), blob.size());
 	return bNeg ? -r : r;
 }
 
 Vm::Value FromBigInteger(const BigInteger& bi) {
 	if (Sign(bi) == 0)
-		return Blob();
+		return Vm::Value();
 	bool bNeg = Sign(bi) < 0;
 	Blob blob = (bNeg ? -bi : bi).ToBytes();
-	blob.data()[blob.Size - 1] |= (bNeg ? 0x80 : 0);
-	return blob;
+	blob.data()[blob.size() - 1] |= (bNeg ? 0x80 : 0);
+	return Vm::Value(blob);
 }
 
 static bool IsValidSignatureEncoding(const uint8_t sig[], size_t size) {
@@ -241,7 +241,8 @@ Instr Vm::GetOp() {
 		if (instr.Opcode < Opcode::OP_PUSHDATA1) {
 			if (int(instr.Opcode) > m_rd->BaseStream.Length - m_rd->BaseStream.Position)
 				Throw(CoinErr::SCRIPT_ERR_UNKNOWN_ERROR); //!!!T to avoid nested EH
-			instr.Value = m_rd->ReadBytes((uint8_t)instr.Opcode);
+			instr.Value.resize((uint8_t)instr.Opcode, false);
+			m_rd->Read(instr.Value.data(), (uint8_t)instr.Opcode);
 			instr.Opcode = Opcode::OP_PUSHDATA1;
 		} else if (instr.Opcode > Opcode::OP_NOP10) {
 			TRC(1, "OP_UNKNOWN: " << hex << int(instr.Opcode));
@@ -305,10 +306,10 @@ int CalcSigOpCount(RCSpan script, RCSpan scriptSig) {
 
 static const uint8_t s_b1 = 1;
 
-const Vm::Value Vm::TrueValue(&s_b1, 1), Vm::FalseValue;
+const Vm::Value Vm::TrueValue(Span(&s_b1, 1)), Vm::FalseValue;
 
-Vm::Value& Vm::GetStack(int idx) {
-	if (idx < 0 || idx >= Stack.size())
+Vm::Value& Vm::GetStack(unsigned idx) {
+	if (idx >= Stack.size())
 		Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
 	return Stack.end()[-1 - idx];
 }
@@ -363,7 +364,7 @@ static uint8_t DecodeOp(Opcode opcode) {
 
 // Return <program, version>
 pair<Span, uint8_t> Script::WitnessProgram(RCSpan pk) {
-    return pk.size() >= 4 && pk.size() <= MAX_WITNESS_PROGRAM + 2 && (pk[0] == (uint8_t)Opcode::OP_0 || pk[0] >= (uint8_t)Opcode::OP_1 && pk[0] <= (uint8_t)Opcode::OP_16) && pk[1] + 2 == pk.size()
+    return between(pk.size(), size_t(4), MAX_WITNESS_PROGRAM + 2) && (pk[0] == (uint8_t)Opcode::OP_0 || pk[0] >= (uint8_t)Opcode::OP_1 && pk[0] <= (uint8_t)Opcode::OP_16) && pk[1] + 2 == pk.size()
         ? make_pair(pk.subspan(2), DecodeOp((Opcode)pk[0]))
         : pair<Span, uint8_t>();
 }
@@ -573,7 +574,7 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 		case WITNESS_V0_SCRIPTHASH_SIZE:
 			if (witness.empty())
 				Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
-			vm.Stack = vector<Blob>(witness.begin(), witness.end() - 1);
+			vm.Stack = vector<StackValue>(witness.begin(), witness.end() - 1);
 			if (HashValue(SHA256().ComputeHash(scriptPubKey = witness.back())) != HashValue(witnessProgram))
 				Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
 			break;
@@ -616,7 +617,7 @@ bool SignatureHasher::VerifyScript(RCSpan scriptSig, RCSpan scriptPk) {
 			bool bP2SH = false;
 			if (!pp.first.data() && t_features.PayToScriptHash) {
 				if (bP2SH = Script::IsPayToScriptHash(scriptPk)) {
-					Blob pubKeySerialized = vmInner.Stack.back();
+					StackValue pubKeySerialized = vmInner.Stack.back();
 					pp = Script::WitnessProgram(pubKeySerialized);
 
 					vmInner.Stack.pop_back();
@@ -642,30 +643,26 @@ bool SignatureHasher::VerifyScript(RCSpan scriptSig, RCSpan scriptPk) {
 	return r;
 }
 
-void SignatureHasher::VerifySignature(const Tx& txFrom) {
+const OutPoint& SignatureHasher::GetOutPoint() const {
+	return m_txoTo.TxIns().at(NIn).PrevOutPoint;
+}
+
+void SignatureHasher::VerifySignature(RCSpan scriptPk) {
 	const TxIn& txIn = m_txoTo.TxIns().at(NIn);
     const OutPoint& outPoint = txIn.PrevOutPoint;
-    const TxOut& txOut = txFrom.TxOuts().at(outPoint.Index);
-#ifdef X_DEBUG//!!!D
-	static int s_i = 0;
-	++s_i;
-	if (s_i >= 10944) {
-		s_i = s_i;
-	}
-#endif
-	if (outPoint.TxHash != Coin::Hash(txFrom) || !VerifyScript(txIn.Script(), txOut.ScriptPubKey)) {
+	if (!VerifyScript(txIn.Script(), scriptPk)) {
 #ifdef X_DEBUG//!!!D
 
 		TRC(1, "txTo " << Hash(txTo));
-//		bool bC = outPoint.TxHash == Hash(txFrom);
-		bool bb = VerifyScript(txIn.Script(), txOut.PkScript, txTo, nHashType);
+//		bool bC = outPoint.TxHash == hashTxFrom;
+		bool bb = VerifyScript(txIn.Script(), scriptPk, txTo, nHashType);
 //		bb = bb;
 #endif
 		Throw(CoinErr::VerifySignatureFailed);
 	}
 }
 
-bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script) {
+bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInMultiSig) {
 	if (t_features.VerifyDerEnc && !IsValidSignatureEncoding(sig.data(), sig.size()))
 		return false;
 
@@ -680,27 +677,28 @@ bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script) {
 		if (HashType != SigHashType::ZERO && HashType != sigHashType)
 			return false;
 		HashType = sigHashType;
-
-		sig = sig.first(sig.size() - 1);
-		return KeyInfoBase::VerifyHash(pubKey, Hash(script), sig);
+		return KeyInfoBase::VerifyHash(pubKey, Hash(script), sig.first(sig.size() - 1));
 	} catch (CryptoException& DBG_PARAM(ex)) {
-		TRC(2, ex.what() << "    PubKey: " << pubKey);
+		if (!bInMultiSig) {
+			TRC(2, ex.what() << "    PubKey: " << pubKey);
+		}		
 		return false;
 	}
 }
 
 
 bool ToBool(const Vm::Value& v) {
-	for (size_t i = 0; i < v.Size; ++i)
-		if (v.constData()[i])
-			return i != v.Size - 1 || v.constData()[i] != 0x80;
+	Span s(v);
+	for (size_t i = 0; i < s.size(); ++i)
+		if (s[i])
+			return i != s.size() - 1 || s[i] != 0x80;
 	return false;
 }
 
 static void MakeSameSize(Vm::Value& v1, Vm::Value& v2) {
-	size_t size = std::max(v1.Size, v2.Size);
-	v1.Size = size;
-	v2.Size = size;
+	size_t size = std::max(v1.size(), v2.size());
+	v1.resize(size);
+	v2.resize(size);
 }
 
 bool Vm::EvalImp() {
@@ -730,7 +728,7 @@ bool Vm::EvalImp() {
 		default:
 			if (bExec) {
 				switch (instr.Opcode) {
-				case Opcode::OP_PUSHDATA1: Push(instr.Value);
+				case Opcode::OP_PUSHDATA1: Push(StackValue(instr.Value));
 				case Opcode::OP_NOP: break;
 				case Opcode::OP_DUP: Push(GetStack(0)); break;
 				case Opcode::OP_2DUP:
@@ -786,8 +784,8 @@ bool Vm::EvalImp() {
 				} break;
 				case Opcode::OP_CAT: {
 					Value& v = GetStack(1);
-					v.Replace(v.Size, 0, GetStack(0));
-					if (v.Size > MAX_SCRIPT_ELEMENT_SIZE)
+					v = Span(v) + GetStack(0);
+					if (v.size() > MAX_SCRIPT_ELEMENT_SIZE)
 						return false;
 					SkipStack(1);
 				} break;
@@ -796,9 +794,9 @@ bool Vm::EvalImp() {
 					int beg = explicit_cast<int>(ToBigInteger(GetStack(1))), end = beg + explicit_cast<int>(ToBigInteger(GetStack(0)));
 					if (beg < 0 || end < beg)
 						return false;
-					beg = std::min(beg, (int)v.Size);
-					end = std::min(end, (int)v.Size);
-					GetStack(2) = Blob(v.constData() + beg, end - beg);
+					beg = std::min(beg, (int)v.size());
+					end = std::min(end, (int)v.size());
+					GetStack(2) = StackValue(Span(v).subspan(beg, end - beg));
 					SkipStack(2);
 				} break;
 				case Opcode::OP_LEFT: {
@@ -806,16 +804,16 @@ bool Vm::EvalImp() {
 					Value& v = GetStack(0);
 					if (size < 0)
 						return false;
-					size = std::min(size, (int)v.Size);
-					v.Replace(size, v.Size - size, Blob());
+					size = std::min(size, (int)v.size());
+					v = StackValue(Span(v).first(size));
 				} break;
 				case Opcode::OP_RIGHT: {
 					int size = explicit_cast<int>(ToBigInteger(Pop()));
 					Value& v = GetStack(0);
 					if (size < 0)
 						return false;
-					size = std::min(size, (int)v.Size);
-					v.Replace(0, v.Size - size, Blob());
+					size = std::min(size, (int)v.size());
+					v = StackValue(Span(v).last(size));
 				} break;
 				case Opcode::OP_RIPEMD160: GetStack(0) = RIPEMD160().ComputeHash(GetStack(0)); break;
 				case Opcode::OP_SHA256: GetStack(0) = SHA256().ComputeHash(GetStack(0)); break;
@@ -868,7 +866,7 @@ bool Vm::EvalImp() {
 				case Opcode::OP_CHECKSIGVERIFY: {
 					Value key = Pop(), sig = Pop();
 					MemoryStream msSig;
-					ScriptWriter(msSig) << sig;
+					ScriptWriter(msSig) << Span(sig);
 
 					Span spanScript = m_span.subspan(m_posCodeHash);
 					Blob script;
@@ -888,8 +886,8 @@ bool Vm::EvalImp() {
 				} break;
 				case Opcode::OP_CHECKMULTISIG:
 				case Opcode::OP_CHECKMULTISIGVERIFY: {
-					vector<Blob> vPubKey;
-					vector<Blob> vSig;
+					vector<StackValue> vPubKey;
+					vector<StackValue> vSig;
 					int n = explicit_cast<int>(ToBigInteger(Pop()));
 					if (n < 0 || n > 20 || (nOpCount += n) > MAX_OP_COUNT)
 						return false;
@@ -903,9 +901,9 @@ bool Vm::EvalImp() {
 					SkipStack(1); // one extra unused value, due to an old bug
 					Blob script(m_span.subspan(m_posCodeHash));
 					if (!WitnessSig) {
-						EXT_FOR(const Blob& sig, vSig) {
+						EXT_FOR(const StackValue& sig, vSig) {
 							MemoryStream ms;
-							ScriptWriter(ms) << sig;
+							ScriptWriter(ms) << Span(sig);
 							script = Script::DeleteSubpart(script, ms);
 							//!!!TODO check
 						}
@@ -914,7 +912,7 @@ bool Vm::EvalImp() {
 					SigHashType originalHashType = m_signatureHasher->HashType;
 					for (int i = 0, j = 0; i < vSig.size() && (b = vSig.size() - i <= vPubKey.size() - j); ++j) {
 						m_signatureHasher->HashType = originalHashType;	//!!!?
-						if (m_signatureHasher->CheckSig(vSig[i], vPubKey[j], script))
+						if (m_signatureHasher->CheckSig(vSig[i], vPubKey[j], script, true))
 							++i;
 					}
 					m_signatureHasher->HashType = originalHashType;	//!!!?
@@ -924,15 +922,15 @@ bool Vm::EvalImp() {
 						return false;
 				} break;
 				case Opcode::OP_INVERT:
-					for (uint8_t *p = GetStack(0).data(), *q = p + GetStack(0).Size; p < q; ++p)
+					for (uint8_t *p = GetStack(0).data(), *q = p + GetStack(0).size(); p < q; ++p)
 						*p = ~*p;
 					break;
 				case Opcode::OP_AND: {
 					Value &vr = GetStack(1), &v = GetStack(0);
 					MakeSameSize(vr, v);
 					uint8_t* pr = vr.data();
-					const uint8_t* p = v.constData();
-					for (int i = 0, n = vr.Size; i < n; ++i)
+					const uint8_t* p = v.data();
+					for (int i = 0, n = vr.size(); i < n; ++i)
 						pr[i] &= p[i];
 					SkipStack(1);
 				} break;
@@ -940,8 +938,8 @@ bool Vm::EvalImp() {
 					Value &vr = GetStack(1), &v = GetStack(0);
 					MakeSameSize(vr, v);
 					uint8_t* pr = vr.data();
-					const uint8_t* p = v.constData();
-					for (int i = 0, n = vr.Size; i < n; ++i)
+					const uint8_t* p = v.data();
+					for (int i = 0, n = vr.size(); i < n; ++i)
 						pr[i] |= p[i];
 					SkipStack(1);
 				} break;
@@ -949,8 +947,8 @@ bool Vm::EvalImp() {
 					Value &vr = GetStack(1), &v = GetStack(0);
 					MakeSameSize(vr, v);
 					uint8_t* pr = vr.data();
-					const uint8_t* p = v.constData();
-					for (int i = 0, n = vr.Size; i < n; ++i)
+					const uint8_t* p = v.data();
+					for (int i = 0, n = vr.size(); i < n; ++i)
 						pr[i] ^= p[i];
 					SkipStack(1);
 				} break;
@@ -1041,7 +1039,7 @@ bool Vm::EvalImp() {
 				case Opcode::OP_ABS: GetStack(0) = FromBigInteger(abs(ToBigInteger(GetStack(0)))); break;
 				case Opcode::OP_NOT: GetStack(0) = FromBigInteger(!ToBigInteger(GetStack(0))); break;
 				case Opcode::OP_0NOTEQUAL: GetStack(0) = FromBigInteger(!!ToBigInteger(GetStack(0))); break;
-				case Opcode::OP_SIZE: Push(FromBigInteger(BigInteger((int64_t)GetStack(0).Size))); break;
+				case Opcode::OP_SIZE: Push(FromBigInteger(BigInteger((int64_t)GetStack(0).size()))); break;
 				case Opcode::OP_DEPTH: Push(FromBigInteger(BigInteger((int64_t)Stack.size()))); break;
 				case Opcode::OP_CODESEPARATOR: m_posCodeHash = (int)m_stm->Position; break;
 				case Opcode::OP_RETURN: return false;
@@ -1111,8 +1109,8 @@ void CoinFilter::Write(BinaryWriter& wr) const {
 
 void CoinFilter::Read(const BinaryReader& rd) {
 	Blob data = CoinSerialized::ReadBlob(rd);
-	Bitset.resize(data.Size * 8);
-	for (int i = 0; i < data.Size; ++i)
+	Bitset.resize(data.size() * 8);
+	for (int i = 0; i < data.size(); ++i)
 		for (int j = 0; j < 8; ++j)
 			Bitset.replace(i * 8 + j, (data.constData()[i] >> j) & 1);
 	HashNum = rd.ReadUInt32();

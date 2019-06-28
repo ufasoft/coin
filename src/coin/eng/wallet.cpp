@@ -18,8 +18,19 @@
 
 namespace Coin {
 
-
 EXT_THREAD_PTR(Wallet) t_pWallet;
+
+DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx) {
+	wr << static_cast<const Tx&>(wtx);
+	Write(wr, wtx.PrevTxes);
+	return wr;
+}
+
+const DbReader& operator>>(const DbReader& rd, WalletTx& wtx) {
+	rd >> static_cast<Tx&>(wtx);
+	Read(rd, wtx.PrevTxes);
+	return rd;
+}
 
 Wallet::Wallet(CoinEng& eng)
 	:	base(eng)
@@ -38,18 +49,6 @@ void Wallet::Init() {
 	Progress = 1;
 	CurrentHeight = -1;
 	m_eng->Events.Subscribers.push_back(this);
-}
-
-DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx) {
-    wr << static_cast<const Tx&>(wtx);
-    Write(wr, wtx.PrevTxes);
-	return wr;
-}
-
-const DbReader& operator>>(const DbReader& rd, WalletTx& wtx) {
-    rd >> static_cast<Tx&>(wtx);
-    Read(rd, wtx.PrevTxes);
-	return rd;
 }
 
 WalletTx::WalletTx(const Tx& tx)
@@ -295,7 +294,7 @@ void Wallet::OnProcessBlock(const Block& block) {
 
 void Wallet::ProcessPendingTxes() {
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		for (DbDataReader dr=m_eng->m_cdb.CmdPendingTxes.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();) {
+		for (DbDataReader dr = m_eng->m_cdb.CmdPendingTxes.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();) {
 			WalletTx wtx;
 			wtx.LoadFromDb(dr);
 			ProcessMyTx(wtx, wtx.m_bFromMe);
@@ -319,7 +318,7 @@ void Wallet::OnBlockchainChanged() {
 					CurrentHeight = bestBlock.Height;
 				break;
 			}
-			Block block = m_eng->GetBlockByHeight(CurrentHeight+1);
+			Block block = m_eng->GetBlockByHeight(CurrentHeight + 1);
 			if (m_eng->Mode == EngMode::Lite) {
 				HashValue hash = Hash(block);
 				EXT_LOCK (m_eng->m_cdb.MtxDb) {
@@ -846,7 +845,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 	EXT_LOCK (Mtx) {
 		for (int64_t fee = 0;;) {
 			WalletTx tx;
-			tx.EnsureCreate();
+			tx.EnsureCreate(*m_eng);
 			tx.m_bFromMe = true;
 
 			int64_t nTotal = nVal + fee;
@@ -1010,7 +1009,7 @@ void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment
 	pair<WalletTx, decimal64> pp = CreateTransaction(nullptr, vSend);
 	pp.first.Comment = comment;
 	t_features.PayToScriptHash = true;
-	
+
 	Commit(pp.first);
 	if (m_iiWalletEvents)
 		m_iiWalletEvents->OnStateChanged();

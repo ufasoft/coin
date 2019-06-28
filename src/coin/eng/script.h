@@ -113,7 +113,7 @@ public:
 
 	Blob ReadBlob(int size = -1) const {
 		Blob r = CoinSerialized::ReadBlob(_self);
-		if (size != -1 && r.Size != size)
+		if (size != -1 && r.size() != size)
 			Throw(E_FAIL);
 		return r;
 	}
@@ -130,7 +130,7 @@ struct LiteInstr {
 struct Instr {
 	Coin::Opcode Opcode;
 	Coin::Opcode OriginalOpcode;
-	Blob Value;
+	StackValue Value;
 
 	Instr()
 	{}
@@ -177,18 +177,17 @@ bool GetInstr(const CMemReadStream& stm, LiteInstr& instr);
 
 class Vm {
 public:
-	typedef Blob Value;
+	typedef StackValue Value;
 
-	static const Value TrueValue,
-						FalseValue;
+	static const Value TrueValue, FalseValue;
 
 	Span m_span;
 	unique_ptr<CMemReadStream> m_stm;
 	unique_ptr<ScriptReader> m_rd;
 	vector<Value> Stack;
-	CBool WitnessSig;
 	SignatureHasher *m_signatureHasher;
-//	Coin::Script Script;
+	CBool WitnessSig;
+	//	Coin::Script Script;
 
 	Vm(SignatureHasher *signatureHasher = nullptr) : m_signatureHasher(signatureHasher) {
 		Stack.reserve(6);
@@ -201,7 +200,7 @@ private:
 	int m_pc;
 	int m_posCodeHash;
 
-	Value& GetStack(int idx);
+	Value& GetStack(unsigned idx);
 	Value Pop();
 	void SkipStack(int n);
 	void Push(const Value& v);

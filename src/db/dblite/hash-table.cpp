@@ -50,7 +50,7 @@ uint32_t HashTable::Hash(RCSpan key) const {
 
 int HashTable::BitsOfHash() const {
 	int r = 0;
-	if (uint64_t nPages = PageMap.Length/4)
+	if (uint64_t nPages = PageMap.Length / 4)
 		r = BitOps::ScanReverse(uint32_t(nPages - 1));
 	return r;
 }
@@ -171,12 +171,12 @@ bool HtCursor::SeekToKeyHash(RCSpan k, uint32_t hash) {
 	SubCursor = nullptr;
 	Initialized = ClearKeyData();
 	for (int level = Ht->BitsOfHash(); level >= 0; --level) {
-		if (uint32_t pgno = Ht->GetPgno(NPage = hash & uint32_t((1LL << level)-1))) {				// converting to 1LL because int(1) << 32 == 1
+		if (uint32_t pgno = Ht->GetPgno(NPage = hash & uint32_t((1LL << level) - 1))) { // converting to 1LL because int(1) << 32 == 1
 			PageHeader& h = (m_pagePos.Page = Ht->Tx.OpenPage(pgno)).Header();
 			if (h.Flags & PageHeader::FLAG_BRANCH) {
 				return (SubCursor = new BTreeSubCursor(_self))->SeekToKey(k);
 			} else {
-				pair<int, bool> pp = Map->EntrySearch(m_pagePos.Page.Entries(Ht->KeySize), h, k);
+				pair<int, bool> pp = Map->EntrySearch(m_pagePos.Page.Entries(Ht->KeySize), k);
 				m_pagePos.Pos = pp.first;
 				return pp.second;
 			}
@@ -211,23 +211,22 @@ void HashTable::Split(uint32_t nPage, int level) {
 	PageMap.PutUInt32(uint64_t(nPageNew)*4, pageNew.N);
 	uint32_t mask = uint32_t(1LL << (level+1))-1;
 	uint8_t bitMask = 0;
-	PageHeader& h = page.Header();
-	uint8_t keyOffset = h.KeyOffset();
-	if (HtType==HashType::Identity && KeySize) {
-		if (h.Flags & PageHeader::FLAGS_KEY_OFFSET) {
+	PageDesc pdesc = page.Entries(KeySize);
+	uint8_t keyOffset = pdesc.Header.KeyOffset();
+	if (HtType == HashType::Identity && KeySize) {
+		if (pdesc.Header.Flags & PageHeader::FLAGS_KEY_OFFSET) {
 			bitMask = 1 << (level & 7);
 		} else if (level == 7)
 			bitMask = 0x80;										// Start to Cut Key Head
 	}
-	LiteEntry *entries = page.Entries(KeySize);
 	PageHeader& dh = pageNew.Header();
 	int off = (bitMask == 0x80) && keyOffset<KeySize ? 1 : 0;	//!!!  was: (bitMask == 0x80) && keyOffset<KeySize-1 ? 1 : 0
-	h.SetKeyOffset(uint8_t(keyOffset + off));
-	dh.SetKeyOffset(h.KeyOffset());
-	uint8_t *ps = h.Data,
+	pdesc.Header.SetKeyOffset(uint8_t(keyOffset + off));
+	dh.SetKeyOffset(pdesc.Header.KeyOffset());
+	uint8_t *ps = pdesc.Header.Data,
 		 *pd = dh.Data;
-	for (int i=0; i<h.Num; ++i) {
-		LiteEntry& e = entries[i];
+	for (int i = 0; i < pdesc.Header.Num; ++i) {
+		LiteEntry& e = pdesc[i];
 		size_t size = e.Size() - off;
 		if ((*e.P & bitMask)
 			|| !bitMask && ((Hash(e.Key(KeySize)) & mask) != nPage))
@@ -240,7 +239,7 @@ void HashTable::Split(uint32_t nPage, int level) {
 			ps += size;
 		}
 	}
-	h.Num -= dh.Num;
+	pdesc.Header.Num -= dh.Num;
 	page.ClearEntries();
 }
 

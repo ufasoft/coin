@@ -10,7 +10,7 @@
 namespace Ext { namespace DB { namespace KV {
 
 uint64_t Filet::GetPagesForLength(uint64_t len) const {
-	const size_t pageSize = m_tx.Storage.PageSize;
+	const uint32_t pageSize = m_tx.Storage.PageSize;
 	return (len + pageSize - 1) >> PageSizeBits;
 }
 
@@ -177,20 +177,21 @@ void Filet::put_Length(uint64_t v) {
 	if (v > prevLen) {
 		if (Page page = GetPageToModify(prevLen, true)) {
 			size_t off = size_t(prevLen & (tx.Storage.PageSize-1));
-			memset((uint8_t*)page.get_Address() + off, 0, m_tx.Storage.PageSize-off);
+			memset((uint8_t*)page.get_Address() + off, 0, m_tx.Storage.PageSize - off);
 		}
 	}
 }
 
 uint32_t Filet::GetUInt32(uint64_t offset) const {
-	if (offset+sizeof(uint32_t) > Length)
+	KVStorage& storage = m_tx.Storage;
+	if (offset + sizeof(uint32_t) > Length)
 		Throw(errc::invalid_argument);
 	if (offset & 3)
 		Throw(errc::invalid_argument);
 	uint32_t vpage = uint32_t(offset >> PageSizeBits);
-	size_t off = size_t(offset & (m_tx.Storage.PageSize-1));
+	size_t off = size_t(offset & (storage.PageSize - 1));
 
-	if (m_tx.Storage.m_accessViewMode == ViewMode::Full) {
+	if (storage.m_accessViewMode == ViewMode::Full) {
 #if UCFG_DB_TLB
 		CTlbAddress::iterator it = TlbAddress.find(vpage);
 		if (it != TlbAddress.end())
@@ -219,18 +220,18 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 		void *pageAddress = PageRoot.get_Address();
 		ptr<ViewBase> view;
 		EXT_LOCK(g_lruViewCache->Mtx) {
-			EXT_LOCK(m_tx.Storage.MtxViews) {
-				for (int levels=IndirectLevels, level=levels;;) {
+			EXT_LOCK(storage.MtxViews) {
+				for (int levels = IndirectLevels, level = levels;;) {
 					--level;
-					int bits = PageSizeBits + level*(PageSizeBits-2);
-					m_tx.Storage.OnOpenPage(pgno);			
+					int bits = PageSizeBits + level * (PageSizeBits - 2);
+					storage.OnOpenPage(pgno);
 					if (level == -1)
 						return letoh(*(uint32_t*)((uint8_t*)pageAddress + off));
 					if (!(pgno = letoh(((uint32_t*)pageAddress)[int(offset >> bits)])))
 						return 0;
-					PageObj *po = m_tx.Storage.OpenedPages.at(pgno);
+					PageObj *po = storage.OpenedPages.at(pgno);
 					pageAddress = po ? po->GetAddress()
-						: m_tx.Storage.GetPageAddress(m_tx.Storage.GetViewNoLock(pgno >> m_tx.Storage.m_bitsViewPageRatio), pgno);
+						: storage.GetPageAddress(storage.GetViewNoLock(pgno >> storage.m_bitsViewPageRatio), pgno);
 					offset &= (1LL<<bits) - 1;
 				}
 			}
@@ -253,11 +254,11 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 }
 
 void Filet::PutUInt32(uint64_t offset, uint32_t v) {
-	if (offset+sizeof(uint32_t) > Length)
+	if (offset + sizeof(uint32_t) > Length)
 		Length = offset+sizeof(uint32_t);
 	if (offset & 3)
 		Throw(errc::invalid_argument);
-	*(uint32_t*)((uint8_t*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize-1))) = htole(v);
+	*(uint32_t*)((uint8_t*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize - 1))) = htole(v);
 }
 
 

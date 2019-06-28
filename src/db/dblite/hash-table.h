@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -55,7 +55,12 @@ class HtCursor : public CursorObj {
 	typedef HtCursor class_type;
 public:
 	observer_ptr<HashTable> Ht;
-
+#ifndef _DEBUG//!!!D
+private:
+#endif
+	ptr<BTreeSubCursor> SubCursor;
+	PagePos m_pagePos;
+public:
 	HtCursor() {}
 
 	HtCursor(DbTransaction& tx, DbTable& table);
@@ -79,14 +84,7 @@ public:
 	void Update(RCSpan d) override;
 	void Delete() override;
 
-
 	void Drop() override;
-#ifndef _DEBUG//!!!D
-private:
-#endif
-	ptr<BTreeSubCursor> SubCursor;
-	PagePos m_pagePos;
-
 	bool SeekToKeyHash(RCSpan k, uint32_t hash);				// returns bFound
 	void UpdateFromSubCursor();
 

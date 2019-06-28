@@ -77,6 +77,7 @@ class CConnectJob;
 class CoinsView;
 class TxOut;
 struct OutPoint;
+interface ITxoMap;
 
 interface ITxMap {
 	virtual Tx Find(const HashValue& hash) const = 0;
@@ -150,12 +151,10 @@ struct OutPoint {
 	}
 
 	bool operator==(const OutPoint& v) const {
-		return TxHash == v.TxHash && Index == v.Index;
+		return !memcmp(this, &v, sizeof(TxHash) + sizeof(Index));
 	}
 
-	bool operator!=(const OutPoint& v) const {
-		return !operator==(v);
-	}
+	bool operator!=(const OutPoint& v) const { return !operator==(v); }
 
 	bool IsNull() const {
 		return TxHash == HashValue::Null() && -1 == Index;
@@ -180,6 +179,11 @@ struct OutPoint {
 	}
 };
 
+inline ostream& operator<<(ostream& os, const OutPoint& op) {
+	return os << op.TxHash << ":" << op.Index;
+}
+
+
 } // namespace Coin
 namespace std {
 template <> struct hash<Coin::OutPoint> {
@@ -194,19 +198,24 @@ COIN_CLASS uint8_t TryParseDestination(RCSpan pkScript, Span& hash160, Span& pub
 
 class COIN_CLASS TxOutBase {
 	typedef TxOutBase class_type;
-
 public:
-	mutable CIdPk m_idPk; // changed when saving/locading Tx. Referenced by TxIn reading.
-	mutable Blob m_scriptPubKey;
+	typedef AutoBlob<28> CScriptPubKey;		// 25 is enough for P2PKH outs, but 28 eats the same space because of alignment
+	mutable CScriptPubKey m_scriptPubKey;
 
 	TxOutBase(const Blob& script = Blob())
 		: m_scriptPubKey(script) {
 	}
 
-	Span get_ScriptPubKey() const;
-	DEFPROP_GET(Span, ScriptPubKey);
-protected:
+#if UCFG_COIN_USE_NORMAL_MODE
+	mutable CIdPk m_idPk; // changed when saving/locating Tx. Referenced by TxIn reading.
 	uint8_t m_typ;
+
+	Span get_ScriptPubKey() const;
+#else
+	Span get_ScriptPubKey() const noexcept { return m_scriptPubKey; }
+#endif
+
+	DEFPROP_GET(Span, ScriptPubKey);
 };
 
 class COIN_CLASS TxOut : public TxOutBase, public CPersistent {
@@ -237,18 +246,18 @@ public:
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 };
 
+typedef AutoBlob<71> StackValue;
+
 class COIN_CLASS TxIn { // Keep this struct small without VTBL
-private:
 	mutable Blob m_script;
 	Blob m_sig;
 	const TxObj* m_pTxo;
 	TxOutBase PrevTxOut;
-
 public:
 	static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = 1U << 31, SEQUENCE_LOCKTIME_TYPE_FLAG = 1 << 22, SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 	static const int SEQUENCE_LOCKTIME_GRANULARITY = 9;
 
-    vector<Blob> Witness;
+    vector<StackValue> Witness;
     OutPoint PrevOutPoint;
 	uint32_t Sequence;
 	uint8_t RecoverPubKeyType;
@@ -264,7 +273,11 @@ public:
 		return Sequence == numeric_limits<uint32_t>::max();
 	}
 
+#if UCFG_COIN_USE_NORMAL_MODE
 	Span Script() const;
+#else
+	Span Script() const { return m_script; }
+#endif
 
 	void put_Script(RCSpan script) {
 		m_script = script;
@@ -374,8 +387,9 @@ public:
 	HashValue Hash(RCSpan script);
 	bool VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan witnessProgram);
 	bool VerifyScript(RCSpan scriptSig, RCSpan scriptPk);
-	void VerifySignature(const Tx& txFrom);
-	bool CheckSig(Span sig, RCSpan pubKey, RCSpan script);
+	const OutPoint& GetOutPoint() const;
+	void VerifySignature(RCSpan scriptPk);
+	bool CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInMultiSig = false);
 };
 
 ENUM_CLASS(MinFeeMode){Block, Tx, Relay} END_ENUM_CLASS(MinFeeMode);
@@ -415,7 +429,7 @@ public:
 		return nLockTime >= LOCKTIME_THRESHOLD ? LocktimeType::Timestamp : LocktimeType::Block;
 	}
 
-	void EnsureCreate();
+	void EnsureCreate(CoinEng& eng);
 	virtual void Write(ProtocolWriter& wr) const override;
     virtual void Read(const ProtocolReader& rd) override;
 	void Check() const;
@@ -445,12 +459,11 @@ public:
 	int get_DepthInMainChain() const;
 	DEFPROP_GET(int, DepthInMainChain);
 
-	unsigned SigOpCost(const ITxMap& txMap) const;
-
+	unsigned SigOpCost(const ITxoMap& txoMap) const;
 	pair<int, DateTime> CalculateSequenceLocks(vector<int>& inHeights, const HashValue& hashBlock) const;
 	void CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const Target& target) const;
 	void ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64_t& nFees, bool bBlock, bool bMiner, int64_t minFee, const Target& target) const;
-	unsigned GetP2SHSigOpCount(const ITxMap& txMap) const;
+	unsigned GetP2SHSigOpCount(const ITxoMap& txoMap) const;
 	bool IsNewerThan(const Tx& txOld) const;
 	void WriteTxIns(DbWriter& wr) const;
 
@@ -932,7 +945,6 @@ public:
 
 	typedef list<SpentTx> CCacheSpentTxes;
 	CCacheSpentTxes m_cacheSpentTxes; // used for fast Reorganize()
-	static const size_t MAX_LAST_SPENT_TXES = 5000;
 
 	ChainCaches();
 
@@ -997,22 +1009,51 @@ struct TxFeeTuple{
 };
 
 class CFutureTxMap : public ITxMap {
+	CoinEng& m_eng;
+	unordered_map<HashValue, shared_future<TxFeeTuple>> m_map;
+	mutable mutex m_mtx;
 public:
 	CFutureTxMap(CoinEng& eng) : m_eng(eng) {}
 	const Tx& Get(const HashValue& hash) const override;
-	void Add(const HashValue& hash, const shared_future<TxFeeTuple> ft);
+	void Add(const HashValue& hash, const shared_future<TxFeeTuple>& ft);
 	void Ensure(const HashValue& hash);
 	bool Contains(const HashValue& hash) const;
 	Tx Find(const HashValue& hash) const override;
 	const TxOut& GetOutputFor(const OutPoint& prev) const override;
 	void Add(const Tx& tx) override;
-private:
-	CoinEng& m_eng;
-	unordered_map<HashValue, shared_future<TxFeeTuple>> m_map;
-	mutable mutex m_mtx;
 };
 
-class CoinsView : public ITxMap {
+typedef TxOut Txo;
+
+interface ITxoMap {
+	virtual Txo Get(const OutPoint& op) const = 0;
+};
+
+class TxoMap : public ITxoMap {
+	CoinEng& m_eng;
+
+	struct Entry {
+		shared_future<Txo> Ft;
+		CBool InCurrentBlock;
+
+		Entry() {}
+
+		Entry(shared_future<Txo>&& ft, bool inCurrentBlock)
+			: Ft(move(ft))
+			, InCurrentBlock(inCurrentBlock)
+		{}
+	};
+
+	mutable unordered_map<OutPoint, Entry> m_map;
+	mutable mutex m_mtx;
+public:
+	TxoMap(CoinEng& eng) : m_eng(eng) {}
+	void Add(const OutPoint& op, int height);
+	void AddAllOuts(const HashValue& hashTx, const Tx& tx);
+	Txo Get(const OutPoint& op) const override;
+};
+
+class CoinsView : public ITxMap, public ITxoMap {
 public:
 	CoinEng& Eng;
 	mutable CTxMap TxMap;
@@ -1023,6 +1064,7 @@ public:
 	Tx Find(const HashValue& hash) const override;
 	const Tx& Get(const HashValue& hash) const override;
 	const TxOut& GetOutputFor(const OutPoint& prev) const override;
+	Txo Get(const OutPoint& op) const override;
 	void Add(const Tx& tx) override;
 private:
 	mutable unordered_map<OutPoint, bool> m_outPoints;
@@ -1044,7 +1086,8 @@ public:
 //!!!R	unordered_set<ptr<ConnectTask>> Tasks;
 	EnabledFeatures Features;
 	int32_t Height;
-	CFutureTxMap TxMap;
+	//!!!?R	CFutureTxMap TxMap; 
+	TxoMap TxoMap;
 	int64_t Fee;
 	Target DifficultyTarget;
 
@@ -1067,14 +1110,15 @@ public:
 
 	CConnectJob(CoinEng& eng)
 		: Eng(eng)
-		, TxMap(eng)
+//!!!R		, TxMap(eng)
+		, TxoMap(eng)
 		, Fee(0)
 		, aSigOps(0)
 		, Failed(false) {
 	}
 
 	void AsynchCheckAll(const vector<Tx>& txes);	//!!!Obsolete
-	void AsynchCheckAllSharedFutures(const vector<Tx>& txes);
+	void AsynchCheckAllSharedFutures(const vector<Tx>& txes, int height);
 	void Prepare(const Block& block);
 	void Calculate();
 	void PrepareTask(const HashValue160& hash160, const CanonicalPubKey& pubKey);

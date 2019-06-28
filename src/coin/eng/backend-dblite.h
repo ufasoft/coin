@@ -45,6 +45,8 @@ private:
 */
 
 class DbTxRef : noncopyable {
+	DbTransaction* m_p;
+	unique_ptr<DbTransaction> m_pMdbTx;
 public:
 	DbTxRef(DbStorage& env);
 
@@ -54,10 +56,6 @@ public:
 		if (m_pMdbTx.get())
 			m_pMdbTx->Commit();
 	}
-private:
-	DbTransaction *m_p;
-
-	unique_ptr<DbTransaction> m_pMdbTx;
 };
 
 class SavepointTransaction;
@@ -83,15 +81,20 @@ private:
 
 class DbliteBlockChainDb : public IBlockChainDb {
 	typedef IBlockChainDb base;
+
+	static const uint64_t MIN_MM_LENGTH = 1024 * 1024 * 1024;
+
+	File m_fileBootstrap;
+	MemoryMappedFile m_mmBootstrap;
+	MemoryMappedView m_viewBootstrap;
+	uint64_t MappedSize;
 public:
+	CoinEng& Eng;
 	mutex MtxDb;
 	DbStorage m_db;
 	DbTable m_tableBlocks, m_tableHashToBlock, m_tableTxes, m_tablePubkeys, m_tablePubkeyToTxes, m_tableProperties;
 
-
-//!!!R	unique_ptr<DbTransaction> m_dbt;
-
-	DbliteBlockChainDb();
+	DbliteBlockChainDb(CoinEng& eng);
 
 	void *GetDbObject() override {
 		return &m_db;
@@ -120,14 +123,25 @@ public:
 	void SpendInputs(const Tx& tx);
 
 	struct TxData {
-		uint32_t Height;
-		Blob Data, TxIns, Coins;
 		HashValue HashTx;
+		Blob Data,			// When bit23==1, other bits contain height of last spend.
+			TxIns, Coins;
+		uint32_t Height,
+			LastSpendHeight;		// serialized only when Coin.size()===0
 		uint32_t TxOffset;
 		uint16_t N;
 
-		void Read(BinaryReader& rd);
-		void Write(BinaryWriter& wr, bool bWriteHash = false) const;
+		TxData()
+			: LastSpendHeight(0)
+		{}
+
+		bool IsCoinSpent(int idx) const {
+			int pos = idx >> 3;
+			return pos >= Coins.size() || !(Coins[pos] & (1 << (idx & 7)));
+		}
+
+		void Read(BinaryReader& rd, CoinEng& eng);
+		void Write(BinaryWriter& wr, CoinEng& eng, bool bWriteHash = false) const;
 	};
 
 	struct TxDatas {
@@ -135,19 +149,32 @@ public:
 		int Index;
 
 		TxDatas()
-			:	Index(0)
+			: Index(0)
 		{}
+
+		TxDatas(int initialSize)
+			: Items(initialSize)
+			, Index(0)
+		{}
+
+		TxDatas(TxDatas&& x)
+			: Items(std::forward<vector<TxData>>(x.Items))
+			, Index(x.Index)
+		{}
+
+		explicit operator bool() const { return !Items.empty(); }
 	};
 
 	Span TxKey(const HashValue& txHash) { return Span(txHash.data(), TXID_SIZE); }
 	Span TxKey(RCSpan txid8) { return Span(txid8.data(), TXID_SIZE); }
 
-	bool FindTxDatas(DbCursor& c, RCSpan txid8, TxDatas& txDatas);
+	TxDatas FindTxDatas(DbCursor& c, RCSpan txid8);
 	TxDatas GetTxDatas(RCSpan txid8);
+	TxDatas GetTxDatas(const HashValue& hashTx);
 	void PutTxDatas(DbCursor& c, RCSpan txKey, const TxDatas& txDatas, bool bUpdate = false);
 	void DeleteBlock(int height, const vector<int64_t> *txids) override;
 	void ReadTx(uint64_t off, Tx& tx);
-	bool FindTxById(RCSpan txid8, Tx *ptx) override;
+	bool FindTxByHash(const HashValue& hashTx, Tx *ptx) override;
 	bool FindTx(const HashValue& hash, Tx *ptx) override;
 	void ReadTxes(const BlockObj& bo) override;
 	void ReadTxIns(const HashValue& hash, const TxObj& txObj) override;
@@ -163,12 +190,12 @@ public:
 
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override;
 	void SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) override;
-	void UpdateCoins(const OutPoint& op, bool bSpend) override;
+	void UpdateCoins(const OutPoint& op, bool bSpend, int32_t heightCur) override;
+	void PruneTxo(const OutPoint& op, int32_t heightCur) override;
 
 	void BeginEngTransaction() override {
 		Throw(E_NOTIMPL);
 	}
-
 
 	Blob FindPubkey(int64_t id) override;
 	void InsertPubkey(int64_t id, RCSpan pk) override;
@@ -196,17 +223,12 @@ public:
 
 	uint64_t GetBoostrapOffset() override;
 	void SetBoostrapOffset(uint64_t v) override;
+	int32_t GetLastPrunedHeight() override;
+	void SetLastPrunedHeight(int32_t height) override;
 	vector<BlockHeader> GetBlockHeaders(const LocatorHashes& locators, const HashValue& hashStop) override;
 protected:
 	virtual void OnOpenTables(DbTransaction& dbt, bool bCreate) {}
 private:
-	static const uint64_t MIN_MM_LENGTH = 1024*1024*1024;
-
-	File m_fileBootstrap;
-	MemoryMappedFile m_mmBootstrap;
-	MemoryMappedView m_viewBootstrap;
-	uint64_t MappedSize;
-
 	HashValue ReadPrevBlockHash(DbReadTransaction& dbt, int height, bool bFromBlock = false);
 	BlockHeader LoadHeader(DbReadTransaction& dbt, int height, Stream& stmBlocks, int hMaxBlock = -2);
 	Block LoadBlock(DbReadTransaction& dbt, int height, Stream& stmBlocks, bool bFullRead = true);

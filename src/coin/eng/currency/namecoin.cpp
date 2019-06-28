@@ -40,7 +40,7 @@ protected:
 			m_tableDomains.Open(dbt, bCreate);
 	}
 
-	int GetNameHeight(const ConstBuf& cbufName, int heightExpired) override {
+	int GetNameHeight(RCSpan cbufName, int heightExpired) override {
 		DbReadTxRef dbt(m_db);
 		DbCursor c(dbt, m_tableDomains);
 		if (c.SeekToKey(cbufName)) {
@@ -55,7 +55,7 @@ protected:
 	DomainData Resolve(RCString domain) override {
 		DomainData r;
 		const char *pDomain = domain;
-		ConstBuf cbufName(pDomain, strlen(pDomain));
+		Span cbufName(pDomain, strlen(pDomain));
 		DbReadTxRef dbt(m_db);
 		DbCursor c(dbt, m_tableDomains);
 		if (c.SeekToKey(cbufName))
@@ -65,7 +65,7 @@ protected:
 
 	void PutDomainData(RCString domain, uint32_t height, const HashValue& hashTx, RCString addressData, bool bInsert) override {
 		const char *pDomain = domain;
-		ConstBuf cbufName(pDomain, strlen(pDomain));
+		Span cbufName(pDomain, strlen(pDomain));
 		if (!bInsert && GetNameHeight(cbufName, -1) < 0)
 			Throw(CoinErr::InconsistentDatabase);
 		DomainData dd;
@@ -108,7 +108,7 @@ public:
 			m_cmdInsertDomain.CommandText = "INSERT INTO domains (name, address, height) VALUES (?, ?, ?)";
 			m_cmdUpdateDomain.CommandText = "UPDATE domains SET address=?, height=? WHERE name=?";
 			m_cmdNameHeight.CommandText = "SELECT height FROM domains WHERE name=?";
-		}	
+		}
 	}
 
 protected:
@@ -126,7 +126,7 @@ protected:
 		return r;
 	}
 
-	int GetNameHeight(const ConstBuf& cbufName, int heightExpired) override {
+	int GetNameHeight(RCSpan cbufName, int heightExpired) override {
 		DbDataReader dr = m_cmdNameHeight.Bind(1, ToStringName(cbufName)).ExecuteReader();
 		return dr.Read() ? dr.GetInt32(0) : -1;
 	}
@@ -200,7 +200,7 @@ const int MAX_NAME_LENGTH = 255,
 const int MIN_FIRSTUPDATE_DEPTH = 12;
 
 
-String ToStringName(const ConstBuf& cbuf) {
+String ToStringName(RCSpan cbuf) {
 	try {
 		DBG_LOCAL_IGNORE_CONDITION(ExtErr::InvalidUTF8String);
 
@@ -210,28 +210,28 @@ String ToStringName(const ConstBuf& cbuf) {
 	}
 }
 
-pair<bool, DecodedTx> DecodeNameScript(const ConstBuf& cbufScript) {
+pair<bool, DecodedTx> DecodeNameScript(RCSpan cbufScript) {
 	pair<bool, DecodedTx> r;
 
 	Script script(cbufScript);
 	if (script.size() < 1)
 		return r;
 	int op = script[0].Opcode;
-	if (op != OP_PUSHDATA1)
+	if (op != Opcode::OP_PUSHDATA1)
 		return r;
 	BigInteger n = ToBigInteger(script[0].Value);
 	if (n < 1 || n > 16)
 		return r;
 	r.second.Op = (NameOpcode)(int)explicit_cast<int>(n);
-	Script::iterator it = script.begin()+1;
+	Script::iterator it = script.begin() + 1;
 	for (; it!=script.end(); ++it) {
 		switch (op = it->Opcode) {
-		case OP_DROP:
-		case OP_2DROP:
-		case OP_NOP:
+		case Opcode::OP_DROP:
+		case Opcode::OP_2DROP:
+		case Opcode::OP_NOP:
 			{
 				++it;
-				while (it != script.end() && (op = it->Opcode) != OP_DROP && op != OP_2DROP && op != OP_NOP)
+				while (it != script.end() && (op = it->Opcode) != Opcode::OP_DROP && op != Opcode::OP_2DROP && op != Opcode::OP_NOP)
 					++it;
 				r.first = r.second.Op == OP_NAME_NEW && r.second.Args.size() == 1 ||
 						  r.second.Op == OP_NAME_FIRSTUPDATE && r.second.Args.size() == 3 ||
@@ -239,7 +239,7 @@ pair<bool, DecodedTx> DecodeNameScript(const ConstBuf& cbufScript) {
 				goto LAB_RET;
 			}
 		default:
-			if (op < 0 || op > OP_PUSHDATA4)
+			if (op < 0 || op > Opcode::OP_PUSHDATA4)
 				return r;
 		}
 		r.second.Args.push_back(it->Value);
@@ -263,7 +263,7 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 		try {
 			DBG_LOCAL_IGNORE_CONDITION(CoinErr::InvalidScript);
 
-			pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_PkScript());
+			pair<bool, DecodedTx> pp = DecodeNameScript(tx.TxOuts()[i].get_ScriptPubKey());
 			if (pp.first) {
 				if (exchange(bFound, true))
 					Throw(CoinErr::NAME_InvalidTx);
@@ -316,13 +316,13 @@ static int GetRelativeDepth(const Tx& tx, const Tx& txPrev, int maxDepth) {
 static int64_t GetNameNetFee(const Tx& tx) {
 	int64_t r = 0;
 	EXT_FOR (const TxOut& txOut, tx.TxOuts()) {
-		if (txOut.get_PkScript().Size == 1 && txOut.get_PkScript()[0] == OP_RETURN)
+		if (txOut.get_ScriptPubKey().Size == 1 && txOut.get_ScriptPubKey()[0] == OP_RETURN)
 			r += txOut.Value;
 	}
 	return r;
 }
 
-int64_t NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decrease 4x starting at 24000    
+int64_t NamecoinEng::GetNetworkFee(int height) {			// Speed up network fee decrease 4x starting at 24000
 	height += std::max(0, height - 24000) * 3;
 	if ((height >> 13) >= 60)
 		return 0;
@@ -338,10 +338,10 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 		bool bFound = false;
 		DecodedTx dtPrev;
 		if (Mode != EngMode::Lite && Mode != EngMode::BlockParser) {
-			for (int i=0; i<tx.TxIns().size(); ++i) {
+			for (int i = 0; i < tx.TxIns().size(); ++i) {
 				const TxIn& txIn = tx.TxIns()[i];
 				const TxOut& txOut = vTxPrev[i].TxOuts()[txIn.PrevOutPoint.Index];
-				auto pp = DecodeNameScript(txOut.get_PkScript());
+				auto pp = DecodeNameScript(txOut.get_ScriptPubKey());
 				if (pp.first) {
 					bFound = true;
 					dtPrev = pp.second;
@@ -362,7 +362,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				Throw(CoinErr::NAME_NewPointsPrevious);
 			break;
 		case OP_NAME_FIRSTUPDATE:
-			if (dt.Args[0].Size==0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
+			if (dt.Args[0].size() == 0 || dt.Args[0].size() > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
 				if (GetNameNetFee(tx) < GetNetworkFee(tx.Height))
@@ -388,7 +388,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 			break;
 
 		case OP_NAME_UPDATE:
-			if (dt.Args[0].Size == 0 || dt.Args[0].Size > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
+			if (dt.Args[0].size() == 0 || dt.Args[0].size() > KVStorage::MAX_KEY_SIZE)				//!!! DBLite supports key length 1..254
 				return;
 			{
 				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {

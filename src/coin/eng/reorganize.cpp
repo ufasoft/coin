@@ -15,12 +15,16 @@ void Block::Disconnect() const {
 	CoinEng& eng = Eng();
 	TRC(3, Height << " " << Hash(_self));
 
+	if (Height <= eng.Db->GetLastPrunedHeight())
+		Throw(CoinErr::CannotReorganizeBeyondPrunedBlocks);
+
+	const CTxes& txes = get_Txes();
 	vector<int64_t> txids;
-	txids.reserve(get_Txes().size());
+	txids.reserve(txes.size());
 
 	if (eng.Mode != EngMode::Lite && eng.Mode != EngMode::BlockParser) {
-		for (size_t i = get_Txes().size(); i--;) {		// reverse order is important
-			const Tx& tx = get_Txes()[i];
+		for (size_t i = txes.size(); i--;) {		// reverse order is important
+			const Tx& tx = txes[i];
 			Coin::HashValue txhash = Coin::Hash(tx);
 			txids.push_back(letoh(*(int64_t*)txhash.data()));
 
@@ -28,7 +32,7 @@ void Block::Disconnect() const {
 
 			if (!tx.IsCoinBase()) {
 				EXT_FOR(const TxIn& txIn, tx.TxIns()) {
-					eng.Db->UpdateCoins(txIn.PrevOutPoint, false);
+					eng.Db->UpdateCoins(txIn.PrevOutPoint, false, Height);
 				}
 			}
 		}
@@ -70,7 +74,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 				if (!tx.IsCoinBase()) {
 					EXT_FOR(const TxIn& txIn, tx.TxIns()) {
 						Tx tx;													// necessary, because without it FindTx() returns 'False Positive' (checks only 6 bytes of hash)
-						if (!Db->FindTxById(Span(txIn.PrevOutPoint.TxHash.data(), 8), &tx) || Hash(tx) != txIn.PrevOutPoint.TxHash)
+						if (!Db->FindTxByHash(txIn.PrevOutPoint.TxHash, &tx))
 							spentTxes.insert(txIn.PrevOutPoint.TxHash);
 					}
 				}

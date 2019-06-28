@@ -14,6 +14,7 @@
 		<Checkpoint Block='105000' Hash='00000000000291ce28027faea320c8d2b054b2e0fe44a773f3eefb151d6bdc97' />
 		<Checkpoint Block='295000' Hash='00000000000000004d9b4ef50f0f9d686fd69db2e03af35a100370c64632a983' />
 		<Checkpoint Block='351225' Hash='0000000000000000139c3c2ec1821208daeab23e24b278915f93551247668b51' />
+		<Checkpoint Block='500000' Hash='00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04' />
 	</Chain>
 
 	<Chain ChainID='0' Name='Bitcoin-testnet3' Symbol='TBTC3' AddressVersion='111'  Hrp='tb' IsTestNet='1'

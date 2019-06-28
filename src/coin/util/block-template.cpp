@@ -99,7 +99,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 	if (VarValue jtx = json["coinbasetxn"]) {
 		Blob blob = Blob::FromHexString(jtx["data"].ToString());
 		CoinbaseTxn = blob;
-		if (blob.Size <= 36+4+1)
+		if (blob.size() <= 36 + 4 + 1)
 			Throw(E_FAIL);
 		uint8_t& lenScript = *(blob.data()+36+4+1);
 		lenScript += 4;
@@ -107,7 +107,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 
 		Coinb1 = Blob(blob.data(), cbFirst);
 //		Extranonce1 = Blob(0, 0);
-		Coinb2 = Blob(blob.data()+cbFirst, blob.Size-cbFirst);
+		Coinb2 = Blob(blob.data() + cbFirst, blob.size() - cbFirst);
 	}
 
 	if (json.HasKey("longpollid")) {
@@ -154,12 +154,12 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	wrScript << BigInteger(Height) << uint8_t(8);
 	size_t coinb1Size = (size_t)msScript.Position;
 	wrScript << int64_t(0);					// place for ExtraNonce1, ExtraNonce2;
-	if (CoinbaseAux.Size) {
-		ASSERT(CoinbaseAux.Size < 75);	//!!!TODO
+	if (CoinbaseAux.size()) {
+		ASSERT(CoinbaseAux.size() < 75);	//!!!TODO
 
 		uint8_t firstByte = CoinbaseAux.constData()[0];
-		if (firstByte==0 || firstByte!=CoinbaseAux.Size-1)
-			wrScript << uint8_t(CoinbaseAux.Size);
+		if (firstByte == 0 || firstByte != CoinbaseAux.size() - 1)
+			wrScript << uint8_t(CoinbaseAux.size());
 		msScript.Write(CoinbaseAux);
 	}
 	Blob scriptIn = Blob(msScript.AsSpan());
@@ -167,7 +167,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
 	wr << uint32_t(1) << uint8_t(1) << HashValue::Null() << uint32_t(-1);
-	CoinSerialized::WriteVarInt(wr, scriptIn.Size);
+	CoinSerialized::WriteVarInt(wr, scriptIn.size());
 	coinb1Size += int(ms.Position);
 	ms.Write(scriptIn);
 	wr << uint32_t(-1) << uint8_t(1) << CoinbaseValue								// seq, NOut
@@ -178,7 +178,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	wr << uint32_t(0);		// locktime;
 	Blob coinbasetxn = ms.AsSpan();
 	Coinb1 = Blob(coinbasetxn.constData(), coinb1Size);
-	Coinb2 = Blob(coinbasetxn.constData()+coinb1Size+8, coinbasetxn.Size-coinb1Size-8);
+	Coinb2 = Blob(coinbasetxn.constData() + coinb1Size + 8, coinbasetxn.size() - coinb1Size - 8);
 }
 
 

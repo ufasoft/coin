@@ -58,24 +58,24 @@ public:
 		m_cmdInsertTx;
 
 	SqliteBlockChainDb()
-		:	m_savepoint(_self)
-		,	m_cmdBeginExclusive("BEGIN EXCLUSIVE"																			, m_db)
-		,	m_cmdCommit("COMMIT"																							, m_db)
-		,	m_cmdSavepoint("SAVEPOINT block"																				, m_db)
-		,	m_cmdReleaseSavepoint("RELEASE SAVEPOINT block"																	, m_db)
-		,	m_cmdFindBlock("SELECT id, hash, data, txhashes FROM blocks WHERE hash=?"										, m_db)
-		,	m_cmdFindBlockByOrd("SELECT id, hash, data, txhashes FROM blocks WHERE id=?"									, m_db)
-		,	m_cmdFindTx("SELECT id, NULL, blockid, data FROM txes WHERE id=?"												, m_db)
-		,	m_cmdInsertTx("INSERT INTO txes (id, blockid, ins, coins, data) VALUES(?, ?, ?, ?, ?)"							, m_db)
-		,	m_cmdTxHashToBlockordIdx("SELECT blockid, txhashes FROM txes JOIN blocks ON blockid=blocks.id WHERE txes.id=?"	, m_db)
-		,	m_cmdTxFindCoins("SELECT coins FROM txes WHERE id=?"															, m_db)
-		,	m_cmdTxFindIns("SELECT ins FROM txes WHERE id=?"																, m_db)
-		,	m_cmdTxUpdateCoins("UPDATE txes SET coins=? WHERE id=?"															, m_db)
-		,	CmdPubkeyIdToData("SELECT data FROM pubkeys WHERE id=?"															, m_db)
-		,	CmdPubkeyInsert("INSERT INTO pubkeys (id, data) VALUES(?, ?)"													, m_db)
-		,	CmdPubkeyUpdate("UPDATE pubkeys SET data=? WHERE id=?"															, m_db)
-		,	m_cmdInsertBlock("INSERT INTO blocks (hash, id, data, txhashes) VALUES(?, ?, ?, ?)"								, m_db)
-		,	m_cmdTxBlockordIdxToHash("SELECT txhashes FROM blocks WHERE id=?"												, m_db)
+		: m_savepoint(_self)
+		, m_cmdBeginExclusive("BEGIN EXCLUSIVE"																			, m_db)
+		, m_cmdCommit("COMMIT"																							, m_db)
+		, m_cmdSavepoint("SAVEPOINT block"																				, m_db)
+		, m_cmdReleaseSavepoint("RELEASE SAVEPOINT block"																	, m_db)
+		, m_cmdFindBlock("SELECT id, hash, data, txhashes FROM blocks WHERE hash=?"										, m_db)
+		, m_cmdFindBlockByOrd("SELECT id, hash, data, txhashes FROM blocks WHERE id=?"									, m_db)
+		, m_cmdFindTx("SELECT id, NULL, blockid, data FROM txes WHERE id=?"												, m_db)
+		, m_cmdInsertTx("INSERT INTO txes (id, blockid, ins, coins, data) VALUES(?, ?, ?, ?, ?)"							, m_db)
+		, m_cmdTxHashToBlockordIdx("SELECT blockid, txhashes FROM txes JOIN blocks ON blockid=blocks.id WHERE txes.id=?"	, m_db)
+		, m_cmdTxFindCoins("SELECT coins FROM txes WHERE id=?"															, m_db)
+		, m_cmdTxFindIns("SELECT ins FROM txes WHERE id=?"																, m_db)
+		, m_cmdTxUpdateCoins("UPDATE txes SET coins=? WHERE id=?"															, m_db)
+		, CmdPubkeyIdToData("SELECT data FROM pubkeys WHERE id=?"															, m_db)
+		, CmdPubkeyInsert("INSERT INTO pubkeys (id, data) VALUES(?, ?)"													, m_db)
+		, CmdPubkeyUpdate("UPDATE pubkeys SET data=? WHERE id=?"															, m_db)
+		, m_cmdInsertBlock("INSERT INTO blocks (hash, id, data, txhashes) VALUES(?, ?, ?, ?)"								, m_db)
+		, m_cmdTxBlockordIdxToHash("SELECT txhashes FROM blocks WHERE id=?"												, m_db)
 	{
 	}
 
@@ -215,14 +215,14 @@ public:
 		SqliteCommand(EXT_STR("DELETE FROM blocks WHERE id=" << height), m_db).ExecuteNonQuery();
 	}
 
-	bool FindTxById(RCSpan txid, Tx *ptx) override {
+	bool FindTxByHash(const HashValue& hashTx, Tx *ptx) override {
 		EXT_LOCK (MtxSqlite) {
-			DbDataReader dr = m_cmdFindTx.Bind(1, *(int64_t*)txid.P).ExecuteReader();
+			DbDataReader dr = m_cmdFindTx.Bind(1, *(int64_t*)hashTx.data()).ExecuteReader();
 			if (!dr.Read())
 				return false;
 			if (ptx) {
 				ptx->EnsureCreate();
-				ptx->SetReducedHash(txid);
+				ptx->SetReducedHash(Span(hashTx.data(), 8));
 				LoadFromDb(*ptx, dr);
 			}
 		}

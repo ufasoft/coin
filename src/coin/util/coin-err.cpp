@@ -13,7 +13,6 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	{ CoinErr::InvalidAddress									, "Invalid Address"								}
 	, { CoinErr::InsufficientAmount								, "Insufficient Amount of money in Balance"		}
 	, { CoinErr::MoneyOutOfRange								, "Money Out of Range"							}
-	, { CoinErr::RecentCoinbase									, "Tried to spend recent coninbase"				}
 	, { CoinErr::VerifySignatureFailed							, "Verify Signature Failed"						}
 	, { CoinErr::AlertVerifySignatureFailed						, "Alert Verify Signature Failed"				}
 	, { CoinErr::RejectedByCheckpoint							, "Block rejected by Checkpoint"				}
@@ -74,7 +73,10 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::BadPrevBlock									, "Previous Block not found"					}
 	, { CoinErr::InvalidPrivateKey								, "Invalid Private Key"							}
 	, { CoinErr::VersionMessageMustBeFirst						, "Version message must be first"				}
-	, { CoinErr::GetBlocksLocatorSize							, "getblocks message has too many locators"	}
+	, { CoinErr::GetBlocksLocatorSize							, "getblocks message has too many locators"		}
+	, { CoinErr::TxMissingInputs								, "Missing inputs"								}
+	, { CoinErr::TxPrematureSpend								, "Premature Spend"								}
+	, { CoinErr::CannotReorganizeBeyondPrunedBlocks				, "Cannot reorganize beyond pruned blocks"		}	
 
 	, { CoinErr::SCRIPT_ERR_UNKNOWN_ERROR						, "Unknown Script error"						}
 	, { CoinErr::SCRIPT_ERR_EVAL_FALSE							, "Script evaluated without error but finished with a false/empty top stack element"	}

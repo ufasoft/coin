@@ -590,11 +590,13 @@
     <ClCompile Include="..\..\el\db\bdb-reader.cpp" />
     <ClCompile Include="..\..\el\num\mod.cpp" />
     <ClCompile Include="..\..\el\num\num.cpp" />
+    <ClCompile Include="..\..\el\win\secdesc.cpp" />
     <ClCompile Include="..\..\el\xml\xml-dom.cpp" />
     <ClCompile Include="..\..\el\xml\xml-node-reader.cpp" />
     <ClCompile Include="..\..\el\xml\xml-reader.cpp" />
     <ClCompile Include="..\..\el\xml\xml-writer.cpp" />
     <ClCompile Include="backend-dblite.cpp" />
+    <ClCompile Include="backend-normal.cpp" />
     <ClCompile Include="backend-sqlite.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='D_St|Win32'">true</ExcludedFromBuild>
@@ -615,6 +617,7 @@
     <ClCompile Include="protocol.cpp" />
     <ClCompile Include="coindb.cpp" />
     <ClCompile Include="coineng.cpp" />
+    <ClCompile Include="prune.cpp" />
     <ClCompile Include="rpc.cpp" />
     <ClCompile Include="crypter.cpp" />
     <ClCompile Include="currency\dogecoin.cpp">

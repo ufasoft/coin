@@ -277,10 +277,10 @@ void PosBlockObj::CheckSignature() {
 	CoinEng& eng = Eng();
 	const vector<Tx>& txes = get_Txes();
 
-	if (0 == Signature.Size) {
+	if (0 == Signature.size()) {
 		if (Hash() == eng.ChainParams.Genesis)
 			return;
-	} else if (VerifySignatureByTxOut(ProofType()==ProofOf::Stake ? txes[1].TxOuts()[1] : txes[0].TxOuts()[0]))
+	} else if (VerifySignatureByTxOut(ProofType() == ProofOf::Stake ? txes[1].TxOuts()[1] : txes[0].TxOuts()[0]))
 		return;
 	Throw(CoinErr::BadBlockSignature);
 }

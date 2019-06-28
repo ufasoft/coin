@@ -63,6 +63,51 @@ class PagedMap;
 class PageObj;
 class CursorObj;
 
+size_t CalculateLocalDataSize(uint64_t dataSize, size_t cbExtendedPrefix, uint32_t pageSize);
+
+struct LiteEntry {
+	uint8_t* P;
+
+	Span Key(uint8_t keySize) {
+		return keySize ? Span(P, keySize) : Span(P + 1, P[0]);
+	}
+
+	uint32_t PgNo() {
+		return GetLeUInt32(P - 4);
+	}
+
+	void PutPgNo(uint32_t v) {
+		PutLeUInt32(P - 4, v);
+	}
+
+	/*!!R  not used
+	uint64_t DataSize(uint8_t keySize, uint8_t keyOffset) const {
+		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
+		return Read7BitEncoded(p);
+	}
+	*/
+
+	struct CLocalData {
+		Span Span;
+		uint64_t DataSize;
+		const uint8_t* P;
+	};
+
+	pair<Span, uint64_t> LocalData(uint32_t pageSize, uint8_t keySize, uint8_t keyOffset) const {
+		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
+		uint64_t dataSize = Read7BitEncoded(p);
+		return make_pair(Span(p, CalculateLocalDataSize(dataSize, p - P + keyOffset, pageSize)), dataSize);
+	}
+
+	uint32_t FirstBigdataPage() {
+		return (this + 1)->PgNo();
+	}
+
+	uint8_t* Upper() { return (this + 1)->P; }
+
+	size_t Size() { return Upper() - P; }
+};
+
 class ViewBase : public Object {
   public:
 	typedef InterlockedPolicy interlocked_policy;
@@ -97,8 +142,17 @@ struct IndexedBuf {
 		: P(p), Size(size), Index(index) {}
 };
 
+class PageDesc {
+public:
+	PageHeader& Header;
+	LiteEntry *Entries;
+
+	PageDesc(PageHeader& h, LiteEntry* e) : Header(h), Entries(e) {}
+	LiteEntry& operator[](int i) const { return Entries[i]; }
+};
+
 class PageObj : public Object {
-  public:
+public:
 	typedef InterlockedPolicy interlocked_policy;
 
 	//!!!R	KVStorage& Storage;
@@ -114,6 +168,8 @@ class PageObj : public Object {
 	PageObj(KVStorage& storage);
 	~PageObj();
 	inline void* GetAddress();
+	__forceinline PageHeader& Header() { return *(PageHeader*)GetAddress(); }
+	PageDesc Entries(uint8_t keySize);
 
 	virtual void Flush() {}
 };
@@ -122,10 +178,10 @@ class Page : public Pimpl<PageObj> {
 	typedef Page class_type;
 	typedef Pimpl<PageObj> base;
 
-  public:
+public:
 	Page() {}
 
-	Page(PageObj* obj) { m_pimpl = obj; }
+	Page(PageObj* obj) : base(obj) {}
 
 	Page(const Page& v) : base(v) {}
 
@@ -150,7 +206,8 @@ class Page : public Pimpl<PageObj> {
 	void* get_Address() const { return m_pimpl->GetAddress(); }
 	DEFPROP_GET(void*, Address);
 
-	__forceinline PageHeader& Header() const { return *(PageHeader*)m_pimpl->GetAddress(); }
+	__forceinline PageHeader& Header() const { return m_pimpl->Header(); }
+	PageDesc Entries(uint8_t keySize) const { return m_pimpl->Entries(keySize); }
 
 	uint8_t get_Overflows() const { return m_pimpl->Overflows; }
 	DEFPROP_GET(uint8_t, Overflows);
@@ -159,8 +216,7 @@ class Page : public Pimpl<PageObj> {
 		return Header().Flags & PageHeader::FLAG_BRANCH;
 	}
 	DEFPROP_GET(bool, IsBranch);
-
-	LiteEntry* Entries(uint8_t keySize) const;
+	
 	void ClearEntries() const;
 	size_t SizeLeft(uint8_t keySize) const;
 	int FillPercent(uint8_t keySize);
@@ -179,10 +235,10 @@ int NumKeys(const Page& page);
 
 struct DbHeader;
 
-typedef unordered_set<uint32_t> CPgNos;
-typedef set<uint32_t> COrderedPgNos;
+typedef unordered_set<uint32_t> CUnorderedPageSet;
+typedef set<uint32_t> COrderedPageSet;
 
-class Pager : public Object {
+class Pager : public InterlockedObject {
   public:
 	KVStorage& Storage;
 
@@ -199,20 +255,34 @@ class Pager : public Object {
 Pager* CreateMMapPager(KVStorage& storage);
 Pager* CreateBufferPager(KVStorage& storage);
 
+typedef COrderedPageSet CFreePages;
+typedef CUnorderedPageSet CReleasedPages;
+
+class SnapshotGenObj : public Object {
+public:
+	typedef InterlockedPolicy interlocked_policy;
+
+	KVStorage& Storage;
+	ptr<SnapshotGenObj> NextGen;
+	vector<uint32_t>
+		PagesToFree,
+		PagesFreeAfterCheckpoint;
+
+	SnapshotGenObj(KVStorage& storage)
+		: Storage(storage)
+	{}
+	
+	~SnapshotGenObj() override;
+};
+
 enum class ViewMode { Window, Full };
 
 class DBLITE_CLASS KVStorage {
 	typedef KVStorage class_type;
 
-  public:
+public:
 	static const size_t HeaderPageSize = 4096;
 	static const size_t MAX_KEY_SIZE = 254;
-
-	uint64_t FileLength;
-	uint64_t FileIncrement;
-	size_t ViewSize; // should be const
-	size_t PageSize;
-	uint32_t PageCount;
 
 	path FilePath;
 	File DbFile;
@@ -223,45 +293,37 @@ class DBLITE_CLASS KVStorage {
 
 	//-----------------------------
 	recursive_mutex MtxViews; // used in ~PageObj()
-
-	bool UseMMapPager;
-
-	ViewMode m_viewMode;
-
-	ViewMode m_accessViewMode;
-
 	void* volatile ViewAddress;
-
+	
 	typedef vector<PageObj*> COpenedPages;
-	COpenedPages OpenedPages;
-
-	//!!!R	LruCache<Page> PageCache;
-	uint32_t PageCacheSize, NewPageCount;
+	COpenedPages OpenedPages;	
 
 	typedef vector<ptr<ViewBase>> CViews;
 	CViews Views;
 
+	uint32_t PageCacheSize, NewPageCount;
 	//------------------
-	mutex MtxRoot;
 
+	
+	mutex MtxRoot;
 	uint64_t LastTransactionId;
 	Page MainTableRoot; // after OpenedPages
 	//---------------------
 
 	mutex MtxWrite;
 
-	//-----------------------------
 	mutex MtxFreePages;
-
+	CFreePages FreePages, PagesFreeAfterCheckpoint;
 #if UCFG_DB_FREE_PAGES_BITSET
 	typedef dynamic_bitset<uint8_t> CFreePagesBitset;
 	CFreePagesBitset FreePagesBitset;
 #endif
+	ptr<SnapshotGenObj> CurGen;
+	SnapshotGenObj* OldestAliveGen;
+	//-----------------------------
 
-	typedef COrderedPgNos CFreePages;
-	CFreePages FreePages;
-	typedef CPgNos CReleasedPages;
-	CReleasedPages ReleasedPages, ReaderLockedPages;
+
+	CReleasedPages ReleasedPages;
 	dynamic_bitset<> AllocatedSinceCheckpointPages;
 
 	//!!!R	int32_t ReaderRefCount;
@@ -275,13 +337,51 @@ class DBLITE_CLASS KVStorage {
 	Version FrontEndVersion;
 
 	TimeSpan CheckpointPeriod;
+	DateTime DtNextCheckpoint;
+
+	uint64_t FileLength;
+	uint64_t FileIncrement;
+	size_t ViewSize; // should be const
+
+	ViewMode m_viewMode;
+	ViewMode m_accessViewMode;
+
+	enum class OpenState { Closed, Closing, Opened };
+protected:
+	COrderedPageSet m_nextFreePages;
+	uint32_t m_salt;
+	uint32_t PhysicalSectorSize;
+	size_t HeaderSize;
+
+	int (*m_pfnProgress)(void*);
+	int m_stepProgress;
+	void* m_ctxProgress;
+
+private:
+	shared_mutex ShMtx;	//!!!?
+
+	volatile OpenState m_state;
+	future<void> m_futClose;
+
+	//!!!R	void ReleaseReader(DbTransaction *dbTx = 0);
+
+	ptr<Pager> m_pager;
+
+	CBool m_bModified;
+	int m_bitsViewPageRatio;
+
+	//!!!R	Page LastFreePoolPage;
+
+public:
+	uint32_t PageSize;
+	uint32_t PageCount;
 	bool Durability;
 	bool UseFlush; // setting it to FALSE is very dangerous
 	bool ProtectPages;
+	bool UseMMapPager;
+	bool AllowLargePages;
 	CBool AsyncClose;
 	CBool ReadOnly;
-
-	enum class OpenState { Closed, Closing, Opened };
 
 	KVStorage();
 	~KVStorage();
@@ -289,7 +389,8 @@ class DBLITE_CLASS KVStorage {
 	void Open(const path& filepath);
 	void Close(bool bLock = true);
 	void Vacuum();
-	bool Checkpoint() { return DoCheckpoint(); }
+	bool Checkpoint() { return DoCheckpoint(Clock::now()); }
+	uint64_t PageSpaceSize() const { return uint64_t(PageCount) * PageSize; }
 
 	ptr<ViewBase> OpenView(uint32_t vno);
 	ViewBase* GetViewNoLock(uint32_t vno);
@@ -319,46 +420,19 @@ class DBLITE_CLASS KVStorage {
 			Throw(E_FAIL);
 		m_salt = v;
 	}
-
 	DEFPROP(uint32_t, Salt);
-
-  protected:
-	COrderedPgNos m_nextFreePages;
-	uint32_t m_salt;
-	size_t PhysicalSectorSize;
-	size_t HeaderSize;
-
-	int (*m_pfnProgress)(void*);
-	int m_stepProgress;
-	void* m_ctxProgress;
-
-  private:
-	shared_mutex ShMtx;
-
-	volatile OpenState m_state;
-	future<void> m_futClose;
-
-	//!!!R	void ReleaseReader(DbTransaction *dbTx = 0);
-
-	DateTime m_dtPrevCheckpoint;
-	CBool m_bModified;
-	int m_bitsViewPageRatio;
-
-	ptr<Pager> m_pager;
-
-	//!!!R	Page LastFreePoolPage;
-
+private:
 	uint32_t GetUInt32(uint32_t pgno, int offset);
 	void SetPageSize(size_t v);
 	void DoClose(bool bLock);
 	void WriteHeader();
-	void MapMeta();
+	void CommonOpen();
 	void Init();
-	bool DoCheckpoint(bool bLock = true);
+	bool DoCheckpoint(const DateTime& now, bool bLock = true);
 	uint32_t TryAllocateMappedFreePage();
 	void UpdateFreePagesBitset();
 	void FreePage(uint32_t pgno);
-	uint32_t NextFreePgno(COrderedPgNos& newFreePages);
+	uint32_t NextFreePgno(COrderedPageSet& newFreePages);
 	void MarkAllocatedPage(uint32_t pgno);
 	void PrepareCreateOpen();
 	void Open(File::OpenInfo& oi);
@@ -370,6 +444,7 @@ class DBLITE_CLASS KVStorage {
 	friend class Filet;
 	friend class AllocatedPageObj;
 	friend class BufferView;
+	friend class SnapshotGenObj;
 };
 
 typedef KVStorage DbStorage;
@@ -398,7 +473,7 @@ const uint32_t DB_EOF_PGNO = 0;
 class CursorStream : public MemStreamWithPosition {
 	typedef MemStreamWithPosition base;
 
-  public:
+public:
 	CursorStream(CursorObj& curObj) : m_curObj(curObj) {}
 
 	uint64_t get_Length() const override { return m_length; }
@@ -412,7 +487,7 @@ class CursorStream : public MemStreamWithPosition {
 	void put_Position(uint64_t pos) const override;
 	size_t Read(void* buf, size_t count) const override;
 
-  private:
+private:
 	CursorObj& m_curObj;
 	uint64_t m_length;
 	mutable Span m_mb;
@@ -425,9 +500,17 @@ class CursorStream : public MemStreamWithPosition {
 
 class CursorObj : public Object {
 public:
+	typedef NonInterlockedPolicy interlocked_policy;
+
 	PagedMap* Map;
 	CursorObj *Next, *Prev; // for IntrusiveList<>
-
+protected:
+	vector<uint8_t> m_bigKey, m_bigData;
+	Span m_key, m_data;
+	CursorStream m_dataStream;
+	uint32_t NPage; // used in get_Key()
+	CBool Initialized, Deleted, Eof, IsDbDirty, Positioned;
+public:
 	CursorObj()
 		: Map(0)
 		, m_dataStream(*this)
@@ -459,12 +542,6 @@ public:
 	}
 
 protected:
-	vector<uint8_t> m_bigKey, m_bigData;
-	Span m_key, m_data;
-	CursorStream m_dataStream;
-	uint32_t NPage; // used in get_Key()
-	CBool Initialized, Deleted, Eof, IsDbDirty, Positioned;
-
 	bool ClearKeyData() {
 		m_dataStream.Clear();
 		m_bigKey.clear();
@@ -492,6 +569,8 @@ protected:
 class DbCursor : public Pimpl<CursorObj> {
 	typedef DbCursor class_type;
 
+	static const int MAX_CURSOR_SIZEOF = 35; // must be >= sizeof(BTreeCursor or HtCursor)
+	uint64_t m_cursorImp[MAX_CURSOR_SIZEOF];
 public:
 	DbCursor(DbTransactionBase& tx, DbTable& table);
 	DbCursor(DbCursor& c);
@@ -524,19 +603,18 @@ public:
 	void Drop() { m_pimpl->Drop(); }
 
 private:
-	static const int MAX_CURSOR_SIZEOF = 35; // must be >= sizeof(BTreeCursor or HtCursor)
-	uint64_t m_cursorImp[MAX_CURSOR_SIZEOF];
-
 	void AssignImpl(TableType type);
 };
 
 struct TableData;
 
-class PagedMap : public Object {
-  public:
+class PagedMap : public InterlockedObject {
+protected:
+	typedef int(__cdecl* PFN_Compare)(const void* p1, const void* p2, size_t size);
+	PFN_Compare m_pfnCompare;
+public:
 	IntrusiveList<CursorObj> Cursors;
-
-	String Name;
+	string Name;
 	DbTransactionBase& Tx;
 	uint8_t KeySize;
 	CBool Dirty;
@@ -550,13 +628,9 @@ class PagedMap : public Object {
 	virtual TableData GetTableData();
 	pair<size_t, bool> GetDataEntrySize(RCSpan k,
 										uint64_t dsize) const; // <size, isBigData>
-	pair<int, bool> EntrySearch(LiteEntry* entries, PageHeader& h, RCSpan k);
+	pair<int, bool> EntrySearch(const PageDesc& pd, RCSpan k);
 	EntryDesc GetEntryDesc(const PagePos& pp);
-
-  protected:
-	typedef int(__cdecl* PFN_Compare)(const void* p1, const void* p2, size_t size);
-	PFN_Compare m_pfnCompare;
-
+protected:
 	static int __cdecl Compare(const void* p1, const void* p2, size_t cb2);
 };
 
@@ -566,24 +640,25 @@ ENUM_CLASS(PageAlloc){
 } END_ENUM_CLASS(PageAlloc);
 
 class DBLITE_CLASS DbTransactionBase : noncopyable, public ITransactionable {
-  public:
+public:
 	KVStorage& Storage;
 
 	int64_t TransactionId;
 	Page MainTableRoot;
-	const bool ReadOnly;
 
-	typedef map<String, ptr<PagedMap>> CTables; // map<> has faster dtor than unordered_map<>
+	typedef map<string, ptr<PagedMap>> CTables; // map<> has faster dtor than unordered_map<>
 	CTables Tables;
+protected:
+	ptr<SnapshotGenObj> SnapshotGen;
+	shared_lock<KVStorage> m_shlk;
+	CBool m_bComplete, m_bError;
+public:
+	const bool ReadOnly;
 
 	DbTransactionBase(KVStorage& storage); // ReadOnly ctor
 	virtual ~DbTransactionBase();
 	virtual Page OpenPage(uint32_t pgno);
-
-  protected:
-	shared_lock<KVStorage> m_shlk;
-	CBool m_bComplete, m_bError;
-
+protected:
 	DbTransactionBase(KVStorage& storage, bool bReadOnly);
 	void InitReadOnly();
 	void Commit() override;
@@ -599,14 +674,22 @@ typedef DbTransactionBase DbReadTransaction;
 class DBLITE_CLASS DbTransaction : public DbTransactionBase {
 	typedef DbTransactionBase base;
 
-  public:
+	unique_lock<mutex> m_lockWrite;
+	Blob TmpPageSpace;
+	CUnorderedPageSet
+		AllocatedPages;			// Pages allocated in the current transaction
+//		ReleasedPages;			// Pages allocated in previous transactions but released in this. Must be unmodified until next Checkpoint.
+
+	vector<uint32_t>
+		PagesToFree,
+		PagesFreeAfterCheckpoint;
+public:
 	CBool Bulk;
 
 	DbTransaction(KVStorage& storage, bool bReadOnly = false);
 	~DbTransaction();
 
 	DbTransaction& Current();
-
 	BTree& Table(RCString name);
 	Page Allocate(PageAlloc pa, Page* pCopyFrom = 0);
 	vector<uint32_t> AllocatePages(int n);
@@ -614,14 +697,9 @@ class DBLITE_CLASS DbTransaction : public DbTransactionBase {
 
 	void Commit() override;
 	void Rollback() override;
-
-  private:
-	unique_lock<mutex> m_lockWrite;
-	Blob TmpPageSpace;
-	CPgNos AllocatedPages, ReleasedPages;
-
+private:
 	void FreePage(uint32_t pgno);
-	void FreePage(const Page& page);
+	void FreePage(const Page& page) { FreePage(page.N); }
 	void Complete();
 
 	friend class BTree;
@@ -632,16 +710,15 @@ class DBLITE_CLASS DbTransaction : public DbTransactionBase {
 };
 
 class DBLITE_CLASS DbTable {
-  public:
+public:
 	static DbTable& AFXAPI Main();
 
-	String Name;
+	string Name;
 	TableType Type;
 	HashType HtType;
 	uint8_t KeySize; // 0=variable
 
-	DbTable(RCString name = nullptr, uint8_t keySize = 0, TableType type = TableType::BTree,
-			HashType htType = HashType::MurmurHash3)
+	DbTable(const string& name = nullptr, uint8_t keySize = 0, TableType type = TableType::BTree, HashType htType = HashType::MurmurHash3)
 		: Name(name)
 		, Type(type)
 		, HtType(htType)
@@ -655,14 +732,14 @@ class DBLITE_CLASS DbTable {
 	void Put(DbTransaction& tx, RCSpan k, RCSpan d, bool bInsert = false);
 	bool Delete(DbTransaction& tx, RCSpan k);
 
-  private:
+private:
 	void CheckKeyArg(RCSpan k);
 };
 
 class CKVStorageKeeper {
 	KVStorage* m_prev;
 
-  public:
+public:
 	CKVStorageKeeper(KVStorage* cur);
 	~CKVStorageKeeper();
 };
@@ -678,10 +755,10 @@ void CheckPage(Page& page);
 class FlushThread : public Thread {
 	typedef Thread base;
 
-  public:
+public:
 	AutoResetEvent m_ev;
 
-  protected:
+protected:
 	void Execute() override;
 
 	void Stop() override {
@@ -693,11 +770,17 @@ class FlushThread : public Thread {
 typedef IntrusiveList<ViewBase> CLruViewList;
 
 class GlobalLruViewCache : public CLruViewList {
-  public:
+public:
 	mutex Mtx;
 	condition_variable Cv;
 
 	ptr<ViewBase> m_viewProcessed;
+private:
+	mutex m_mtxThread;
+	ptr<FlushThread> Thread;
+	//!!!R volatile int32_t RefCount;
+	atomic<int32_t> m_aRefCount;
+public:
 
 	GlobalLruViewCache() : m_aRefCount(0) {}
 
@@ -706,13 +789,7 @@ class GlobalLruViewCache : public CLruViewList {
 	void Release();
 
 	void WakeUpFlush() { Thread->m_ev.Set(); }
-
-  private:
-	mutex m_mtxThread;
-	ptr<FlushThread> Thread;
-	//!!!R volatile int32_t RefCount;
-	atomic<int32_t> m_aRefCount;
-
+private:
 	void Execute();
 
 	friend class FlushThread;
@@ -720,6 +797,4 @@ class GlobalLruViewCache : public CLruViewList {
 
 extern InterlockedSingleton<GlobalLruViewCache> g_lruViewCache;
 
-} // namespace KV
-} // namespace DB
-} // namespace Ext
+}}} // Ext::DB::KV::

@@ -22,7 +22,7 @@ String ConvertToBase58ShaSquare(RCSpan cbuf) {
 	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
-	vector<uint8_t> tmp(v.Size+1, 0);
+	vector<uint8_t> tmp(v.size() + 1, 0);
 	std::reverse_copy(v.begin(), v.end(), tmp.begin());
 	for (BigInteger n(&tmp[0], tmp.size()); Sign(n);) {
 		pair<BigInteger, BigInteger> pp = div(n, 58);
@@ -30,7 +30,7 @@ String ConvertToBase58ShaSquare(RCSpan cbuf) {
 		r.insert(r.begin(), s_pszBase58[explicit_cast<int>(pp.second)]);
 	}
 
-	for (int i=0; i<v.Size && !v.constData()[i]; ++i)
+	for (int i = 0; i < v.size() && !v.constData()[i]; ++i)
 		r.insert(r.begin(), s_pszBase58[0]);
 	return String(&r[0], r.size());
 }
@@ -40,7 +40,7 @@ String ConvertToBase58(RCSpan cbuf) {
 	Blob v = cbuf + Blob(hash.data(), 4);
 	vector<char> r;
 
-	vector<uint8_t> tmp(v.Size+1, 0);
+	vector<uint8_t> tmp(v.size() + 1, 0);
 	std::reverse_copy(v.begin(), v.end(), tmp.begin());
 	for (BigInteger n(&tmp[0], tmp.size()); Sign(n);) {
 		pair<BigInteger, BigInteger> pp = div(n, 58);
@@ -48,7 +48,7 @@ String ConvertToBase58(RCSpan cbuf) {
 		r.insert(r.begin(), s_pszBase58[explicit_cast<int>(pp.second)]);
 	}
 
-	for (int i=0; i<v.Size && !v.constData()[i]; ++i)
+	for (int i = 0; i < v.size() && !v.constData()[i]; ++i)
 		r.insert(r.begin(), s_pszBase58[0]);
 	return String(&r[0], r.size());
 }

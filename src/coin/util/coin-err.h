@@ -12,7 +12,6 @@ enum class CoinErr {
 	InvalidAddress = 1
 	, InsufficientAmount
 	, MoneyOutOfRange
-	, RecentCoinbase
 	, VerifySignatureFailed
 	, AlertVerifySignatureFailed
 	, RejectedByCheckpoint
@@ -77,6 +76,9 @@ enum class CoinErr {
 	, VersionMessageMustBeFirst
 	, GetBlocksLocatorSize
 	, NonStandardTx
+	, TxMissingInputs
+	, TxPrematureSpend
+	, CannotReorganizeBeyondPrunedBlocks
 
 	, SCRIPT_ERR_UNKNOWN_ERROR = 501
     , SCRIPT_ERR_EVAL_FALSE

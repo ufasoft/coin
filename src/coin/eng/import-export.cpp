@@ -30,8 +30,8 @@ static pair<String, Blob> SplitKey(RCSpan cbuf) {
 	stm.ReadBuffer(&size, 1);
 	if (size <= cbuf.size() - 1) {
 		Blob blobKey(0, size);
-		stm.ReadBuffer(blobKey.data(), blobKey.Size);
-		String k = r.first = String((const char*)blobKey.data(), blobKey.Size);
+		stm.ReadBuffer(blobKey.data(), blobKey.size());
+		String k = r.first = String((const char*)blobKey.data(), blobKey.size());
 		if (k == "tx")
 			r.second = rd.ReadBytes(32);
 		else if (k == "pool") {
@@ -141,7 +141,7 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				BinaryReader(CMemReadStream(val)) >> wkey;
 				KeyInfo ki;
 				ki.Timestamp = DateTime::from_time_t(wkey.nTimeCreated);
-				ki.m_pimpl->SetPrivData(wkey.vchPrivKey, pp.second.Size == 33);
+				ki.m_pimpl->SetPrivData(wkey.vchPrivKey, pp.second.size() == 33);
 				if (!Equal(ki.PubKey.Data, pp.second))
 					Throw(E_FAIL);
 
@@ -178,12 +178,12 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				Blob vchSecret;
 				if(DecryptSecret(vMasterKey, vchCryptedSecret, Hash(pubKey), vchSecret)) {
 					KeyInfo ki;
-					ki.m_pimpl->SetPrivData(vchSecret, pubKey.Size == 33);
+					ki.m_pimpl->SetPrivData(vchSecret, pubKey.size() == 33);
 					if (Equal(ki.PubKey.Data, pubKey)) {
 						Blob privKey = ki.PrivKey; //!!!R ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);
 						for (int j=0; j<myKeys.size(); ++j) {
 							if (Equal(myKeys[j].PubKey.Data, pubKey)) {
-								myKeys[j].m_pimpl->SetPrivData(privKey, pubKey.Size == 33);
+								myKeys[j].m_pimpl->SetPrivData(privKey, pubKey.size() == 33);
 								goto LAB_DECRYPTED;
 							}
 						}

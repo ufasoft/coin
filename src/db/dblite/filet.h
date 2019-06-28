@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -27,17 +27,22 @@ struct  PathVisitor {
 
 class Filet {
 	typedef Filet class_type;
+
+	uint64_t m_length;
 public:
 	DbTransactionBase& m_tx;
 	Page PageRoot;
 	const int PageSizeBits;
+private:
+	int IndirectLevels;
+public:
 
 	Filet(DbTransactionBase& tx)
-		:	m_tx(tx)
-		,	PageSizeBits(BitOps::Scan(tx.Storage.PageSize)-1)
+		: m_tx(tx)
+		, PageSizeBits(BitOps::Scan(tx.Storage.PageSize)-1)
 #if UCFG_DB_TLB
-		,	TlbPage(16)
-		,	TlbAddress(16)
+		, TlbPage(16)
+		, TlbAddress(16)
 #endif
 	{}
 
@@ -59,9 +64,6 @@ public:
 	void PutUInt32(uint64_t offset, uint32_t v);
 	void PutPgNo(Page& page, int idx, uint32_t pgno) const;	// const because called from universal FindPath()
 private:
-	uint64_t m_length;
-	int IndirectLevels;
-	
 	uint32_t GetPgNo(uint32_t pgno, int idx) const { return m_tx.Storage.GetUInt32(pgno, idx*4); }
 
 #if UCFG_DB_TLB

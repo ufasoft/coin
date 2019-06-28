@@ -143,33 +143,33 @@ void CursorObj::Delete() {
 
 void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail) {
 	DbTransaction& tx = dynamic_cast<DbTransaction&>(Map->Tx);
-	size_t pageSize = tx.Storage.PageSize;
+	uint32_t pageSize = tx.Storage.PageSize;
 	PagePos& pp = Top();
-	LiteEntry *entries = pp.Page.Entries(Map->KeySize);
-	tx.TmpPageSpace.Size = pageSize;
+	PageDesc pd = pp.Page.Entries(Map->KeySize);
+	tx.TmpPageSpace.resize(pageSize);
 	uint8_t *p = tx.TmpPageSpace.data(), *q = p;
 	if (!Map->KeySize)
 		*p++ = (uint8_t)k.size();
-	uint8_t keyOffset = pp.Page.Header().KeyOffset();
+	uint8_t keyOffset = pd.Header.KeyOffset();
 	memcpy(p, k.data() + keyOffset, k.size() - keyOffset);
 	Write7BitEncoded(p += k.size() - keyOffset, fullSize);
 	memcpy(exchange(p, p + ppEntry.first), head.data(), ppEntry.first);
 	if (ppEntry.second) {
 		size_t cbOverflow = head.size() - ppEntry.first;
 		if (0 == cbOverflow)
-			PutLeUInt32(exchange(p, p+4), pgnoTail);
+			PutLeUInt32(exchange(p, p + 4), pgnoTail);
 		else {
-			int n = int((cbOverflow+pageSize-4-1) / (pageSize-4));
+			int n = int((cbOverflow + pageSize - 4 - 1) / (pageSize - 4));
 			vector<uint32_t> pages = tx.AllocatePages(n);
 			const uint8_t* q = head.data() + ppEntry.first;
 			size_t off = ppEntry.first;
-			for (size_t cbCopy, i=0; cbOverflow; q+=cbCopy, cbOverflow-=cbCopy, ++i) {
-				cbCopy = std::min(cbOverflow, pageSize-4);
+			for (size_t cbCopy, i = 0; cbOverflow; q += cbCopy, cbOverflow -= cbCopy, ++i) {
+				cbCopy = std::min(cbOverflow, size_t(pageSize - 4));
 				Page page = tx.OpenPage(pages[i]);
-				*(BeUInt32*)page.get_Address() = i==pages.size()-1 ? pgnoTail : pages[i+1];
+				*(BeUInt32*)page.get_Address() = i == pages.size() - 1 ? pgnoTail : pages[i + 1];
 				memcpy((uint8_t*)page.get_Address() + 4, q, cbCopy);
 			}
-			PutLeUInt32(exchange(p, p+4), pages[0]);
+			PutLeUInt32(exchange(p, p + 4), pages[0]);
 		}
 	}
 	tx.m_bError = true;
@@ -281,7 +281,7 @@ DbCursor::DbCursor(DbTransactionBase& tx, DbTable& table) {
 		} else {
 			DbCursor cMain(tx, DbTable::Main());
 			const char *pTableName = table.Name.c_str();
-			Span k((const uint8_t*)pTableName, strlen(pTableName));
+			Span k((const uint8_t*)pTableName, table.Name.length());
 			if (!cMain.SeekToKey(k))
 				Throw(E_FAIL);
 			TableData& td = *(TableData*)cMain.get_Data().data();

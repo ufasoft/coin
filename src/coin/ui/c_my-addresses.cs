@@ -23,25 +23,22 @@ namespace Coin {
 
 		ListViewSortHelper LvMyAddressesSortHelper = new ListViewSortHelper();
 
-		public IWallet Wallet {
-			get; set;
-		}
+        public IWallet Wallet { get; set; }
 
-
-		public CtlMyAddresses() {
+        public CtlMyAddresses() {
 			GridView gv = new GridView();
 
-			GridViewColumn c = new GridViewColumn();
-			c.DisplayMemberBinding = new Binding("Value");
-			c.Header = new GridViewColumnHeader() { Tag="Value", Content = "Address" };
-			c.Width = 250;
-			gv.Columns.Add(c);
+			gv.Columns.Add(new GridViewColumn {
+                DisplayMemberBinding = new Binding("Value")
+                , Header = new GridViewColumnHeader() { Tag = "Value", Content = "Address" }
+                , Width = 250
+            });
 
-			c = new GridViewColumn();
-			c.DisplayMemberBinding = new Binding("Comment");
-			c.Header = new GridViewColumnHeader() { Tag = "Comment", Content = "Comment" };
-			c.Width = 300;
-			gv.Columns.Add(c);
+			gv.Columns.Add(new GridViewColumn {
+                DisplayMemberBinding = new Binding("Comment")
+                , Header = new GridViewColumnHeader() { Tag = "Comment", Content = "Comment" }
+                , Width = 300
+            });
 
 			View = gv;
 
@@ -55,12 +52,16 @@ namespace Coin {
 			mi.Click += OnMyAddressEditComment;
 			menu.Items.Add(mi);
 
-			mi = new MenuItem() { Header = "_Generate New..." };
-			mi.Click += OnMyAddressGenerateNew;
-			menu.Items.Add(mi);
+            var subMenu = new MenuItem() { Header = "_Generate New" };
+            subMenu.Items.Add(mi = new MenuItem { Header = "Legacy (P2P_KH)" });
+            mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.Legacy);
+            subMenu.Items.Add(mi = new MenuItem { Header = "P2_SH" });
+            mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.P2SH);
+//!!!T Until testing            subMenu.Items.Add(mi = new MenuItem { Header = "_Bech32" });
+//            mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.Bech32);
+            menu.Items.Add(subMenu);
 
-
-			ContextMenu = menu;
+            ContextMenu = menu;
 			
 			LvMyAddressesSortHelper.ListView = this;
 		}
@@ -87,10 +88,10 @@ namespace Coin {
 			}
 		}
 
-		private void OnMyAddressGenerateNew(object sender, RoutedEventArgs e) {
+		void OnMyAddressGenerateNew(EAddressType type) {
 			string r = FormQueryString.QueryString("Enter New Address Comment");
 			if (r != null)
-				AddMyAddress(Wallet.GenerateNewAddress(r));
+				AddMyAddress(Wallet.GenerateNewAddress(type, r));
 		}
 
 	}

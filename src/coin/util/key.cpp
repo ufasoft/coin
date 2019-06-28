@@ -81,7 +81,7 @@ void KeyInfoBase::GenRandom(bool bCompressed) {
 }
 
 Blob KeyInfoBase::ToPrivateKeyDER() const {
-	ASSERT(m_privKey.Size == 32);
+	ASSERT(m_privKey.size() == 32);
 
 #if UCFG_COIN_ECC=='S'
 	return Sec256Dsa::PrivKeyToDER(m_privKey, PubKey.IsCompressed());
@@ -110,7 +110,7 @@ static Blob CreateAesBip38(Aes& aes, RCString password, RCSpan salt) {
 }
 
 String KeyInfoBase::ToString(RCString password) const {			// non-EC-multiplied case
-	ASSERT(m_privKey.Size == 32);
+	ASSERT(m_privKey.size() == 32);
 
 	uint8_t d[39] ={ 1, 0x42, 0xC0 };
 	size_t size = 39;
@@ -140,7 +140,7 @@ void KeyInfoBase::FromBIP38(RCString bip38, RCString password) {
 
 	Blob blob = ConvertFromBase58(bip38);
 	const uint8_t *d = blob.constData();
-	if (blob.Size != 39 || d[0]!=1 || d[1] != 0x42)
+	if (blob.size() != 39 || d[0]!=1 || d[1] != 0x42)
 		Throw(CoinErr::InvalidPrivateKey);
 	Aes aes;
 	Blob derived = CreateAesBip38(aes, password, ConstBuf(d+3, 4));

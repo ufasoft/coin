@@ -186,7 +186,8 @@ namespace Coin {
             return "";
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e) {
+        private void Window_Loaded(object sender, RoutedEventArgs e) {            
+            MenuDBMode.IsEnabled = false;       //!!! Until testing of Lite mode
             MenuModeFull.Tag = EEngMode.Bootstrap;
             MenuModeLite.Tag = EEngMode.Lite;
 
@@ -630,9 +631,11 @@ namespace Coin {
             ContextMenu menu = (ContextMenu)sender;
             var wf = SelectedWallet();
             menu.DataContext = wf;
+/*
             MenuDBMode.IsEnabled = wf != null;
             if (MenuDBMode.IsEnabled)
                 SetMenuDBMode();
+*/
         }
 
         private void menuMining_Checked(object sender, RoutedEventArgs e) {

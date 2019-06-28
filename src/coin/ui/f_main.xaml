@@ -43,7 +43,7 @@
 							    <MenuItem Header="_Transactions" Click="OnTransactions"/>
 							    <MenuItem Header="_Send money" Click="OnSendMoney"/>
 							    <MenuItem Header="_Address Book"  Click="OnAddressBook"/>
-								<MenuItem Name="MenuDBMode" Header="_DB Mode" >
+								<MenuItem Name="MenuDBMode" Header="_DB Mode">
 									<MenuItem Name="MenuModeFull" Header="_Full" IsCheckable="True" Click="MenuDBMode_Click"  />
 									<MenuItem Name="MenuModeLite" Header="_Lite" IsCheckable="True" Click="MenuDBMode_Click"  />
 								</MenuItem>

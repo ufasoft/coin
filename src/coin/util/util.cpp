@@ -157,13 +157,13 @@ BlockHashValue::BlockHashValue(RCSpan mb) {
 
 HashValue::HashValue(RCString s) {
 	Blob blob = Blob::FromHexString(s);
-	ASSERT(blob.Size == 32);
+	ASSERT(blob.size() == 32);
 	reverse_copy(blob.constData(), blob.constData()+32, data());
 }
 
 HashValue::HashValue(const char *s) {
     Blob blob = Blob::FromHexString(s);
-    ASSERT(blob.Size == 32);
+    ASSERT(blob.size() == 32);
     reverse_copy(blob.constData(), blob.constData() + 32, data());
 }
 
@@ -180,7 +180,7 @@ HashValue HashValue::Combine(const HashValue& h1, const HashValue& h2) {
 
 HashValue160::HashValue160(RCString s) {
 	Blob blob = Blob::FromHexString(s);
-	ASSERT(blob.Size == 20);
+	ASSERT(blob.size() == 20);
 	reverse_copy(blob.constData(), blob.constData() + 20, data());
 }
 
@@ -247,7 +247,7 @@ Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
 
 String CoinSerialized::ReadString(const BinaryReader& rd) {
 	Blob blob = ReadBlob(rd);
-	return String((const char*)blob.constData(), blob.Size);
+	return String((const char*)blob.constData(), blob.size());
 }
 
 void CoinSerialized::WriteSpan(BinaryWriter& wr, RCSpan mb) {
@@ -347,7 +347,7 @@ ShaConstants GetShaConstants() {
 pair<uint32_t, uint32_t> FromOptionalNonceRange(const VarValue& json) {
 	if (VarValue vNonceRange = json["noncerange"]) {
 		Blob blob = Blob::FromHexString(vNonceRange.ToString());
-		if (blob.Size == 8)
+		if (blob.size() == 8)
 			return make_pair(betoh(*(uint32_t*)blob.constData()), betoh(*(uint32_t*)(blob.constData()+4)));
 	}
 	return pair<uint32_t, uint32_t>(0, 0xFFFFFFFF);

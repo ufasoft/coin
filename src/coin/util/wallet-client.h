@@ -57,7 +57,7 @@ struct BlockInfo {
 	vector<HashValue> HashTxes;
 };
 
-class IWalletClient : public Object {
+class IWalletClient : public InterlockedObject {
 public:
 	String Name;
 	path PathDaemon;
@@ -79,10 +79,10 @@ public:
 	bool WalletNotifications;
 
 	IWalletClient()
-		:	Listen(true)
-		,	IsTestNet(false)
-		,	EnableNotifications(true)
-		,	WalletNotifications(false)
+		: Listen(true)
+		, IsTestNet(false)
+		, EnableNotifications(true)
+		, WalletNotifications(false)
 	{}
 
 	virtual void Start() =0;

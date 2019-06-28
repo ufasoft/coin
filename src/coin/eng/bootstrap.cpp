@@ -33,9 +33,7 @@ void BootstrapDbThread::Execute() {
 	CEngStateDescription stateDesc(Eng, EXT_STR("Bootstrapping from " << PathBootstrap));
 
 	FileStream stm(PathBootstrap, FileMode::Open, FileAccess::Read, FileShare::ReadWrite, Stream::DEFAULT_BUF_SIZE, FileOptions::SequentialScan);
-#ifdef _DEBUG//!!!
 	stm.Position = Eng.OffsetInBootstrap;
-#endif
 	ProtocolReader rd(stm);
 	rd.WitnessAware = true;
 	try {
