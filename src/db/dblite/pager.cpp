@@ -839,7 +839,16 @@ DbTransactionBase::DbTransactionBase(KVStorage& storage, bool bReadOnly)
 }
 
 DbTransactionBase::~DbTransactionBase() {
-	EXT_LOCKED(Storage.MtxFreePages, SnapshotGen.reset());
+	if (SnapshotGen) {
+		EXT_LOCK(Storage.MtxFreePages) {
+			ptr<SnapshotGenObj> next = SnapshotGen->NextGen;		// To avoid recursion
+			SnapshotGen.reset();
+			for (ptr<SnapshotGenObj> cur = next; cur; cur = next) {
+				next = cur->NextGen;
+				cur.reset();
+			}
+		}
+	}
 }
 
 void DbTransactionBase::InitReadOnly() {

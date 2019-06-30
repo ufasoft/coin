@@ -919,8 +919,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 				}
 
 				eng.CheckMoneyRange(nValueIn += txOut.Value);
-				Txo txo = { txPrev.TxOuts()[i] };
-				vTxo.push_back(txo);
+				vTxo.push_back(txOut);
 			}
 		}
 

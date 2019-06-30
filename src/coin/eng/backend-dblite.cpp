@@ -26,7 +26,12 @@ template <> EXT_THREAD_PTR(Ext::DB::KV::DbReadTransaction) CThreadTxRef<Ext::DB:
 
 namespace Coin {
 
-const Version VER_BLOCKS_TABLE_IS_HASHTABLE(0, 81), VER_PUBKEY_RECOVER(0, 90), VER_HEADERS(0, 120);
+const Version
+	VER_BLOCKS_TABLE_IS_HASHTABLE(0, 81),
+	VER_PUBKEY_RECOVER(0, 90),
+	VER_HEADERS(0, 120),
+	DB_VER_COMPACT_UTXO(1, 1),
+	DB_VER_LATEST = DB_VER_COMPACT_UTXO;
 
 //
 //template class CThreadTxRef<DbReadTransaction>;
@@ -301,7 +306,7 @@ void DbliteBlockChainDb::BeforeDbOpenCreate() {
 bool DbliteBlockChainDb::Create(const path& p) {
 	BeforeDbOpenCreate();
 	m_db.AppName = "Coin";
-	m_db.UserVersion = Version(VER_PRODUCTVERSION);
+	m_db.UserVersion = Version(DB_VER_LATEST);
 	m_db.Create(p);
 	{
 		DbTransaction dbt(m_db);
@@ -387,28 +392,31 @@ Version DbliteBlockChainDb::CheckUserVersion() {
 		throw Exception(E_FAIL, "This database has AppName \"" + m_db.AppName + "\", but must be \"Coin\"");
 	}
 
-	Version ver(VER_PRODUCTVERSION), dver = m_db.UserVersion;
-	if (dver > ver && (dver.Major != ver.Major || dver.Minor / 10 != ver.Minor / 10)) { // Versions [mj.x0 .. mj.x9] are DB-compatible
+	Version ver(DB_VER_LATEST), dbVer = m_db.UserVersion;
+	if (ver.Major > dbVer.Major) {
 		m_db.Close();
-		throw VersionException(dver);
+		throw UnsupportedOldVersionException(dbVer);
+	} else if (ver.Major < dbVer.Major || ver.Major == dbVer.Major && ver.Minor < dbVer.Minor) {
+		m_db.Close();
+		throw UnsupportedNewVersionException(dbVer);
 	}
-	return dver;
+	return dbVer;
 }
 
 void DbliteBlockChainDb::UpgradeTo(const Version& ver) {
-	Version dbver = CheckUserVersion();
-	if (dbver < ver) {
-		TRC(0, "Upgrading Database " << Eng.GetDbFilePath() << " from version " << dbver << " to " << ver);
+	Version dbVer = CheckUserVersion();
+	if (dbVer < ver) {
+		TRC(0, "Upgrading Database " << Eng.GetDbFilePath() << " from version " << dbVer << " to " << ver);
 
 		DbTransaction dbtx(m_db);
 
-		if (dbver < VER_BLOCKS_TABLE_IS_HASHTABLE) {
+		if (dbVer < VER_BLOCKS_TABLE_IS_HASHTABLE) {
 			m_tableProperties.Open(dbtx, true);
 			int32_t h = htole(int32_t(GetMaxHeight()));
 			m_tableProperties.Put(dbtx, KEY_MaxHeight, Span((const uint8_t*)&h, sizeof h));
 		}
 
-		if (dbver < VER_HEADERS) {
+		if (dbVer < VER_HEADERS) {
 			int32_t h = htole(int32_t(GetMaxHeight()));
 			m_tableProperties.Put(dbtx, KEY_MaxHeaderHeight, Span((const uint8_t*)&h, sizeof h));
 		}
@@ -420,11 +428,15 @@ void DbliteBlockChainDb::UpgradeTo(const Version& ver) {
 	}
 }
 
-void DbliteBlockChainDb::TryUpgradeDb(const Version& verApp) {
-	if (Eng.Mode != EngMode::Bootstrap && CheckUserVersion() < VER_HEADERS)
-		Recreate();
-	else
-		UpgradeTo(VER_HEADERS);
+void DbliteBlockChainDb::TryUpgradeDb(const Version& verTarget) {
+	if (Eng.Mode != EngMode::Bootstrap) {
+		Version dbVer = CheckUserVersion();
+		if (dbVer < verTarget) {
+			Recreate(dbVer);
+			return;
+		}
+	}
+	UpgradeTo(verTarget);
 }
 
 HashValue DbliteBlockChainDb::ReadPrevBlockHash(DbReadTransaction& dbt, int height, bool bFromBlock) {
@@ -658,19 +670,28 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
 	case EngMode::Normal:
 	case EngMode::BlockExplorer:
 		rd >> N;
-#	endif
-	case EngMode::Bootstrap:
 		Data.resize(3);
 		rd.BaseStream.ReadBuffer(Data.data(), 3);
+		break;
+#	endif
+	case EngMode::Bootstrap:
+		rd.BaseStream.ReadBuffer(&TxOffset, 3);
+		TxOffset = letoh(TxOffset) & 0xFFFFFF;
 		break;
 	default:
 		rd >> Data >> TxIns;
 	}
-	if (rd.BaseStream.Eof())
-		Coins = Blob();
-	else {
-		rd >> Coins;
-		if (Coins.empty())
+	if (rd.BaseStream.Eof()) {
+		if (uint8_t utxo = uint8_t(TxOffset >> 22)) {
+			Utxo = Span(&utxo, 1);
+			TxOffset &= 0x3FFFFF;
+		} else {
+			Utxo.resize(0);
+			LastSpendHeight = 0; //!!! unknown
+		}
+	} else {
+		rd >> Utxo;
+		if (Utxo.empty())
 			LastSpendHeight = uint32_t(Height + rd.Read7BitEncoded());
 	}
 }
@@ -682,15 +703,25 @@ void DbliteBlockChainDb::TxData::Write(BinaryWriter& wr, CoinEng& eng, bool bWri
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 	case EngMode::Normal:
 	case EngMode::BlockExplorer:
-#	endif
 		wr << N;
-	case EngMode::Bootstrap:
 		wr.BaseStream.WriteBuffer(Data.constData(), 3);
 		break;
-	default: wr << Data << TxIns;
+#	endif
+	case EngMode::Bootstrap:
+		if (!bWriteHash && Utxo.size() == 1 && Utxo[0] < 4 && TxOffset <= 0x3FFFFF) {	// Compact UTXO encoding
+			uint32_t txOffset = htole(TxOffset | (uint32_t(Utxo[0]) << 22));
+			wr.BaseStream.WriteBuffer(&txOffset, 3);
+			return;
+		} else {
+			uint32_t txOffset = htole(TxOffset);
+			wr.BaseStream.WriteBuffer(&txOffset, 3);
+		}
+		break;
+	default:
+		wr << Data << TxIns;
 	}
-	wr << Coins;
-	if (Coins.empty())
+	wr << Utxo;
+	if (Utxo.empty())
 		wr.Write7BitEncoded(LastSpendHeight - Height);
 	if (bWriteHash)
 		wr << HashTx;
@@ -890,11 +921,9 @@ bool DbliteBlockChainDb::FindTxByHash(const HashValue& hashTx, Tx* ptx) {
 		const TxData& txData = txDatas.Items[txDatas.Index];
 		ptx->Height = txData.Height;
 		switch (Eng.Mode) {
-		case EngMode::Bootstrap: {
-			uint32_t off = 0;
-			memcpy(&off, txData.Data.constData(), 3);
-			ReadTx(GetBlockOffset(txData.Height) + letoh(off), *ptx);
-		} break;
+		case EngMode::Bootstrap:
+			ReadTx(GetBlockOffset(txData.Height) + txData.TxOffset, *ptx);
+			break;
 		default:
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 			DbCursor cb(dbt, m_tableBlocks);
@@ -1000,8 +1029,8 @@ vector<bool> DbliteBlockChainDb::GetCoinsByTxHash(const HashValue& hash) {
 	TxDatas txDatas = GetTxDatas(hash);
 	const TxData& txData = txDatas.Items[txDatas.Index];
 	vector<bool> vec;
-	for (int j = 0; j < txData.Coins.size(); ++j) {
-		uint8_t v = txData.Coins.constData()[j];
+	for (int j = 0; j < txData.Utxo.size(); ++j) {
+		uint8_t v = txData.Utxo[j];
 		for (int i = 0; i < 8; ++i)
 			vec.push_back(v & (1 << i));
 	}
@@ -1011,7 +1040,7 @@ vector<bool> DbliteBlockChainDb::GetCoinsByTxHash(const HashValue& hash) {
 void DbliteBlockChainDb::SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) {
 	TxDatas txDatas = GetTxDatas(hash);
 	TxData& txData = txDatas.Items[txDatas.Index];
-	txData.Coins = find(vec.begin(), vec.end(), true) != vec.end() ? CoinEng::SpendVectorToBlob(vec) : Blob();
+	txData.Utxo = find(vec.begin(), vec.end(), true) != vec.end() ? CoinEng::SpendVectorToBlob(vec) : Blob();
 
 	DbTxRef dbt(m_db);
 	DbCursor cTxes(dbt, m_tableTxes);
@@ -1032,23 +1061,24 @@ void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend, int32_t he
 	uint8_t mask = 1 << (op.Index & 7);
 	uint8_t* p;
 	if (bSpend) {
-		p = txData.Coins.data();
-		if (pos >= txData.Coins.size() || !(p[pos] & mask))
+		p = txData.Utxo.data();
+		if (pos >= txData.Utxo.size() || !(p[pos] & mask))
 			Throw(CoinErr::InputsAlreadySpent);
 		p[pos] &= ~mask;
 	} else {
-		if (pos >= txData.Coins.size())
-			txData.Coins.resize(pos + 1);
-		(p = txData.Coins.data())[pos] |= mask;
+		if (pos >= txData.Utxo.size())
+			txData.Utxo.resize(pos + 1);
+		(p = txData.Utxo.data())[pos] |= mask;
 	}
 	size_t i;
-	for (i = txData.Coins.size(); i-- && !p[i];)
+	for (i = txData.Utxo.size(); i-- && !p[i];)
 		;
-	if (i + 1 != txData.Coins.size())
-		txData.Coins.resize(i + 1);
-	if (txData.Coins.size() == 0) {
+	if (i + 1 != txData.Utxo.size())
+		txData.Utxo.resize(i + 1);
+	if (txData.Utxo.size() == 0) {
 		if (Eng.Mode == EngMode::Bootstrap || UCFG_COIN_TXES_IN_BLOCKTABLE) {
-			SpentTx stx = { op.TxHash, txData.Height, GetLeUInt32(txData.Data.constData()), txData.N };
+			uint32_t txOffset = Eng.Mode == EngMode::Bootstrap ? txData.TxOffset : GetLeUInt32(txData.Data.constData());
+			SpentTx stx = { op.TxHash, txData.Height, txOffset, txData.N };
 			auto& caches = Eng.Caches;
 			EXT_LOCK(caches.Mtx) {
 				caches.m_cacheSpentTxes.push_front(stx);
@@ -1068,41 +1098,32 @@ void DbliteBlockChainDb::PruneTxo(const OutPoint& op, int32_t heightCur) {
 	DbTxRef dbt(m_db);
 	DbCursor cTxes(dbt, m_tableTxes);
 	if (TxDatas txDatas = FindTxDatas(cTxes, Span(op.TxHash.data(), 8))) {	// May be has been removed in other txin of this heightCur
-		if (!txDatas.Items[txDatas.Index].IsCoinSpent(op.Index))
-			Throw(CoinErr::InconsistentDatabase);
-		for (auto& d : txDatas.Items)
-			if (!d.Coins.empty() || d.LastSpendHeight > heightCur)
-				return;
-#ifdef _DEBUG	//!!!D
-		if (txDatas.Items.size() >= 2) {
-			heightCur = heightCur;
+		if (!txDatas.Items[txDatas.Index].IsCoinSpent(op.Index)) {
+			//!!!C Throw(CoinErr::InconsistentDatabase);	/!!!C Don't throw, because prev versions coud prune on the fly
+			return;
 		}
-#endif
+		for (auto& d : txDatas.Items)
+			if (!d.Utxo.empty() || d.LastSpendHeight > heightCur)
+				return;
 		cTxes.Delete();		// Only when all UTXO are spent
 	}
 }
 
-void DbliteBlockChainDb::InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data) {
+void DbliteBlockChainDb::InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data, uint32_t txOffset) {
 	ASSERT(height < 0xFFFFFF);
+
+	TxData d;
+	d.Height = height;
+	d.N = nTx;
+	d.TxOffset = txOffset;
+	d.Utxo = spend;
+	d.Data = data;
+	d.TxIns = txIns;
+	d.HashTx = txHash;
 
 	MemoryStream msT;
 	BinaryWriter wr(msT);
-	uint32_t h = htole(height);
-	msT.WriteBuffer(&h, BLOCKID_SIZE);
-	switch (Eng.Mode) {
-#	if UCFG_COIN_TXES_IN_BLOCKTABLE
-	case EngMode::Normal:
-	case EngMode::BlockExplorer:
-#	endif
-		wr << nTx;
-	case EngMode::Bootstrap:
-		ASSERT(data.size() == 3);
-		msT.WriteBuffer(data.data(), 3);
-		break;
-	default:
-		wr << data << txIns;
-	}
-	wr << spend;
+	d.Write(wr, Eng);
 
 	DbTxRef dbt(m_db);
 	try {
@@ -1117,19 +1138,24 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutN
 		TxDatas txDatas = FindTxDatas(cTxes, Span(txHash.data(), 8));
 		if (txDatas) {
 			if (txDatas.Items.size() == 1) {
-				TxData& d = txDatas.Items[0];
+				TxData& t = txDatas.Items[0];
 				if (Eng.Mode == EngMode::Bootstrap) {
 					Tx txOld;
-					ReadTx(GetBlockOffset(d.Height) + GetLeUInt32(d.Data.constData()), txOld);
+					ReadTx(GetBlockOffset(t.Height) + t.TxOffset, txOld);
 					if (Hash(txOld) != txHash) {
-						d.HashTx = Hash(txOld);
+						t.HashTx = Hash(txOld);
 						goto LAB_FOUND;
 					}
-				} else if (!Equal(Span(d.TxIns), txIns) || !Equal(Span(d.Data), data))
+				} else if (!Equal(Span(t.TxIns), txIns))
+					goto LAB_OTHER_TX;
+				else if (Eng.Mode == EngMode::Bootstrap) {
+					if (t.TxOffset != txOffset)
+						goto LAB_OTHER_TX;
+				} else if (!Equal(Span(t.Data), data))
 					goto LAB_OTHER_TX;
 			}
 			TxData& txData = txDatas.Items[txDatas.Index];
-			txData.Coins = spend;
+			txData.Utxo = spend;
 
 			String msg = ex.what(); //!!!D
 			TRC(1, "Duplicated Transaction: " << txHash);
@@ -1152,15 +1178,8 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutN
 			}
 			Throw(CoinErr::InconsistentDatabase);
 		}
-	LAB_FOUND : {
-		txDatas.Items.resize(txDatas.Items.size() + 1);
-		TxData& txData = txDatas.Items.back();
-		txData.Height = height;
-		txData.N = nTx;
-		txData.Data = data;
-		txData.TxIns = txIns;
-		txData.Coins = spend;
-		txData.HashTx = txHash;
+	LAB_FOUND :
+		txDatas.Items.push_back(d);
 
 #ifdef X_DEBUG
 		if (txDatas.Items.size() > 1) {
@@ -1169,7 +1188,6 @@ void DbliteBlockChainDb::InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutN
 		}
 #endif
 		PutTxDatas(cTxes, TxKey(txHash), txDatas);
-	}
 	LAB_END:;
 	}
 	if (Eng.Mode == EngMode::BlockExplorer)
@@ -1183,8 +1201,7 @@ void DbliteBlockChainDb::InsertSpentTxOffsets(const unordered_map<HashValue, Spe
 	DbTxRef dbt(m_db);
 	for (unordered_map<HashValue, SpentTx>::const_iterator it = spentTxOffsets.begin(), e = spentTxOffsets.end(); it != e; ++it) {
 		const SpentTx& spentTx = it->second;
-		uint32_t off = htole(spentTx.Offset);
-		InsertTx(Tx(), spentTx.N, TxHashesOutNums(), it->first, spentTx.Height, Span(), Span(), Span((const uint8_t*)&off, 3));
+		InsertTx(Tx(), spentTx.N, TxHashesOutNums(), it->first, spentTx.Height, Span(), Span(), Span(), spentTx.Offset);
 	}
 	dbt.CommitIfLocal();
 }
@@ -1280,7 +1297,7 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 			txOffsets[i] = uint32_t(msB.Position);
 			wrT << Span(msTx);
 #	else
-			InsertTx(tx, txHashOutNums, txHash, Height, msTxIns, CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), msTx);
+			InsertTx(tx, txHashOutNums, txHash, Height, msTxIns, CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), msTx, 0);
 			SpendInputs(tx);
 #	endif
 		}
@@ -1309,8 +1326,9 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 		for (int nTx = 0; nTx < txes.size(); ++nTx) {
 			const Tx& tx = txes[nTx];
 			Coin::HashValue txHash = Coin::Hash(tx);
-			uint32_t offset = htole(txOffsets[nTx]);
-			InsertTx(tx, (uint16_t)nTx, txHashOutNums, txHash, height, Span(), CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), Span((const uint8_t*)&offset, 3));
+			uint32_t txOffset = txOffsets[nTx];
+			uint32_t leOffset = htole(txOffset);
+			InsertTx(tx, (uint16_t)nTx, txHashOutNums, txHash, height, Span(), CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), Span((const uint8_t*)& leOffset, 3), txOffset);
 			SpendInputs(tx);
 		}
 		break;

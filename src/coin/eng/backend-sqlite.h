@@ -279,7 +279,7 @@ public:
 		return vec;
 	}
 
-	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data) override {
+	void InsertTx(const Tx& tx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data, uint32_t txOffset) override {
 		CoinEng& eng = Eng();
 
 		m_cmdInsertTx

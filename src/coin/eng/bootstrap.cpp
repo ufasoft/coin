@@ -74,7 +74,7 @@ void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 	FileStream fs(pathBoostrap, FileMode::Create, FileAccess::Write);
 	BinaryWriter wr(fs);
 
-	for (uint32_t i=0; i<n && Runned; ++i) {
+	for (uint32_t i = 0; i < n && Runned; ++i) {
 		wr << ChainParams.ProtocolMagic;
 		MemoryStream ms;
 

@@ -112,14 +112,23 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	int nBlockSigOps = 0;
 	int64_t nFees = 0;
 	//!!!TODO:  accepts only transaction with inputs already in the DB. view should check inputs in the mem pool too
-	tx.ConnectInputs(view, Eng.BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, Eng.AllowFreeTxes, MinFeeMode::Relay), Eng.ChainParams.MaxTarget);	//!!!? MaxTarget
+	try {
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::SCRIPT_ERR_CLEANSTACK);
+		
+		tx.ConnectInputs(view, Eng.BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, Eng.AllowFreeTxes, MinFeeMode::Relay), Eng.ChainParams.MaxTarget);	//!!!? MaxTarget
+	} catch (WitnessProgramException&) {
+		if (!tx->HasWitness())
+			return false;
+		throw;
+	}
 
 	if (nFees < tx.GetMinFee(1000, Eng.AllowFreeTxes, MinFeeMode::Relay))
 		Throw(CoinErr::TxFeeIsLow);
 	if (nFees < Eng.GetMinRelayTxFee()) {
 		DateTime now = Clock::now();
-		Eng.m_freeCount = pow(1.0 - 1.0/600, (int)duration_cast<seconds>(now - exchange(Eng.m_dtLastFreeTx, now)).count());
-		if (Eng.m_freeCount > 15*10000 && !Eng.IsFromMe(tx))
+		Eng.m_freeCount = pow(1.0 - 1.0 / 600, (int)duration_cast<seconds>(now - exchange(Eng.m_dtLastFreeTx, now)).count());
+		if (Eng.m_freeCount > 15 * 10000 && !Eng.IsFromMe(tx))
 			Throw(CoinErr::TxRejectedByRateLimiter);
 		Eng.m_freeCount += serSize;
 	}

@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2012-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2012-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -21,11 +21,11 @@ namespace Coin {
 void PeerInfoBase::Write(BinaryWriter& wr) const {
 	wr << Services;
 	Blob blob = Ep.Address.GetAddressBytes();
-	if (blob.Size == 4) {
+	if (blob.size() == 4) {
 		const uint8_t buf[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
 		wr.Write(buf, sizeof buf);
 	}
-	wr.Write(blob.constData(), blob.Size);
+	wr.Write(blob.constData(), blob.size());
 	wr << uint16_t(_byteswap_ushort(Ep.Port));
 }
 
@@ -158,13 +158,13 @@ void AuxPow::Check(const Block& blockAux) {
 PrivateKey::PrivateKey(RCString s) {
 	try {
 		Blob blob = ConvertFromBase58(s.Trim());
-		if (blob.Size < 10)
+		if (blob.size() < 10)
 			Throw(CoinErr::InvalidAddress);
 		uint8_t ver = blob.constData()[0];
 		//!!! common ver for all Nets		if (ver != Eng().ChainParams.AddressVersion+128)
 		if (!(ver & 128))
 			Throw(CoinErr::InvalidAddress);
-		m_data = CData(blob.constData() + 1, blob.Size - 1);
+		m_data = CData(blob.constData() + 1, blob.size() - 1);
 	} catch (RCExc) {
 		Throw(CoinErr::InvalidAddress);
 	}

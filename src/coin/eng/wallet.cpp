@@ -309,8 +309,8 @@ void Wallet::OnBlockchainChanged() {
 		if (Thread::CurrentThread->m_bStop)
 			return;
 		bool bChanged = false;
-		EXT_LOCK (MtxCurrentHeight) {
-			Block bestBlock = m_eng->BestBlock();
+		Block bestBlock = m_eng->BestBlock();
+		EXT_LOCK(MtxCurrentHeight) {
 			if (CurrentHeight >= bestBlock.SafeHeight)
 				break;
 			if (CurrentHeight == -1 && BestBlockHash) {
@@ -318,34 +318,28 @@ void Wallet::OnBlockchainChanged() {
 					CurrentHeight = bestBlock.Height;
 				break;
 			}
-			Block block = m_eng->GetBlockByHeight(CurrentHeight + 1);
-			if (m_eng->Mode == EngMode::Lite) {
-				HashValue hash = Hash(block);
-				EXT_LOCK (m_eng->m_cdb.MtxDb) {
-					++CurrentHeight;
-					BestBlockHash = hash;
-					if (!(CurrentHeight & 0xFF) || (CurrentHeight==bestBlock.Height && !m_eng->IsInitialBlockDownload()) )
-						SetBestBlockHash(hash);
-					bChanged = true;
-				}
-			} else {
-				block.LoadToMemory();
-				HashValue hash = Hash(block);
-				EXT_LOCK (m_eng->m_cdb.MtxDb) {
-					bool bUpdateWallet = false;
-					EXT_FOR (const Tx& tx, block.get_Txes()) {
+		}
+		Block block = m_eng->GetBlockByHeight(CurrentHeight + 1);
+		if (m_eng->Mode != EngMode::Lite)
+			block.LoadToMemory();
+		HashValue hash = Hash(block);
+		EXT_LOCK(MtxCurrentHeight) {
+			EXT_LOCK(m_eng->m_cdb.MtxDb) {
+				bool bUpdateWallet = m_eng->Mode == EngMode::Lite;
+				if (bUpdateWallet) {
+					EXT_FOR(const Tx & tx, block.get_Txes()) {
 						bUpdateWallet |= ProcessTx(tx);
 					}
-					++CurrentHeight;
-					BestBlockHash = hash;
-					if (bUpdateWallet || !(CurrentHeight & 0xFF) || (CurrentHeight==bestBlock.Height && !m_eng->IsInitialBlockDownload()) )
-						SetBestBlockHash(hash);
-					bChanged = true;
 				}
+				++CurrentHeight;
+				BestBlockHash = hash;
+				if (bUpdateWallet || !(CurrentHeight & 0xFF) || (CurrentHeight == bestBlock.Height && !m_eng->IsInitialBlockDownload()))
+					SetBestBlockHash(hash);
+				bChanged = true;
 			}
 		}
 	}
-	if (m_eng->Mode==EngMode::Lite && !m_eng->IsInitialBlockDownload())
+	if (m_eng->Mode == EngMode::Lite && !m_eng->IsInitialBlockDownload())
 		ProcessPendingTxes();
 	if (m_iiWalletEvents)
 		m_iiWalletEvents->OnStateChanged();
@@ -610,7 +604,7 @@ void Wallet::Start() {
 				ReacceptWalletTxes();												//!!!TODO
 
 			if (!RescanThread) {
-				if (CurrentHeight>=0 && CurrentHeight < m_eng->BestBlockHeight() || BestBlockHash==HashValue::Null())
+				if (CurrentHeight >= 0 && CurrentHeight < m_eng->BestBlockHeight() || BestBlockHash == HashValue::Null())
 					StartRescan(BestBlockHash);
 			}
 		}

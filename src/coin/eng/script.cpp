@@ -130,22 +130,35 @@ bool GetInstr(const CMemReadStream& stm, LiteInstr& instr) {
 	int op = stm.ReadByte();
 	if (op < 0)
 		return false;
+	size_t remains = stm.Length - stm.Position;
 	BinaryReader rd(stm);
 	size_t len;
 	switch (instr.Opcode = instr.OriginalOpcode = (Opcode)op) {
 	case Opcode::OP_PUSHDATA1:
+		if (remains < 1)
+			return false;
 		len = rd.ReadByte();
+		if (remains < 1 + len)
+			return false;
 		instr.Value = Span(stm.m_mb.data() + stm.Position, len);
 		stm.ReadBuffer(0, instr.Value.size());
 		break;
 	case Opcode::OP_PUSHDATA2:
+		if (remains < 2)
+			return false;
 		len = rd.ReadUInt16();
+		if (remains < 2 + len)
+			return false;
 		instr.Value = Span(stm.m_mb.data() + stm.Position, len);
 		stm.ReadBuffer(0, instr.Value.size());
 		instr.Opcode = Opcode::OP_PUSHDATA1;
 		break;
 	case Opcode::OP_PUSHDATA4:
+		if (remains < 4)
+			return false;
 		len = rd.ReadUInt32();
+		if (remains < 4 + len)
+			return false;
 		instr.Value = Span(stm.m_mb.data() + stm.Position, len);
 		stm.ReadBuffer(0, instr.Value.size());
 		instr.Opcode = Opcode::OP_PUSHDATA1;
@@ -186,6 +199,8 @@ bool GetInstr(const CMemReadStream& stm, LiteInstr& instr) {
 		break;
 	default:
 		if (instr.Opcode < Opcode::OP_PUSHDATA1) {
+			if (remains < (uint8_t)instr.Opcode)
+				return false;
 			instr.Value = Span(stm.m_mb.data() + stm.Position, (uint8_t)instr.Opcode);
 			instr.Opcode = Opcode::OP_PUSHDATA1;
 			stm.ReadBuffer(0, instr.Value.size());
@@ -464,6 +479,8 @@ Address TxOut::CheckStandardType(RCSpan scriptPubKey) {
 			while (true) {
 				if (!GetInstr(stm, instr) || instr.Opcode != Opcode::OP_PUSHDATA1)
 					return Address(eng, AddressType::NonStandard, Span());
+				if (instr.Value.size() > CanonicalPubKey::MAX_SIZE)
+					break;
 				CanonicalPubKey pubkey(instr.Value);
 				if (!pubkey.IsValid())
 					break;
@@ -565,7 +582,7 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 		switch (witnessProgram.size()) {
 		case WITNESS_V0_KEYHASH_SIZE: {
 				if ((vm.Stack = witness).size() != 2)
-					Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+					throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
 				MemoryStream ms;
 				ScriptWriter(ms) << Opcode::OP_DUP << Opcode::OP_HASH160 << witnessProgram << Opcode::OP_EQUALVERIFY << Opcode::OP_CHECKSIG;		//!!!Optimze to check without intermediate script
 				scriptPubKey = ms;
@@ -573,10 +590,10 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 			break;
 		case WITNESS_V0_SCRIPTHASH_SIZE:
 			if (witness.empty())
-				Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+				throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
 			vm.Stack = vector<StackValue>(witness.begin(), witness.end() - 1);
 			if (HashValue(SHA256().ComputeHash(scriptPubKey = witness.back())) != HashValue(witnessProgram))
-				Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+				throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
 			break;
 		default:
 			Throw(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WRONG_LENGTH);

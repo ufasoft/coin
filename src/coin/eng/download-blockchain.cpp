@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2018 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com      ####
+/*######   Copyright (c) 2018-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -318,10 +318,10 @@ void Link::RequestHeaders() {
 void Link::RequestBlocks() {
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
-	bool bFetch = IsPreferredDownload || (0==eng.aPreferredDownloadPeers && !IsClient && !IsOneShot);
+	bool bFetch = IsPreferredDownload || (0 == eng.aPreferredDownloadPeers && !IsClient && !IsOneShot);
 
 	int count = MAX_BLOCKS_IN_TRANSIT_PER_PEER - (int)EXT_LOCKED(eng.Mtx, BlocksInFlight.size());
-	if (IsClient || (!bFetch && eng.IsInitialBlockDownload()) || count<=0 || !HashBlockBestKnown)
+	if (IsClient || (!bFetch && eng.IsInitialBlockDownload()) || count <= 0 || !HashBlockBestKnown)
 		return;
 
 	if (!HashBlockLastCommon) {
@@ -349,11 +349,11 @@ void Link::RequestBlocks() {
 		typedef map<int, HashValue> CHeight2Value;
 		CHeight2Value height2hash;
 
-		int nToFetch = (min)(nMaxHeight-bti.Height, (max)(128, count - (mGetData ? (int)mGetData->Invs.size() : 0) ));
+		int nToFetch = (min)(nMaxHeight - bti.Height, (max)(128, count - (mGetData ? (int)mGetData->Invs.size() : 0)));
 		BlockHeader cur = bti = eng.Tree.GetAncestor(HashBlockBestKnown, bti.Height+nToFetch);
 		height2hash.insert(make_pair(cur.Height, Hash(cur)));
-		for (int i=1; i<nToFetch; ++i) {
-			height2hash.insert(make_pair(cur.Height-1, cur.PrevBlockHash));
+		for (int i = 1; i < nToFetch; ++i) {
+			height2hash.insert(make_pair(cur.Height - 1, cur.PrevBlockHash));
 			cur = cur.GetPrevHeader();
 		}
 

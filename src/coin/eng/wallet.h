@@ -121,7 +121,6 @@ class COIN_CLASS Wallet : public WalletBase {
 	typedef Wallet class_type;
 	typedef WalletBase base;
 public:
-
 	recursive_mutex Mtx;
 	HashValue BestBlockHash;
 

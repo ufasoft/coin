@@ -49,6 +49,13 @@ class IBlockChainDb;
 class GetDataMessage;
 class Link;
 
+extern const Version
+VER_BLOCKS_TABLE_IS_HASHTABLE,
+VER_PUBKEY_RECOVER,
+VER_HEADERS,
+DB_VER_COMPACT_UTXO,
+DB_VER_LATEST;
+
 struct QueuedBlockItem {
 	Coin::Link& Link;
 	HashValue HashBlock;
@@ -455,7 +462,7 @@ public:
 	virtual bool Create(const path& p) = 0;
 	virtual bool Open(const path& p) = 0; // returns false if DBConvering deffered
 	virtual void Close(bool bAsync = true) = 0;
-	virtual void Recreate();
+	virtual void Recreate(const Version& verOld);
 	virtual void Checkpoint() = 0;
 
 	virtual Version CheckUserVersion() = 0;
@@ -484,7 +491,7 @@ public:
 	virtual void ReadTxes(const BlockObj& bo) = 0;
 	virtual void ReadTxIns(const HashValue& hash, const TxObj& txObj) = 0;
 	virtual pair<int, int> FindPrevTxCoords(DbWriter& wr, int height, const HashValue& hash) = 0;
-	virtual void InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data) = 0;
+	virtual void InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data, uint32_t txOffset) = 0;
 
 	virtual void InsertSpentTxOffsets(const unordered_map<HashValue, SpentTx>& spentTxOffsets) { Throw(E_NOTIMPL); } // used only for EngMode::Bootstrap
 
@@ -969,6 +976,12 @@ protected:
 	String get_Message() const override { return EXT_STR(base::get_Message() << " " << HashTx); }
 };
 
+class WitnessProgramException : public Exception {
+	typedef Exception base;
+public:
+	WitnessProgramException(CoinErr err) : base(err) {}
+};
+
 class PeerMisbehavingException : public Exception {
 	typedef Exception base;
 
@@ -976,20 +989,6 @@ public:
 	int HowMuch;
 
 	PeerMisbehavingException(int howMuch = 1) : base(CoinErr::Misbehaving), HowMuch(howMuch) {}
-};
-
-class VersionException : public Exception {
-	typedef Exception base;
-
-public:
-	Ext::Version Version;
-
-	VersionException(const Ext::Version& ver = Ext::Version()) : base(ExtErr::DB_Version), Version(ver) {}
-
-	~VersionException() noexcept {} //!!! GCC 4.6
-
-protected:
-	String get_Message() const override { return base::get_Message() + " " + Version.ToString(2); }
 };
 
 Version CheckUserVersion(SqliteConnection& db);

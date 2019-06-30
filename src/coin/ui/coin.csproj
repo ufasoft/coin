@@ -1,96 +1,23 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <StartupObject>Coin.App</StartupObject>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
-    <DebugSymbols>true</DebugSymbols>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <OutputPath>$(OUT)\$(Platform)_$(Configuration)</OutputPath>
-    <Prefer32Bit>false</Prefer32Bit>
-    <UseVSHostingProcess>false</UseVSHostingProcess>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <OutputPath>$(OUT)\$(Platform)_$(Configuration)</OutputPath>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2AA40339-73FA-4440-9A35-2A458E9CBC0B}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RuntimeIdentifiers>win7-x64;win7-x86</RuntimeIdentifiers>
+    <TargetFramework>net45</TargetFramework>
     <RootNamespace>Coin</RootNamespace>
-    <AssemblyName>coin</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    <WarningLevel>4</WarningLevel>
-    <BaseIntermediateOutputPath>$(OUT)\obj\$(AssemblyName)</BaseIntermediateOutputPath>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <OutputPath>$(OUT)\$(Platform)_$(Configuration)</OutputPath>
-    <Prefer32Bit>false</Prefer32Bit>
-    <UseVSHostingProcess>false</UseVSHostingProcess>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <OutputPath>$(OUT)\$(Configuration)</OutputPath>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
-    <DebugSymbols>true</DebugSymbols>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x86</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <OutputPath>$(OUT)\x86_Debug\</OutputPath>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <DefineConstants>
-    </DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x86</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>false</Prefer32Bit>
-    <OutputPath>$(OUT)\x86_Release\</OutputPath>
+    <UseWPF>true</UseWPF>
+    <Platforms>x64;x86</Platforms>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
+    <StartupObject>Coin.App</StartupObject>
+    <AssemblyName>Coin</AssemblyName>
+    <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>
+    <Company>Ufasoft</Company>
+    <Product>Coin</Product>
+    <Description>Multi-cryptocurrency client. Bitcoin, Litecoin, etc.</Description>
+    <Version>1.0.1</Version>
+    <Copyright>Copyright © Ufasoft 2011-2019</Copyright>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Interop.coineng">
-      <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-    </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -100,178 +27,17 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.0.8" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="c_send-money.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="c_transactions.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="f_address-book.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="f_address.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="f_main.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Compile Include="app.cs" />
-    <Compile Include="c_send-money.xaml.cs">
-      <DependentUpon>c_send-money.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="c_my-addresses.cs" />
-    <Compile Include="c_recipients.cs" />
-    <Compile Include="c_transactions.xaml.cs">
-      <DependentUpon>c_transactions.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_address-book.xaml.cs">
-      <DependentUpon>f_address-book.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_address.xaml.cs">
-      <DependentUpon>f_address.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_main.xaml.cs">
-      <DependentUpon>f_main.xaml</DependentUpon>
-      <SubType>Code</SubType>
-    </Compile>
-    <Page Include="f_options.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="f_passphrase.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="f_send-money.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="f_transactions.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
+    <ProjectReference Include="..\..\m\guicomp\guicomp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="f_options.xaml.cs">
-      <DependentUpon>f_options.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_passphrase.xaml.cs">
-      <DependentUpon>f_passphrase.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_send-money.xaml.cs">
-      <DependentUpon>f_send-money.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="f_transactions.xaml.cs">
-      <DependentUpon>f_transactions.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\AssemblyInfo.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-    <None Include="app.config" />
-    <None Include="properties\settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-    <AppDesigner Include="Properties\" />
+    <Reference Include="Interop.coineng"> <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath> </Reference>
+
+    <Resource Include="..\images\coin.ico"          ><Link>coin.ico                 </Link></Resource>
+    <Resource Include="..\images\groestlcoin.ico"   ><Link>images\groestlcoin.ico   </Link></Resource>
+
   </ItemGroup>
-  <ItemGroup>
-    <Resource Include="..\images\coin-3.ico">
-      <Link>coin-3.ico</Link>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="..\images\novacoin.ico">
-      <Link>images\novacoin.ico</Link>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="..\images\bitcoin.ico">
-      <Link>images\bitcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\devcoin.ico">
-      <Link>images\devcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\feathercoin.ico">
-      <Link>images\feathercoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\groestlcoin.ico">
-      <Link>images\groestlcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\dogecoin.ico">
-      <Link>images\dogecoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\earthcoin.ico">
-      <Link>images\earthcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\ixcoin.ico">
-      <Link>images\ixcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\litecoin.ico">
-      <Link>images\litecoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\maxcoin.ico">
-      <Link>images\maxcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\metiscoin.ico">
-      <Link>images\metiscoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\namecoin.ico">
-      <Link>images\namecoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\ppcoin.ico">
-      <Link>images\ppcoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\primecoin.ico">
-      <Link>images\primecoin.ico</Link>
-    </Resource>
-    <Resource Include="..\images\protoshares.ico">
-      <Link>images\protoshares.ico</Link>
-    </Resource>
-    <Resource Include="..\images\terracoin.ico">
-      <Link>images\terracoin.ico</Link>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="..\images\coin.ico">
-      <Link>coin.ico</Link>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\m\guicomp\guicomp.csproj">
-      <Project>{0cb510bb-f1e6-4ac6-8e9d-43d93c71f1c4}</Project>
-      <Name>guicomp</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>editbin /LARGEADDRESSAWARE $(TargetPath)</PostBuildEvent>
-  </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

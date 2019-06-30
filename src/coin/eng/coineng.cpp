@@ -217,6 +217,7 @@ CoinEng::CoinEng(CoinDb& cdb)
 	, TxPool(*this)
 	, m_cdb(cdb)
 	, MaxBlockVersion(3)
+	, m_dtLastFreeTx(Clock::now())
 	, m_freeCount(0)
 	, CommitPeriod(0x1F)
 	, m_mode(EngMode::Normal)
@@ -354,6 +355,7 @@ Block CoinEng::LookupBlock(const HashValue& hash) {
 
 bool CoinEng::CreateDb() {
 	bool r = Db->Create(GetDbFilePath());
+	OffsetInBootstrap = 0;
 
 	TransactionScope dbtx(*Db);
 
@@ -1019,7 +1021,7 @@ void CoinEng::UpgradeTo(const Version& ver) {
 }
 
 void CoinEng::TryUpgradeDb() {
-	Db->TryUpgradeDb(theApp.ProductVersion);
+	Db->TryUpgradeDb(DB_VER_LATEST);
 }
 
 path CoinEng::GetBootstrapPath() {
@@ -1127,9 +1129,14 @@ void CoinEng::Load() {
 	bool bContinue;
 	OffsetInBootstrap = 0;
 	if (exists(dbFilePath)) {
-		bContinue = OpenDb();
-		if (bContinue)
-			TryUpgradeDb();
+		try {
+			bContinue = OpenDb();
+			if (bContinue)
+				TryUpgradeDb();
+		} catch (UnsupportedOldVersionException& ex) {
+			Db->Recreate(ex.Version);
+			bContinue = true;
+		}
 	} else
 		bContinue = CreateDb();
 
@@ -1332,10 +1339,13 @@ void CoinEng::CheckCoinbasedTxPrev(int hCur, int hOut) {
 		Throw(CoinErr::TxPrematureSpend);
 }
 
-void IBlockChainDb::Recreate() {
+void IBlockChainDb::Recreate(const Version& verOld) {
 	CoinEng& eng = Eng();
 	Close(false);
-	filesystem::remove(eng.GetDbFilePath());
+	path pathOld = eng.GetDbFilePath(),
+		pathBak = pathOld;
+	pathBak += ".bak-" + verOld.ToString();
+	filesystem::rename(pathOld, pathBak);
 	eng.CreateDb();
 }
 

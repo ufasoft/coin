@@ -108,7 +108,7 @@ public:
 	void Checkpoint() override;
 	Version CheckUserVersion() override;
 	void UpgradeTo(const Version& ver) override;
-	void TryUpgradeDb(const Version& verApp) override;
+	void TryUpgradeDb(const Version& verTarget) override;
 	bool HaveHeader(const HashValue& hash) override;
 	bool HaveBlock(const HashValue& hash) override;
 	BlockHeader FindHeader(int height) override;
@@ -124,8 +124,9 @@ public:
 
 	struct TxData {
 		HashValue HashTx;
-		Blob Data,			// When bit23==1, other bits contain height of last spend.
-			TxIns, Coins;
+		Blob Data,
+			TxIns;
+		AutoBlob<9> Utxo;
 		uint32_t Height,
 			LastSpendHeight;		// serialized only when Coin.size()===0
 		uint32_t TxOffset;
@@ -137,7 +138,7 @@ public:
 
 		bool IsCoinSpent(int idx) const {
 			int pos = idx >> 3;
-			return pos >= Coins.size() || !(Coins[pos] & (1 << (idx & 7)));
+			return pos >= Utxo.size() || !(Utxo[pos] & (1 << (idx & 7)));
 		}
 
 		void Read(BinaryReader& rd, CoinEng& eng);
@@ -182,7 +183,7 @@ public:
 	void InsertPubkeyToTxes(DbTransaction& dbTx, const Tx& tx);
 	vector<int64_t> GetTxesByPubKey(const HashValue160& pubkey) override;
 
-	void InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data) override;
+	void InsertTx(const Tx& tx, uint16_t nTx, const TxHashesOutNums& hashesOutNums, const HashValue& txHash, int height, RCSpan txIns, RCSpan spend, RCSpan data, uint32_t txOffset) override;
 	void InsertSpentTxOffsets(const unordered_map<HashValue, SpentTx>& spentTxOffsets) override;
 
 	void InsertBlock(const Block& block, CConnectJob& job) override;
