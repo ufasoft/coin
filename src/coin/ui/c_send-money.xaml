@@ -16,7 +16,7 @@
    		<Label Content="Comment:" HorizontalAlignment="Left" Margin="10,120,0,0" VerticalAlignment="Top" TabIndex="4" />
    		<TextBox Margin="100,120,28,0" x:Name="textComment" x:FieldModifier="public" Text="" TextWrapping="Wrap" VerticalAlignment="Top" TabIndex="5" />
 
-		<Button x:Name="buttonSend" Content="Send" IsDefault="true" Click="OnSend" Width="70" Height="30" Margin="100,150,0,0" Padding="7,3.5" TabIndex="6" />
-
+		<Button x:Name="buttonSend" Content="Send" IsDefault="true" Click="OnSend" Width="70" Height="30" Margin="10,150,10,0" Padding="7,3.5" TabIndex="6" />
+		<Button x:Name="buttonCancel" Content="Cancel" IsCancel="true" Click="OnCancel" Width="70" Height="30" Margin="200,150,0,0" Padding="7,3.5" TabIndex="7" />
    	</Grid>
 </UserControl>

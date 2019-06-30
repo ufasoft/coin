@@ -1,6 +1,6 @@
 /*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
-# 		See LICENSE for licensing information                                                                                         #
+#       See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
 
 using System;
@@ -22,67 +22,68 @@ using Interop.coineng;
 
 namespace Coin {
 
-	public partial class CtlSendMoney : UserControl {
+    public partial class CtlSendMoney : UserControl {
 
-		public event RoutedEventHandler Send;
+        public event RoutedEventHandler Send;
 
-		IWallet m_Wallet;
+        IWallet m_Wallet;
 
-		public IWallet Wallet {
-			get { return m_Wallet; }
-			set {
-				m_Wallet = value;
-				labelCurrencySymbol.Content = m_Wallet != null ? m_Wallet.CurrencySymbol : "";
-			}
-		}
+        public IWallet Wallet {
+            get { return m_Wallet; }
+            set {
+                m_Wallet = value;
+                labelCurrencySymbol.Content = m_Wallet != null ? m_Wallet.CurrencySymbol : "";
+            }
+        }
 
-		public CtlSendMoney() {
-			InitializeComponent();
-		}
+        public CtlSendMoney() {
+            InitializeComponent();
+        }
 
-		private void textAmount_TextChanged(object sender, TextChangedEventArgs e) {
-			decimal amount;
-			if (decimal.TryParse(textAmount.Text, out amount)) {
-				try {
-					labelFee.Content = Wallet.CalcFee(amount).ToString();
-					buttonSend.IsEnabled = true;
+        private void textAmount_TextChanged(object sender, TextChangedEventArgs e) {
+            decimal amount;
+            if (decimal.TryParse(textAmount.Text, out amount)) {
+                try {
+                    labelFee.Content = Wallet.CalcFee(amount).ToString();
+                    buttonSend.IsEnabled = true;
                 } catch (Exception ex) {
-					labelFee.Content = ex.Message;
-					buttonSend.IsEnabled = false;
-				}
-			} else
-				buttonSend.IsEnabled = false;
-		}
+                    labelFee.Content = ex.Message;
+                    buttonSend.IsEnabled = false;
+                }
+            } else
+                buttonSend.IsEnabled = false;
+        }
 
+        void OnCancel(object sender, RoutedEventArgs e) {
+        }
 
-
-		void OnSend(object sender, RoutedEventArgs e) {
-			if (FormMain.I.EnsurePassphraseUnlock()) {
-				var prevCursor = Cursor;
-				Cursor = Cursors.Wait;
-				string address = textAddress.Text,
-					comment = textComment.Text;
-				try {
-					Wallet.AddRecipient(address, comment);
-				} catch (Exception) {
-				}
-				try {
-					var prov = new NumberFormatInfo();
-					prov.NumberDecimalSeparator = ".";
-					decimal amount = Convert.ToDecimal(textAmount.Text.Replace(',', '.'), prov);
-					Wallet.SendTo(amount, address, comment);
-				} finally {
-					Cursor = prevCursor;
-				}
-				textAmount.Text = "";
-				textAddress.Text = "";
-				textComment.Text = "";
+        void OnSend(object sender, RoutedEventArgs e) {
+            if (FormMain.I.EnsurePassphraseUnlock()) {
+                var prevCursor = Cursor;
+                Cursor = Cursors.Wait;
+                string address = textAddress.Text,
+                    comment = textComment.Text;
+                try {
+                    Wallet.AddRecipient(address, comment);
+                } catch (Exception) {
+                }
+                try {
+                    var prov = new NumberFormatInfo();
+                    prov.NumberDecimalSeparator = ".";
+                    decimal amount = Convert.ToDecimal(textAmount.Text.Replace(',', '.'), prov);
+                    Wallet.SendTo(amount, address, comment);
+                } finally {
+                    Cursor = prevCursor;
+                }
+                textAmount.Text = "";
+                textAddress.Text = "";
+                textComment.Text = "";
                 MessageBox.Show("The coins were sent successfully");
-			}
+            }
 
-			if (Send != null)
-				Send(this, null);
-		}
-	}
+            if (Send != null)
+                Send(this, null);
+        }
+    }
 
 }

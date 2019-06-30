@@ -90,7 +90,7 @@ namespace Coin {
 
 			switch (Wallet.CurrencySymbol) {
 				case "GRS":
-					dlg.Hyperlink.NavigateUri = new Uri(string.Format("https://chainz.cryptoid.info/{0}/tx.dws?{1}", Wallet.CurrencySymbol.ToLower(), tx.Hash));
+					dlg.Hyperlink.NavigateUri = new Uri($"https://chainz.cryptoid.info/{Wallet.CurrencySymbol.ToLower()}/tx.dws?{tx.Hash}");
 					dlg.Hyperlink.Inlines.Add("Block Explorer");
 					dlg.Hyperlink.RequestNavigate += (sender, e) => { Process.Start(e.Uri.ToString()); };
 					break;

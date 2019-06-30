@@ -481,9 +481,10 @@ private:
 
 class CanonicalPubKey {
 	typedef CanonicalPubKey class_type;
-
 public:
-	typedef vararray<uint8_t, 65> CData;
+	const static size_t MAX_SIZE = 65;
+
+	typedef vararray<uint8_t, MAX_SIZE> CData;
 	CData Data;
 
 	CanonicalPubKey() {
@@ -494,7 +495,7 @@ public:
 	}
 
 	CanonicalPubKey(RCSpan cbuf)
-		: Data(cbuf.data(), cbuf.size()) {
+		: Data(cbuf.data(), CheckArgSize(cbuf.size())) {
 	}
 
 	bool IsCompressed() const {
@@ -513,6 +514,12 @@ public:
 
 	Blob ToCompressed() const;
 	static CanonicalPubKey FromCompressed(RCSpan cbuf);
+private:
+	static size_t CheckArgSize(size_t size) {
+		if (size > MAX_SIZE)
+			Throw(E_INVALIDARG);
+		return size;
+	}
 };
 
 enum class AddressType : uint8_t {				// Used in WalletDb in pubkeys.type field

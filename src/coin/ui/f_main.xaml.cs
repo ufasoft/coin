@@ -89,10 +89,10 @@ namespace Coin {
                         decimal amount = tx.Amount;
                         string s;
                         if (amount > 0)
-                            s = string.Format("{0} {1} received to our ", amount, w.CurrencySymbol);
+                            s = $"{amount} {w.CurrencySymbol} received to our ";
                         else
-                            s = string.Format("{0} {1} sent to", -amount, w.CurrencySymbol);
-                        s += string.Format(" address {0} {1} {2}", addr.Value, addr.Comment, tx.Comment);
+                            s = $"{-amount} {w.CurrencySymbol} sent to";
+                        s += $" address {addr.Value} {addr.Comment} {tx.Comment}";
                         WalletEvents.Add(new WalletEvent() { Timestamp = tx.Timestamp, Comment = s });
                         if (++i > 10)
                             break;
@@ -159,7 +159,7 @@ namespace Coin {
                 if ((int)UserAppRegistryKey.GetValue("UrlRegAsked", 0) == 0) {
                     UserAppRegistryKey.SetValue("UrlRegAsked", 1);
                     RegistryKey keyClasses = Registry.CurrentUser.OpenSubKey("Software").OpenSubKey("Classes", true);
-                    string toMe = string.Format("\"{0}\" %1", Assembly.GetCallingAssembly().Location);
+                    string toMe = $"\"{Assembly.GetCallingAssembly().Location}\" %1";
                     var subKey = keyClasses.OpenSubKey("bitcoin");
                     if (subKey == null) {
                         keyClasses.CreateSubKey("bitcoin").CreateSubKey("shell").CreateSubKey("open").CreateSubKey("command").SetValue(null, toMe);
@@ -226,8 +226,8 @@ namespace Coin {
                 wf.Wallet = wallet;
                 MenuItem mi = new MenuItem();
                 wf.MenuItem = mi;
-                mi.Header = string.Format("{0}  {1}", wallet.CurrencySymbol, currencyName);
-                mi.Icon = new Image() { Source = new BitmapImage(new Uri(String.Format("images/{0}.ico", currencyName), UriKind.Relative)) };
+                mi.Header = $"{wallet.CurrencySymbol}  {currencyName}";
+                mi.Icon = new Image() { Source = new BitmapImage(new Uri($"images/{currencyName}.ico", UriKind.Relative)) };
                 menuCurrency.Items.Add(mi);
                 mi.Template = menuTemplate;
                 mi.IsCheckable = true;
@@ -378,7 +378,7 @@ namespace Coin {
         WalletForms FindWallet(string netName) {
             var r = ActiveWalletForms.FirstOrDefault(w => w.Wallet.CurrencyName.ToUpper() == netName.ToUpper());
             if (r == null)
-                throw new ApplicationException(string.Format("No active Wallet with name {0}", netName));
+                throw new ApplicationException($"No active Wallet with name {netName}");
             return r;
         }
 
@@ -497,7 +497,7 @@ namespace Coin {
         private void OnHelpAbout(object sender, RoutedEventArgs e) {
             var d = new GuiComp.DialogAbout();
             d.SourceCodeUri = new Uri("https://github.com/ufasoft/coin");
-            d.Image.Source = new BitmapImage(new Uri(string.Format("/{0};component/coin.ico", System.Reflection.Assembly.GetExecutingAssembly().GetName().Name), UriKind.Relative));
+            d.Image.Source = new BitmapImage(new Uri($"/{ System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/coin.ico", UriKind.Relative));
             Dialog.ShowDialog(d, this);
         }
 

@@ -1,21 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <RuntimeIdentifiers>win7-x64;win7-x86</RuntimeIdentifiers>
     <TargetFramework>net45</TargetFramework>
-    <RootNamespace>Coin</RootNamespace>
-    <UseWPF>true</UseWPF>
+    <RuntimeIdentifiers>win7-x64;win7-x86</RuntimeIdentifiers>
     <Platforms>x64;x86</Platforms>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
-    <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
     <StartupObject>Coin.App</StartupObject>
+    <RootNamespace>Coin</RootNamespace>
     <AssemblyName>Coin</AssemblyName>
-    <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>
     <Company>Ufasoft</Company>
     <Product>Coin</Product>
-    <Description>Multi-cryptocurrency client. Bitcoin, Litecoin, etc.</Description>
+    <Description>Multi-cryptocurrency client.&#10; Bitcoin, Litecoin, etc.</Description>
     <Version>1.0.1</Version>
     <Copyright>Copyright © Ufasoft 2011-2019</Copyright>
+    <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
+    <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.VisualBasic" />
@@ -29,15 +29,14 @@
     <Reference Include="PresentationFramework" />
 
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.0.8" />
-  </ItemGroup>
-  <ItemGroup>
+
     <ProjectReference Include="..\..\m\guicomp\guicomp.csproj" />
-  </ItemGroup>
-  <ItemGroup>
+
     <Reference Include="Interop.coineng"> <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath> </Reference>
 
     <Resource Include="..\images\coin.ico"          ><Link>coin.ico                 </Link></Resource>
+    <Resource Include="..\images\bitcoin.ico"       ><Link>images\bitcoin.ico       </Link></Resource>
+    <Resource Include="..\images\bitcoin-testnet3.ico"><Link>images\bitcoin-testnet3.ico</Link></Resource>
     <Resource Include="..\images\groestlcoin.ico"   ><Link>images\groestlcoin.ico   </Link></Resource>
-
   </ItemGroup>
 </Project>
