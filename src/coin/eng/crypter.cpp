@@ -57,7 +57,7 @@ bool CCrypter::SetKeyFromPassphrase(const string& strKeyData, const std::vector<
 }
 
 bool CCrypter::SetKey(const CKeyingMaterial& chNewKey, const std::vector<unsigned char>& chNewIV) {
-    if (chNewKey.Size != WALLET_CRYPTO_KEY_SIZE || chNewIV.size() != WALLET_CRYPTO_KEY_SIZE)
+    if (chNewKey.size() != WALLET_CRYPTO_KEY_SIZE || chNewIV.size() != WALLET_CRYPTO_KEY_SIZE)
         return false;
 
 	memcpy(&chKey[0], chNewKey.data(), sizeof chKey);
@@ -76,7 +76,7 @@ bool CCrypter::Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned
 	aes.Key = Span(chKey, sizeof chKey);
 	aes.IV = Span(chIV, sizeof chIV);
 	Blob r = aes.Encrypt(vchPlaintext);
-	vchCiphertext = vector<unsigned char>(r.constData(), r.constData()+r.Size);
+	vchCiphertext = vector<unsigned char>(r.constData(), r.constData() + r.size());
 
     return true;
 }

@@ -219,10 +219,10 @@ public:
 		m_wallet.SendTo(make_decimal64(amount.Lo64, -amount.scale), addr, comment);
 	} METHOD_END
 
-	HRESULT __stdcall GenerateNewAddress(BSTR comment, IAddress** r)
+	HRESULT __stdcall GenerateNewAddress(EAddressType type, BSTR comment, IAddress** r)
 	METHOD_BEGIN {
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
-		CComPtr<IAddress> iA = new AddressCom(_self, m_wallet.Eng.m_cdb.GenerateNewAddress(comment).ToAddress());
+		CComPtr<IAddress> iA = new AddressCom(_self, m_wallet.Eng.m_cdb.GenerateNewAddress((AddressType)type, comment).ToAddress());
 		*r = iA.Detach();
 	} METHOD_END
 
@@ -513,13 +513,13 @@ public:
 		CCoinEngThreadKeeper engKeeper(&eng);
 		String ssKey = String(sKey).Trim();
 		Blob blob = ConvertFromBase58(ssKey);
-		if (blob.Size < 33) {
+		if (blob.size() < 33) {
 			Throw(CoinErr::InvalidPrivateKey);
 		}
 		uint8_t ver = blob.constData()[0];
 		if (ver == 0x80) {
 			KeyInfo ki;
-			ki.m_pimpl->SetPrivData(Span(blob.constData()+1, 32), blob.Size==34);
+			ki.m_pimpl->SetPrivData(Span(blob.constData() + 1, 32), blob.size() == 34);
 			ki.Comment = "Imported";
 			EXT_LOCK(eng.m_cdb.MtxDb) {
 				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))

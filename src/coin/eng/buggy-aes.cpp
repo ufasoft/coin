@@ -69,7 +69,7 @@ Blob BuggyAes::Encrypt(RCSpan cbuf) {
 	uint8_t *tdata = (uint8_t*)alloca(cbBlock);
 	Span state = IV;
 	Blob ekey = CalcInvExpandedKey();
-	for (size_t pos = 0;; pos += block.Size) {
+	for (size_t pos = 0;; pos += block.size()) {
 		size_t size = (min)(cbuf.size() - pos, size_t(cbBlock));
 		memcpy(tdata, cbuf.data() + pos, size);
 		if (size < cbBlock)
@@ -106,7 +106,7 @@ Blob BuggyAes::Decrypt(RCSpan cbuf) {
 	Blob block = IV;
 	Span state = IV;
 	Blob ekey = CalcExpandedKey();
-	for (size_t pos = 0; pos < cbuf.size(); pos += block.Size) {
+	for (size_t pos = 0; pos < cbuf.size(); pos += block.size()) {
 		VectorXor(block.data(), cbuf.data() + pos, cbBlock);
 		EncryptBlock(ekey, block.data());
 		if (pos + cbBlock == cbuf.size()) {

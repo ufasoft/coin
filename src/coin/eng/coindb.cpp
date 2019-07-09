@@ -93,7 +93,7 @@ void CoinDb::InitAes(BuggyAes& aes, RCString password, uint8_t encrtyptAlgo) {
 KeyInfo CoinDb::AddNewKey(KeyInfo ki) {
 	BuggyAes aes;
 	if (!m_masterPassword.empty()) {
-		if (m_cachedMasterKey.first.Size == 0) {
+		if (m_cachedMasterKey.first.size() == 0) {
 			InitAes(aes, m_masterPassword, DEFAULT_PASSWORD_ENCRYPT_METHOD);
 			m_cachedMasterKey = make_pair(aes.Key, aes.IV);
 		} else {
@@ -113,7 +113,7 @@ KeyInfo CoinDb::AddNewKey(KeyInfo ki) {
 	return Hash160ToKey.insert(make_pair(ki.PubKey.Hash160, ki)).first->second;
 }
 
-KeyInfo CoinDb::FindReservedKey() {
+KeyInfo CoinDb::FindReservedKey(AddressType type) {
 	EXT_LOCK (MtxDb) {
 		SqliteCommand cmd("SELECT id, pubkey FROM privkeys WHERE reserved ORDER by id", m_dbWallet);
 		DbDataReader dr = cmd.ExecuteReader();
@@ -121,14 +121,13 @@ KeyInfo CoinDb::FindReservedKey() {
 			return nullptr;
 		auto id = dr.GetInt32(0);
 		Blob pubkey = dr.GetBytes(1);
-		AddressType defaultType = AddressType::P2SH;
 		SqliteCommand cmdUpdate("UPDATE privkeys SET type=? WHERE id=?", m_dbWallet);
 		cmdUpdate
-			.Bind(1, (int)defaultType)
+			.Bind(1, (int)type)
 			.Bind(2, id)
 			.ExecuteNonQuery();
 		KeyInfo keyInfo = Hash160ToKey[Hash160(CanonicalPubKey::FromCompressed(pubkey).Data)];
-		keyInfo.AddressType = defaultType;
+		keyInfo.AddressType = type;
 		return keyInfo;
 	}
 }
@@ -166,12 +165,12 @@ bool CoinDb::SetPrivkeyComment(const HashValue160& hash160, RCString comment) {
 	return false;
 }
 
-KeyInfo CoinDb::GenerateNewAddress(RCString comment, int lim) {
+KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment, int lim) {
 	EXT_LOCK (MtxDb) {
-		KeyInfo ki = FindReservedKey();
+		KeyInfo ki = FindReservedKey(type);
 		if (!ki) {
 			TopUpPool(lim);
-			ki = FindReservedKey();
+			ki = FindReservedKey(type);
 		}
 		SetPrivkeyComment(ki.get_PubKey().Hash160, comment);
 		return ki;
@@ -249,7 +248,7 @@ void CoinDb::CreateDbWallet() {
 		GetSystemURandomReader().BaseStream.ReadBuffer(Salt.data(), sizeof Salt);
 		m_dbWallet.ExecuteNonQuery(EXT_STR("INSERT INTO globals (name, value) VALUES(\'salt\', " << *(int64_t*)Salt.data() << ")"));
 
-		GenerateNewAddress("", 2);	//!!! reserve more keys
+		GenerateNewAddress(AddressType::P2SH, "", 4);	//!!! reserve more keys
 	} catch (RCExc) {
 		m_dbWallet.Close();
 		filesystem::remove(DbWalletFilePath);
@@ -393,10 +392,10 @@ void CoinDb::LoadKeys(RCString password) {
 						case 'B': pAes = &aesB; break;
 						}
 						Blob ptext = pAes->Decrypt(buf.subspan(1));
-						if (ptext.Size < 5)
+						if (ptext.size() < 5)
 							Throw(CoinErr::InconsistentDatabase);
-						ki.m_pimpl->SetPrivData(Blob(ptext.constData(), ptext.Size-4), ki.PubKey.IsCompressed());
-						if (!Equal(Crc32().ComputeHash(ki.m_pimpl->get_PrivKey()), Blob(ptext.constData() + ptext.Size - 4, 4)))
+						ki.m_pimpl->SetPrivData(Blob(ptext.constData(), ptext.size() - 4), ki.PubKey.IsCompressed());
+						if (!Equal(Crc32().ComputeHash(ki.m_pimpl->get_PrivKey()), Blob(ptext.constData() + ptext.size() - 4, 4)))
 							Throw(ExtErr::LogonFailure);
 					} catch (OpenSslException&) {
 						Throw(ExtErr::LogonFailure);

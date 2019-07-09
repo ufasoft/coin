@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -46,6 +46,13 @@ library CointEng {
 		Bootstrap
 	};
 
+	[uuid(55534654-3F35-46d9-000E-54BAFC250402)]
+	enum EAddressType {	// Same values as in AddressType
+		Legacy		= 0
+		, P2SH		= 1
+		, Bech32	= 2
+	};
+
 	[uuid(55534654-3F35-46d9-0001-54BAFC250402), dual, oleautomation]
 	interface IWallet : IDispatch {
 	    [id(1), propget] HRESULT CurrencyName([out,retval] BSTR *r);
@@ -53,7 +60,7 @@ library CointEng {
 	    [id(3), propget] HRESULT Balance([out,retval] DECIMAL *r);
 	    [id(4), propget] HRESULT Transactions([out,retval] SAFEARRAY(ITransaction) *r);
 	    [id(5), propget] HRESULT MyAddresses([out,retval] SAFEARRAY(IAddress) *r);
-	    [id(7)] HRESULT GenerateNewAddress([in] BSTR comment, [out,retval] IAddress **r);
+	    [id(7)] HRESULT GenerateNewAddress([in] enum EAddressType type, [in] BSTR comment, [out,retval] IAddress **r);
 	    [id(8)] HRESULT Rescan();
 	    [id(9)] HRESULT GetAndResetStateChangedFlag([out,retval] VARIANT_BOOL *r);
 	    [id(10)] HRESULT CalcFee([in] DECIMAL amount, [out,retval] DECIMAL *r);
