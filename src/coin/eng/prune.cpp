@@ -12,7 +12,9 @@ namespace Coin {
 void PruneDbThread::Execute() {
 	Name = "PruneThread";
 	CCoinEngThreadKeeper engKeeper(&Eng);
-	for (int h = From; h <= To; Sleep(10), ++h) {
+	for (int h = From; h <= To; ++h) {
+		if (m_bStop)
+			return;
 		CoinEngTransactionScope scopeBlockSavepoint(Eng);
 		Block block = Eng.Db->FindBlock(h);
 		const CTxes& txes = block.Txes;

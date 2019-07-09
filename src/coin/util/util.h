@@ -157,6 +157,14 @@ public:
 	void Read(const BinaryReader& rd) {
 		rd.Read(data(), 32);
 	}
+
+	void Print(ostream& os, bool bFull = true) const;
+
+	String ToString(bool bFull = true) const {
+		ostringstream os;
+		Print(os, bFull);
+		return os.str();
+	}
 };
 
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
@@ -333,8 +341,9 @@ public:
 		: Ver(1) {
 	}
 
-	static void WriteVarInt(BinaryWriter& wr, uint64_t v);
-	static uint64_t ReadVarInt(const BinaryReader& rd);
+	static void WriteVarUInt64(BinaryWriter& wr, uint64_t v);
+	static uint64_t ReadVarUInt64(const BinaryReader& rd);
+	static uint32_t ReadVarSize(const BinaryReader& rd);
 	static String ReadString(const BinaryReader& rd);
 	static void WriteString(BinaryWriter& wr, RCString s);
 	static void WriteSpan(BinaryWriter& wr, RCSpan mb);
@@ -354,7 +363,7 @@ public:
 
 	template <class T>
     static void Write(ProtocolWriter& wr, const vector<T>& ar) {
-		WriteVarInt(wr, ar.size());
+		WriteVarUInt64(wr, ar.size());
         for (size_t i = 0; i < ar.size(); ++i)
             WriteEl(wr, ar[i]);
 	}
@@ -372,10 +381,10 @@ public:
     static void ReadEl(const ProtocolReader& rd, T& v) { v.Read(rd); }
 
 	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = SIZE_MAX) {
-        auto size = ReadVarInt(rd);
+        uint32_t size = ReadVarSize(rd);
         if (size > maxSize)
             Throw(ExtErr::Protocol_Violation);
-		ar.resize((size_t)size);
+		ar.resize(size);
 		for (size_t i = 0; i < ar.size(); ++i)
 			ReadEl(rd, ar[i]);
 	}
@@ -389,10 +398,8 @@ struct BlockHeaderBinary {
 		Timestamp, DifficultyTargetBits, Nonce;
 };
 
-class COIN_UTIL_CLASS BlockBase : public Object {
+class COIN_UTIL_CLASS BlockBase : public InterlockedObject {
 public:
-	typedef InterlockedPolicy interlocked_policy;
-
 	HashValue PrevBlockHash;
 	mutable optional<HashValue> m_merkleRoot;
 	DateTime Timestamp;

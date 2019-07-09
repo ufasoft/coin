@@ -177,7 +177,7 @@ static HashValue HashFromTx(CoinEng *peng, const BlockObj *block, int n) {
 	CCoinEngThreadKeeper engKeeper(peng);
 	const Tx& tx = block->get_Txes()[n];
 	HashValue r = block->HashFromTx(tx, n);
-	if (tx.m_pimpl->m_nBytesOfHash != 32)
+	if (tx->m_nBytesOfHash != 32)
 		tx.SetHash(r);
 	return r;
 }
@@ -371,7 +371,7 @@ void BlockObj::Read(const ProtocolReader& rd) {
 void BlockObj::Write(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 
-	CoinSerialized::WriteVarInt(wr, Ver);
+	CoinSerialized::WriteVarUInt64(wr, Ver);
 	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
 	if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::BlockParser || wr.ForHeader)
 		wr << MerkleRoot();
@@ -384,7 +384,7 @@ void BlockObj::Write(DbWriter& wr) const {
 void BlockObj::Read(const DbReader& rd) {
 	CoinEng& eng = Eng();
 
-	Ver = (uint32_t)CoinSerialized::ReadVarInt(rd);
+	Ver = (uint32_t)CoinSerialized::ReadVarUInt64(rd);
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
@@ -598,7 +598,7 @@ uint32_t Block::OffsetOfTx(const HashValue& hashTx) const {
 	ProtocolWriter wr(ms);
 	m_pimpl->WriteHeader(wr);
 	const CTxes& txes = m_pimpl->get_Txes();
-	CoinSerialized::WriteVarInt(wr, txes.size());
+	CoinSerialized::WriteVarUInt64(wr, txes.size());
 	for (size_t i=0; i<txes.size(); ++i) {
 		if (Hash(txes[i]) == hashTx)
 			return uint32_t(ms.Position);
@@ -821,7 +821,7 @@ void BlockHeader::Connect() const {
 	HashValue hashBlock = Hash(_self);
 #if UCFG_TRC
 	if (!(Height & 0x1FF)) {
-		TRC(4, "                \t" << Height << "\t" << hashBlock);
+		TRC(4, Height << "/" << hashBlock);
 	}
 #endif
 
@@ -893,7 +893,7 @@ void Block::Connect() const {
 	CoinEng& eng = Eng();
 	HashValue hashBlock = Hash(_self);
 	const CTxes& txes = get_Txes();
-	TRC(3, Height << " " << hashBlock <<  (eng.Mode == EngMode::Lite ? String() : EXT_STR(" " << setw(4) << txes.size() << " Txes")));
+	TRC(3, Height << "/" << hashBlock << (eng.Mode == EngMode::Lite ? String() : EXT_STR(" " << setw(4) << txes.size() << " Txes")));
 
 	Check(false);		// Check Again without bCheckMerkleRoot
 	int64_t nFees = 0;
@@ -1110,7 +1110,7 @@ bool BlockHeader::HasBestChainWork() const {
 	}
 
 	HashValue hashB = Hash(bestHeader);
-	for (BlockTreeItem bti=bestHeader; hashB!=hash && forkWork > work;) {
+	for (BlockTreeItem bti = bestHeader; hashB != hash && forkWork > work;) {
 		hashB = bti.PrevBlockHash;
 		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti.PrevBlockHash)).DifficultyTarget;
 	}
@@ -1140,29 +1140,28 @@ void BlockHeader::Accept() {
 			Throw(ExtErr::ThreadInterrupted);
 		if (Height <= eng.BestHeaderHeight() && eng.Tree.FindHeader(hash))
 			return;																	// RaceCondition check, header already accepted by parallel thread.
-		if (!HasBestChainWork()) {
-			TRC(2, "Fork detected: " << Height << " " << hash);
-			eng.Tree.Add(_self);
-		} else {
-			if (eng.BestBlock() && Hash(eng.BestHeader()) != get_PrevBlockHash())
-				eng.Reorganize(_self);
-			else {
+		if (HasBestChainWork()) {
+			if (!eng.BestBlock() || Hash(eng.BestHeader()) == get_PrevBlockHash())
 				Connect();
+			else {
+				eng.Reorganize(_self);
 			}
+		} else {
+			TRC(2, "Fork detected: " << Height << "/" << hash);
+			eng.Tree.Add(_self);
 		}
-//!!!?
-
-
 	}
 }
 
 void Block::Accept() {
 	CoinEng& eng = Eng();
 
-	if (!PrevBlockHash)
-		m_pimpl->Height = 0;
+	int height = 0;
+	HashValue hashPrev = PrevBlockHash;
+	if (!hashPrev)
+		m_pimpl->Height = height = 0;
 	else {
-		BlockHeader blockPrev = eng.Tree.FindHeader(PrevBlockHash);
+		BlockHeader blockPrev = eng.Tree.FindHeader(hashPrev);
 
 		Target targetNext = eng.GetNextTarget(blockPrev, _self);
 		if (get_DifficultyTarget() != targetNext) {
@@ -1175,7 +1174,7 @@ void Block::Accept() {
 			Throw(CoinErr::IncorrectProofOfWork);
 		}
 
-        m_pimpl->Height = blockPrev.Height + 1;
+        m_pimpl->Height = height = blockPrev.Height + 1;
         ContextualCheck(blockPrev);
 	}
 
@@ -1185,24 +1184,28 @@ void Block::Accept() {
 	EXT_LOCK (eng.Mtx) {
 		if (!eng.Runned)
 			Throw(ExtErr::ThreadInterrupted);
-		if (Height <= eng.BestBlockHeight() && eng.HaveBlock(hash))
+		Block blockBest = eng.BestBlock();
+		if (height <= blockBest.SafeHeight && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
 		bool bConnectToMainChain = IsInMainChain();
+		bool bReorganize = false;
 		if (!bConnectToMainChain) {
 			CheckAgainstCheckpoint();
 			if (BlockTreeItem bti = eng.Tree.FindInMap(hash)) {
 				eng.Tree.Add(_self);
 				return;
-			} else if (!(bConnectToMainChain = HasBestChainWork())) {
-				TRC(2, "Fork detected: " << Height << " " << hash);
+			} else if (!(bReorganize = HasBestChainWork())) {
+				TRC(2, "Fork detected: " << height << "/" << hash);
 				eng.Tree.Add(_self);
 				return;
 			}
 		}
-		if (eng.BestBlock() && Hash(eng.BestBlock()) != get_PrevBlockHash())
+		if (!blockBest || Hash(blockBest) == hashPrev)
+			Connect();
+		else if (bReorganize)
 			eng.Reorganize(_self);
 		else
-			Connect();
+			eng.Tree.Add(_self);
 
 		bool bNotifyWallet = !eng.Events.Subscribers.empty() && !eng.IsInitialBlockDownload();
 		if (bNotifyWallet || !(Height % eng.CommitPeriod))
@@ -1247,7 +1250,7 @@ LAB_AGAIN:
 				Throw(ExtErr::ThreadInterrupted);
 			Block blk(nullptr);
 			EXT_LOCK (eng.Caches.Mtx) {
-				for (ChainCaches::COrphanMap::iterator it=eng.Caches.OrphanBlocks.begin(); it!=eng.Caches.OrphanBlocks.end(); ++it) {
+				for (ChainCaches::COrphanMap::iterator it = eng.Caches.OrphanBlocks.begin(); it != eng.Caches.OrphanBlocks.end(); ++it) {
 					Block& blockNext = it->second.first;
 					if (blockNext.PrevBlockHash == h) {
 						blk = blockNext;
@@ -1279,12 +1282,12 @@ LAB_AGAIN:
 		if (BlockTreeItem bti = eng.Tree.FindHeader(hash)) {
 			m_pimpl->Height = bti.Height;
 			eng.Tree.Add(_self);
-			TRC(4, "requested    \t" << bti.Height << "\t" << hash << " added to Tree");
+			TRC(4, "requested " << bti.Height << "/" << hash << " added to Tree");
 		} else {
 			EXT_LOCK(eng.Caches.Mtx) {
 				eng.Caches.OrphanBlocks.insert(make_pair(hash, _self));
 
-				TRC(4, "B \t" << hash << " added to OrphanBlocks.size= " << eng.Caches.OrphanBlocks.size());
+				TRC(4, "B " << hash << " added to OrphanBlocks.size= " << eng.Caches.OrphanBlocks.size());
 			}
 		}
 	} else {

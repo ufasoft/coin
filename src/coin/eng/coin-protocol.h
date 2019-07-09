@@ -17,21 +17,23 @@ namespace Coin {
 class ProtocolVersion {
 public:
 	static const uint32_t
-		PROTOCOL_VERSION			= 70015,
-		INVALID_CB_NO_BAN_VERSION	= 70015,
-		SHORT_IDS_BLOCKS_VERSION	= 70014,
-		FEEFILTER_VERSION			= 70013,	// BIP133
-		SENDHEADERS_VERSION			= 70012,
-		NO_BLOOM_VERSION			= 70011,
-		MIN_PEER_PROTO_VERSION		= 31800;				//  "getheaders" message
+		PROTOCOL_VERSION			= 70015
+		, INVALID_CB_NO_BAN_VERSION	= 70015
+		, SHORT_IDS_BLOCKS_VERSION	= 70014
+		, FEEFILTER_VERSION			= 70013		// BIP133
+		, SENDHEADERS_VERSION		= 70012
+		, NO_BLOOM_VERSION			= 70011
+		, MIN_PEER_PROTO_VERSION	= 31800;	//  "getheaders" message
 };
 
 class ProtocolParam {
 public:
 	static const unsigned
-		MAX_INV_SZ			= 50000,
-		MAX_ADDR_SZ			= 1000,
-		MAX_LOCATOR_SZ		= 101;
+		MAX_PROTOCOL_MESSAGE_LENGTH = 4 * 1000 * 1000
+		, MAX_INV_SZ			= 50000
+		, MAX_ADDR_SZ			= 1000
+		, MAX_LOCATOR_SZ		= 101
+		, MAX_HEADERS_RESULTS = 2000;
 };
 
 struct MessageHeader {
@@ -55,29 +57,22 @@ ENUM_CLASS(InventoryType) {
 
 class Inventory : public CPersistent, public CPrintable {
 public:
-	InventoryType Type;
 	Coin::HashValue HashValue;
+	InventoryType Type;
 
 	Inventory() {}
 
 	Inventory(InventoryType typ, const Coin::HashValue& hash)
-		:	Type(typ)
-		,	HashValue(hash)
+		: Type(typ)
+		, HashValue(hash)
 	{}
 
 	bool operator==(const Inventory& inv) const {
-		return Type==inv.Type && HashValue==inv.HashValue;
+		return Type == inv.Type && HashValue == inv.HashValue;
 	}
 
-	void Write(BinaryWriter& wr) const override {
-		wr << uint32_t(Type) << HashValue;
-	}
-
-	void Read(const BinaryReader& rd) override {
-		uint32_t typ;
-		rd >> typ >> HashValue;
-		Type = InventoryType(typ);
-	}
+	void Write(BinaryWriter& wr) const override;
+	void Read(const BinaryReader& rd) override;
 protected:
 	void Print(ostream& os) const override;
 };
@@ -93,29 +88,35 @@ protected:
 class Link : public P2P::Link {
 	typedef P2P::Link base;
 public:
+	HashValue
+		HashContinue,
+		HashBlockLastUnknown,
+		HashBlockLastCommon,
+		HashBlockBestKnown,
+		HashBestHeaderSent;
+
 	LruCache<Inventory> KnownInvertorySet;
 
 	typedef unordered_set<Inventory> CInvertorySetToSend;
 	CInvertorySetToSend InvertorySetToSend;
 
-	HashValue HashContinue;
-	HashValue HashBlockLastUnknown;
-	HashValue HashBlockLastCommon, HashBlockBestKnown, HashBestHeaderSent;
-
 	Block m_curMerkleBlock;
 	vector<HashValue> m_curMatchedHashes;
 
+	//-- locked by Eng.Mtx
 	BlocksInFlightList BlocksInFlight;
+	//----
 
 	mutex MtxFilter;
 	ptr<CoinFilter> Filter;
-	int64_t MinFeeRate;
+	atomic<int64_t> MinFeeRate;
 	uint64_t PingNonceSent;
 	int32_t LastReceivedBlock;
 
 	CBool
 		RelayTxes,
 		IsClient,
+		IsLimitedNode,
         IsPreferredDownload,
         IsSyncStarted,
         HaveWitness,
@@ -133,6 +134,8 @@ public:
 	bool HasHeader(const BlockHeader& header);
 protected:
 	void OnPeriodic(const DateTime& now) override;
+private:
+	void SetHashBlockBestKnown(const HashValue& hash);
 };
 
 class VersionMessage : public CoinMessage {
@@ -196,13 +199,14 @@ public:
 	vector<Inventory> Invs;
 protected:
 	InvGetDataMessage(const char *cmd)
-		:	base(cmd)
+		: base(cmd)
 	{}
 
+	void Print(ostream& os) const override;
+	void Trace(Link& link, bool bSend) const override;
 	void Write(ProtocolWriter& wr) const override;
 	void Read(const ProtocolReader& rd) override;
 	void Process(Link& link) override;
-	void Print(ostream& os) const override;
 };
 
 class InvMessage : public InvGetDataMessage {
@@ -235,6 +239,14 @@ public:
 	void Process(Link& link) override;
 };
 
+class SendHeadersMessage : public CoinMessage {
+	typedef CoinMessage base;
+public:
+	SendHeadersMessage() : base("sendheaders") {}
+protected:
+	void Process(Link& link) override;
+};
+
 class HeadersMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
@@ -253,8 +265,8 @@ protected:
 class GetHeadersGetBlocksMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
-	LocatorHashes Locators;
 	HashValue HashStop;
+	LocatorHashes Locators;
 	uint32_t Ver;
 
 	GetHeadersGetBlocksMessage(const char *cmd)
@@ -305,6 +317,7 @@ public:
 
 	void Process(Link& link) override;
 protected:
+	void Trace(Link& link, bool bSend) const override;
 	void Write(ProtocolWriter& wr) const override;
 	void Read(const ProtocolReader& rd) override;
 	void Print(ostream& os) const override;
@@ -314,6 +327,8 @@ class BlockMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
 	Coin::Block Block;
+	uint64_t Offset;
+	uint32_t Size;
 
 	BlockMessage(const Coin::Block& block = nullptr, const char *cmd = "block")
 		: base(cmd)
@@ -395,12 +410,10 @@ public:
 class PingMessage : public PingPongMessage {
 	typedef PingPongMessage base;
 public:
-	PingMessage()
+	PingMessage(int64_t nonce = 0)
 		: base("ping")
 	{
-		do {
-			Ext::Random().NextBytes(span<uint8_t>((uint8_t*)& Nonce, sizeof Nonce));
-		} while (Nonce == 0);
+		Nonce = nonce;
 	}
 
 	void Read(const ProtocolReader& rd) override;
@@ -423,7 +436,7 @@ class MemPoolMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
 	MemPoolMessage()
-		:	base("mempool")
+		: base("mempool")
 	{}
 
 	void Process(Link& link) override;
@@ -493,16 +506,16 @@ protected:
 };
 
 ENUM_CLASS(RejectReason) {
-	Malformed 	= 1,
-	Invalid 	= 0x10,
-	Obsolete	= 0x11,
-	Duplicate	= 0x12,
-	NonStandard	= 0x40,
-	Dust		= 0x41,
-	InsufficientFee	= 0x42,
-	CheckPoint		= 0x43,
-	TxMissingInputs = 0x44,
-		TxPrematureSpend = 0x45
+	Malformed 			= 1
+	, Invalid 			= 0x10
+	, Obsolete			= 0x11
+	, Duplicate			= 0x12
+	, NonStandard		= 0x40
+	, Dust				= 0x41
+	, InsufficientFee	= 0x42
+	, CheckPoint		= 0x43
+	, TxMissingInputs	= 0x44
+	, TxPrematureSpend	= 0x45
 } END_ENUM_CLASS(RejectReason);
 
 class RejectMessage : public CoinMessage {
@@ -526,21 +539,17 @@ protected:
 	void Process(Link& link) override;
 };
 
-class SendHeadersMessage : public CoinMessage {
-    typedef CoinMessage base;
-public:
-    SendHeadersMessage() : base("sendheaders") {}
-protected:
-    void Process(Link& link) override;
-};
-
 class FeeFilterMessage : public CoinMessage {
     typedef CoinMessage base;
 public:
     int64_t MinFeeRate;
 
-    FeeFilterMessage() : base("feefilter") {}
+    FeeFilterMessage(int64_t minFeeRate = 0)
+		: base("feefilter")
+		, MinFeeRate(minFeeRate)
+	{}
 protected:
+	void Print(ostream& os) const override;
     void Write(ProtocolWriter& wr) const override;
     void Read(const ProtocolReader& rd) override;
     void Process(Link& link) override;
@@ -552,7 +561,11 @@ public:
 	uint64_t CompactBlockVersion;
 	bool Announce;
 
-    SendCompactBlockMessage() : base("sendcmpct") {}
+    SendCompactBlockMessage(uint64_t compactBlockVersion = 0, bool announce = false)
+		: base("sendcmpct")
+		, CompactBlockVersion(compactBlockVersion)
+		, Announce(announce)
+	{}
 protected:
     void Write(ProtocolWriter& wr) const override;
     void Read(const ProtocolReader& rd) override;
@@ -583,7 +596,8 @@ public:
 protected:
     void Write(ProtocolWriter& wr) const override;
     void Read(const ProtocolReader& rd) override;
-    void Process(Link& link) override;
+	void Print(ostream& os) const override;
+	void Process(Link& link) override;
 private:
 	static ShortTxId GetShortTxId(const HashValue& hash, const uint64_t keys[2]);
 };

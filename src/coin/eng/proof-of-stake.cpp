@@ -219,7 +219,7 @@ HashValue PosBlockObj::HashProofOfStake() const {
 		MemoryStream msBlock;
 		ProtocolWriter wrPrev(msBlock);
 		blockPrev.WriteHeader(wrPrev);
-		CoinSerialized::WriteVarInt(wrPrev, blockPrev.get_Txes().size());
+		CoinSerialized::WriteVarUInt64(wrPrev, blockPrev.get_Txes().size());
 		EXT_FOR (const Tx& t, blockPrev.get_Txes()) {
 			if (Coin::Hash(t) == txIn.PrevOutPoint.TxHash) {
 				wr << uint32_t(Span(msBlock).size());

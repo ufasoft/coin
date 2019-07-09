@@ -32,13 +32,11 @@ LiteEntry *BuildLiteEntryIndex(PageHeader& h, void *raw, int n, uint32_t pageSiz
 			p += (keySize ? keySize - keyOffset : 1 + p[0]) + 4;
 		}
 	} else {
-		uint8_t *q = p;
-		for (int i = 0; i < n; ++i, q = p) {
-			entries[i].P = p;
-			pair<Span, uint64_t> qq = entries[i].LocalData(pageSize, keySize, keyOffset);
-			p = (uint8_t*)qq.first.data();
+		for (LiteEntry *entry = entries, *end = entries + n; entry != end; ++entry) {
+			entry->P = p;
+			pair<Span, uint64_t> qq = entry->LocalData(pageSize, keySize, keyOffset);
 			size_t cbLocal = qq.first.size();
-			p += cbLocal + (cbLocal != qq.second ? 4 : 0);
+			p = (uint8_t*)qq.first.data() + cbLocal + (cbLocal != qq.second ? 4 : 0);
 		}
 	}
 	entries[n].P = p;
@@ -624,7 +622,7 @@ void BTreeCursor::PageTouch(int height) {
 		CopyPage(page, np, Tree->KeySize);
 		tx.FreePage(page);
 
-		int t = Path.size()-1;
+		int t = Path.size() - 1;
 		EXT_FOR (CursorObj& co, Tree->Cursors) {
 			BTreeCursor& c = dynamic_cast<BTreeCursor&>(co);
 			if (&c != this && c.Path.size() > t && c.Path[t].Page == page)

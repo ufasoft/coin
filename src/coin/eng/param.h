@@ -17,13 +17,15 @@ const size_t MAX_BLOOM_FILTER_SIZE = 36000; // bytes
 const int MAX_HASH_FUNCS = 50;
 
 
-const int MAX_SEND_SIZE = 1000000;
-
 const int
-	MAX_BLOCKS_IN_TRANSIT_PER_PEER = 32,				// 16 in the reference client
-	BLOCK_DOWNLOAD_WINDOW = 1024,						// at least 1024 is recommended for some non-sorted bootstrap.dat files
-	MAX_HEADERS_RESULTS	= 2000;
+	MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16,
+	BLOCK_DOWNLOAD_WINDOW = 1024;					// at least 1024 is recommended for some non-sorted bootstrap.dat files
 
+const seconds BLOCK_STALLING_TIMEOUT = seconds(2);			// seconds
+
+static const int64_t
+	DEFAULT_TRANSACTION_MINFEE = 1000,
+    DEFAULT_MIN_RELAY_TX_FEE = 1000;
 
 //!!!static const int64_t MIN_TX_FEE = 50000;
 //!!!static const int64_t MIN_RELAY_TX_FEE = 10000;
@@ -36,6 +38,8 @@ const int SECONDS_RESEND_PERIODICITY = 15 * 60;
 const size_t MAX_LAST_SPENT_TXES = 5000;
 
 const int PRUNE_UPTO_LAST_BLOCKS = 1000;	// # Max depth of Blockchain Reorganization after fork
+
+const int TRC_LEVEL_TX_MESSAGE = 6;
 
 } // Coin::
 
@@ -83,4 +87,3 @@ const int PRUNE_UPTO_LAST_BLOCKS = 1000;	// # Max depth of Blockchain Reorganiza
 #ifndef UCFG_COIN_CONF_FILENAME
 #	define UCFG_COIN_CONF_FILENAME "coin.conf"
 #endif
-

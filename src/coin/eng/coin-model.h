@@ -50,9 +50,14 @@ class Link;
 class NodeServices {
 public:
 	static const uint64_t
-		NODE_NETWORK = 1,
-		NODE_GETUTXO = 2,
-		NODE_WITNESS = 8;
+		NODE_NETWORK = 1
+		, NODE_GETUTXO = 2
+		, NODE_BLOOM = 4
+		, NODE_WITNESS = 8
+		, NODE_XTHIN = 16
+		, NODE_NETWORK_LIMITED = 0x400;
+
+	static String ToString(uint64_t s);
 };
 
 const int BLOCK_VERSION_AUXPOW = 256;
@@ -1044,8 +1049,9 @@ class TxoMap : public ITxoMap {
 		{}
 	};
 
-	mutable unordered_map<OutPoint, Entry> m_map;
 	mutable mutex m_mtx;
+	mutable unordered_map<OutPoint, Entry> m_map;
+	//----
 public:
 	TxoMap(CoinEng& eng) : m_eng(eng) {}
 	void Add(const OutPoint& op, int height);

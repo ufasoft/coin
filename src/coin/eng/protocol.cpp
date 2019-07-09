@@ -9,7 +9,7 @@
 using namespace Ext::Crypto;
 
 #ifndef UCFG_COIN_BIP0014_USER_AGENT
-#	define UCFG_COIN_BIP0014_USER_AGENT ("/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR "/")
+#	define UCFG_COIN_BIP0014_USER_AGENT ("/" UCFG_MANUFACTURER " " VER_PRODUCTNAME_STR ":" VER_PRODUCTVERSION_STR3 "/")
 #endif
 
 
@@ -187,6 +187,24 @@ CoinMessage *CoinEng::CreateCheckPointMessage() {
 	return new CoinMessage("checkpoint");
 }
 
+String NodeServices::ToString(uint64_t s) {
+	ostringstream os;
+	if (s & NODE_NETWORK)
+		os << "NODE_NETWORK";
+	if (s & NODE_GETUTXO)
+		os << " NODE_GETUTXO";
+	if (s & NODE_BLOOM)
+		os << " NODE_BLOOM";
+	if (s & NODE_WITNESS)
+		os << " NODE_WITNESS";
+	if (s & NODE_XTHIN)
+		os << " NODE_XTHIN";
+	if (s & NODE_NETWORK_LIMITED)
+		os << " NODE_NETWORK_LIMITED";
+	if (s & ~(NODE_NETWORK | NODE_GETUTXO | NODE_BLOOM | NODE_WITNESS | NODE_XTHIN | NODE_NETWORK_LIMITED))
+		os << " " << hex << showbase << s;
+	return os.str();
+}
 
 ptr<CoinMessage> CoinMessage::ReadFromStream(Link& link, const BinaryReader& rd) {
 	CoinEng& eng = Eng();
@@ -201,7 +219,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(Link& link, const BinaryReader& rd)
 		uint32_t len = rd.ReadUInt32(),
 			checksum = rd.ReadUInt32();
 
-		if (0 != cmd[sizeof(cmd)-1] || len > MAX_PROTOCOL_MESSAGE_LENGTH)
+		if (0 != cmd[sizeof(cmd)-1] || len > ProtocolParam::MAX_PROTOCOL_MESSAGE_LENGTH)
 			Throw(ExtErr::Protocol_Violation);
 
 		if (auto omfn = Lookup(MessageClassFactoryBase::s_map, String(cmd)))
@@ -237,7 +255,11 @@ void CoinMessage::Read(const ProtocolReader& rd) {
 }
 
 void CoinMessage::Print(ostream& os) const {
-	os << Cmd << "\t";
+	os << Cmd << " ";
+}
+
+void CoinMessage::Trace(Coin::Link& link, bool bSend) const {
+	TRC(4, (bSend ? "Sending  " : "Received ") << link.Peer->get_EndPoint().Address << ": " << _self);
 }
 
 void CoinMessage::ProcessMsg(P2P::Link& link) {
@@ -280,36 +302,36 @@ void VersionMessage::Read(const ProtocolReader& rd) {
 
 void VersionMessage::Print(ostream& os) const {
 	base::Print(os);
-	os << "Ver: " << ProtocolVer << ", " << UserAgent << ", LastBlock: " << LastReceivedBlock << ", Services: " << Services;
+	os << "Ver: " << ProtocolVer << ", " << UserAgent
+		<< ", LastBlock: " << LastReceivedBlock;
+	if (Timestamp != DateTime())
+		os << ", Time offset: " << duration_cast<seconds>(RemoteTimestamp - Timestamp).count() << "s";
+	os << ", Services: " << NodeServices::ToString(Services);
 }
 
 void VerackMessage::Process(Link& link) {
 	CoinEng& eng = Eng();
 	eng.RemoveVerNonce(link);
 
-	if (link.PeerVersion >= ProtocolVersion::SENDHEADERS_VERSION)
-		link.Send(eng.CreateSendHeadersMessage());
+	if (link.PeerVersion < ProtocolVersion::SENDHEADERS_VERSION)
+		return;
+	link.Send(new SendHeadersMessage);
 
-	if (link.PeerVersion >= ProtocolVersion::SHORT_IDS_BLOCKS_VERSION) {
-		ptr<SendCompactBlockMessage> m;
-		if (link.HaveWitness) {
-			m = new SendCompactBlockMessage;
-			m->Announce = false;
-			m->CompactBlockVersion = 2;
-			link.Send(m);
-		}
-		m = new SendCompactBlockMessage;
-		m->Announce = false;
-		m->CompactBlockVersion = 1;
-		link.Send(m);
-	}
+	if (link.PeerVersion < ProtocolVersion::FEEFILTER_VERSION)
+		return;
+	if (g_conf.MinRelayTxFee)
+		link.Send(new FeeFilterMessage(g_conf.MinRelayTxFee));
+
+	if (link.PeerVersion < ProtocolVersion::SHORT_IDS_BLOCKS_VERSION)
+		return;
+	if (link.HaveWitness)
+		link.Send(new SendCompactBlockMessage(2, false));
+	link.Send(new SendCompactBlockMessage(1, false));
 }
-
 
 void CoinEng::SendVersionMessage(Link& link) {
 	ptr<VersionMessage> m = (VersionMessage*)CreateVersionMessage();
 	m->UserAgent = UCFG_COIN_BIP0014_USER_AGENT;		// BIP 0014
-	m->RemoteTimestamp = Clock::now();
 	GetSystemURandomReader() >> m->Nonce;
 	EXT_LOCK(m_mtxVerNonce) {
 		m_nonce2link[m->Nonce] = &link;
@@ -318,11 +340,13 @@ void CoinEng::SendVersionMessage(Link& link) {
 		m->LocalPeerInfo.Ep = NetManager.LocalEp4;		//!!!? IPv6
 	m->RemotePeerInfo.Ep = link.Tcp.Client.RemoteEndPoint;
 	m->LastReceivedBlock = BestBlockHeight();
+	m->RemoteTimestamp = Clock::now();
 	link.Send(m);
 }
 
 void GetAddrMessage::Process(Link& link) {
-	if (link.Incoming) {
+	if (link.Incoming && !link.SentOtherPeersAddresses) {
+		link.SentOtherPeersAddresses = true;
 		EXT_LOCK(link.Mtx) {
 			link.m_setPeersToSend.clear();
 		}
@@ -380,16 +404,16 @@ int LocatorHashes::FindHeightInMainChain(bool bFullBlocks) const {
 
 void BlockObj::WriteHeaderInMessage(ProtocolWriter& wr) const {
 	WriteHeader(wr);
-	CoinSerialized::WriteVarInt(wr, 0);
+	CoinSerialized::WriteVarUInt64(wr, 0);
 }
 
 void BlockObj::ReadHeaderInMessage(const ProtocolReader& rd) {
 	ReadHeader(rd, false, 0);
-	CoinSerialized::ReadVarInt(rd);		// tx count unused
+	CoinSerialized::ReadVarUInt64(rd);		// tx count unused
 }
 
 void HeadersMessage::Write(ProtocolWriter& wr) const {
-	CoinSerialized::WriteVarInt(wr, Headers.size());
+	CoinSerialized::WriteVarUInt64(wr, Headers.size());
 	EXT_FOR (const BlockHeader& header, Headers) {
 		header.m_pimpl->WriteHeaderInMessage(wr);
 	}
@@ -398,18 +422,20 @@ void HeadersMessage::Write(ProtocolWriter& wr) const {
 void HeadersMessage::Read(const ProtocolReader& rd) {
 	CoinEng& eng = Eng();
 
-	Headers.resize((size_t)CoinSerialized::ReadVarInt(rd));
-	for (int i=0; i<Headers.size(); ++i) {
-		(Headers[i] = BlockHeader(eng.CreateBlockObj())).m_pimpl->ReadHeaderInMessage(rd);
+	Headers.resize(CoinSerialized::ReadVarSize(rd));
+	for (int i = 0; i < Headers.size(); ++i) {
+		(Headers[i] = BlockHeader(eng.CreateBlockObj()))->ReadHeaderInMessage(rd);
 	}
 }
 
 void HeadersMessage::Print(ostream& os) const {
+	CoinEng& eng = Eng();
+
 	base::Print(os);
 	os << Headers.size() << " headers:";
-	for (int i=0; i<Headers.size(); ++i) {
+	for (int i = 0; i < Headers.size(); ++i) {
 		if (i < 2 || i == Headers.size()-1)
-			os << " " << Hash(Headers[i]);
+			os << " " << eng.BlockStringId(Hash(Headers[i]));
 		else if (i == 2)
 			os << " ...";
 	}
@@ -428,15 +454,18 @@ void GetHeadersGetBlocksMessage::Read(const ProtocolReader& rd) {
 }
 
 void GetHeadersGetBlocksMessage::Print(ostream& os) const {
+	CoinEng& eng = Eng();
+
 	base::Print(os);
-	for (int i=0; i<Locators.size(); ++i) {
-		if (i >= 2) {
-			os << " ... ";
-			break;
-		}
-		os << Locators[i] << " ";
+	bool bDotsPrinted = false;
+	for (int i = 0; i < Locators.size(); ++i) {
+		if (i >= 2 && i + 2 < Locators.size()) {
+			if (!exchange(bDotsPrinted, true))
+				os << " ... ";
+		} else
+			os << eng.BlockStringId(Locators[i]) << "  ";
 	}
-	os << " HashStop: " << HashStop;
+	os << " Stop block: " << eng.BlockStringId(HashStop);
 }
 
 void GetHeadersGetBlocksMessage::Set(const HashValue& hashLast, const HashValue& hashStop) {
@@ -480,17 +509,31 @@ void GetHeadersMessage::Process(Link& link) {
 		link.Send(m);
 }
 
+void Inventory::Write(BinaryWriter& wr) const {
+	wr << uint32_t(Type) << HashValue;
+}
+
+void Inventory::Read(const BinaryReader& rd) {
+	uint32_t typ;
+	rd >> typ >> HashValue;
+	Type = InventoryType(typ);
+}
+
 void Inventory::Print(ostream& os) const {
 	switch (Type) {
-	case InventoryType::MSG_TX: os << "MSG_TX"; break;
-	case InventoryType::MSG_WITNESS_TX: os << "MSG_WITNESS_TX"; break;
-	case InventoryType::MSG_BLOCK: os << "MSG_BLOCK"; break;
-	case InventoryType::MSG_WITNESS_BLOCK: os << "MSG_WITNESS_BLOCK"; break;
-	case InventoryType::MSG_FILTERED_BLOCK: os << "MSG_FILTERED_BLOCK"; break;
+	case InventoryType::MSG_TX:						os << "MSG_TX";						break;
+	case InventoryType::MSG_WITNESS_TX:				os << "MSG_WITNESS_TX";				break;
+	case InventoryType::MSG_BLOCK:					os << "MSG_BLOCK";					break;
+	case InventoryType::MSG_WITNESS_BLOCK:			os << "MSG_WITNESS_BLOCK";			break;
+	case InventoryType::MSG_FILTERED_BLOCK:			os << "MSG_FILTERED_BLOCK";			break;
 	case InventoryType::MSG_FILTERED_WITNESS_BLOCK: os << "MSG_FILTERED_WITNESS_BLOCK"; break;
-	default: os << "0x" << hex << (int)Type;
+	default:										os << hex << showbase << (int)Type;
 	}
-	os << " " << HashValue;
+	os << " ";
+	if (((int)Type & ~(int)InventoryType::MSG_WITNESS_FLAG) == (int)InventoryType::MSG_BLOCK || ((int)Type & ~(int)InventoryType::MSG_WITNESS_FLAG) == (int)InventoryType::MSG_FILTERED_BLOCK)
+		os << Eng().BlockStringId(HashValue);
+	else
+		os << HashValue;
 }
 
 GetBlocksMessage::GetBlocksMessage(const HashValue& hashLast, const HashValue& hashStop)
@@ -630,7 +673,8 @@ void Link::OnPeriodic(const DateTime& now) {
 	}
 
 	RequestHeaders();
-	RequestBlocks();
+	if (HaveWitness || eng.BestBlock().SafeHeight < eng.ChainParams.SegwitHeight)
+		RequestBlocks();
 }
 
 void Link::Push(const Inventory& inv) {
@@ -644,7 +688,7 @@ void Link::Send(ptr<P2P::Message> msg) {
 	CoinMessage& m = *static_cast<CoinMessage*>(msg.get());
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
-	TRC(2, Peer->get_EndPoint().Address << " send " << m);
+	m.Trace(_self, true);
 
     MemoryStream stm;
     ProtocolWriter wr(stm);
@@ -673,7 +717,7 @@ void FilterLoadMessage::Write(ProtocolWriter& wr) const {
 
 void FilterLoadMessage::Read(const ProtocolReader& rd) {
 	rd >> *(Filter = new CoinFilter);
-	if ((Filter->Bitset.size()+7)/8 > MAX_BLOOM_FILTER_SIZE || Filter->HashNum > MAX_HASH_FUNCS)
+	if ((Filter->Bitset.size() + 7) / 8 > MAX_BLOOM_FILTER_SIZE || Filter->HashNum > MAX_HASH_FUNCS)
 		throw PeerMisbehavingException(100);
 }
 
@@ -706,7 +750,7 @@ void RejectMessage::Write(ProtocolWriter& wr) const {
 	WriteString(wr, Command);
 	wr << (uint8_t)Code;
 	WriteString(wr, Reason);
-	if (Command=="block" || Command=="tx")
+	if (Command == "block" || Command == "tx")
 		wr << Hash;
 }
 
@@ -714,7 +758,7 @@ void RejectMessage::Read(const ProtocolReader& rd) {
 	Command = ReadString(rd);
 	Code = (RejectReason)rd.ReadByte();
 	Reason = ReadString(rd);
-	if (Command=="block" || Command=="tx")
+	if (Command == "block" || Command == "tx")
 		rd >> Hash;
 }
 
@@ -722,11 +766,7 @@ void RejectMessage::Print(ostream& os) const {
 	base::Print(os);
 	if (LinkPtr)
 		os << "From " << LinkPtr->Peer->get_EndPoint() << ": ";
-	os << "Reject to command " << Command << ": " << Reason;
-#ifdef _DEBUG//!!!D
-	if (Reason != "insufficient priority")
-		os << "";
-#endif
+	os << "to command " << Command << ": " << Reason;
 	if (Command == "block" || Command == "tx")
 		os << " " << Hash;
 }
@@ -752,13 +792,28 @@ void InvGetDataMessage::Process(Link& link) {
 void InvGetDataMessage::Print(ostream& os) const {
 	base::Print(os);
 	os << Invs.size() << " invs: ";
-	for (int i = 0; i < Invs.size(); ++i) {
-		if (i > 18) {
-			os << " ... ";
+	int n = 0;
+	for (auto& inv : Invs) {
+		if (n > 18) {
+			os << "...";
 			break;
 		}
-		os << (i ? ", " : "     ") << Invs[i];
+		if (inv.Type != InventoryType::MSG_TX && inv.Type != InventoryType::MSG_WITNESS_TX || (CTrace::s_nLevel & (1 << TRC_LEVEL_TX_MESSAGE))) {
+			os << (n ? ", " : "   ") << inv;
+			++n;
+		}
 	}
+}
+
+void InvGetDataMessage::Trace(Link& link, bool bSend) const {
+	if (!(CTrace::s_nLevel & (1 << TRC_LEVEL_TX_MESSAGE))) {
+		for (auto& inv : Invs)
+			if (inv.Type != InventoryType::MSG_TX && inv.Type != InventoryType::MSG_WITNESS_TX)
+				goto LAB_TRACE;
+		return;
+	}
+LAB_TRACE:
+	base::Trace(link, bSend);
 }
 
 vector<Tx> MerkleBlockMessage::Init(const Coin::Block& block, CoinFilter& filter) {
@@ -818,7 +873,10 @@ void TxMessage::Print(ostream& os) const {
 }
 
 void BlockMessage::Write(ProtocolWriter& wr) const {
-	Block.Write(wr);
+	if (Block)
+		Block.Write(wr);
+	else
+		Eng().Db->CopyTo(Offset, Size, wr.BaseStream);
 }
 
 void BlockMessage::Read(const ProtocolReader& rd) {
@@ -828,9 +886,7 @@ void BlockMessage::Read(const ProtocolReader& rd) {
 
 void BlockMessage::Print(ostream& os) const {
 	base::Print(os);
-	if (Block.Height >= 0)
-		os << Block.Height << "\t";
-	os << Hash(Block);
+	os << Eng().BlockStringId(Hash(Block));
 }
 
 bool CoinEng::CheckSelfVerNonce(uint64_t nonce) {
@@ -865,7 +921,8 @@ void VersionMessage::Process(Link& link) {
 		link.TimeOffset = RemoteTimestamp - Timestamp;
 		link.LastReceivedBlock = LastReceivedBlock;
 		link.RelayTxes = RelayTxes;
-		link.IsClient = !(Services & NodeServices::NODE_NETWORK);
+		link.IsClient = !(Services & NodeServices::NODE_NETWORK) && !(Services & NodeServices::NODE_NETWORK_LIMITED);
+		link.IsLimitedNode = !(Services & NodeServices::NODE_NETWORK) && (Services & NodeServices::NODE_NETWORK_LIMITED);
         link.HaveWitness = Services & NodeServices::NODE_WITNESS;
 		link.Peer->Services = Services;
 
@@ -873,7 +930,7 @@ void VersionMessage::Process(Link& link) {
 
 		if (link.Incoming)
 			eng.SendVersionMessage(link);
-		link.Send(eng.CreateVerackMessage());
+		link.Send(new VerackMessage);
 
 		if (!link.Incoming)
 			link.Send(new GetAddrMessage);
@@ -937,6 +994,11 @@ void SendHeadersMessage::Process(Link& link) {
     link.PreferHeaders = true;
 }
 
+void FeeFilterMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << "MinFeeRate: " << MinFeeRate;
+}
+
 void FeeFilterMessage::Write(ProtocolWriter& wr) const {
     wr << MinFeeRate;
 }
@@ -946,16 +1008,16 @@ void FeeFilterMessage::Read(const ProtocolReader& rd) {
 }
 
 void FeeFilterMessage::Process(Link& link) {
-	link.MinFeeRate = MinFeeRate;
+	link.MinFeeRate.store(MinFeeRate);
 }
 
 ProtocolWriter& operator<<(ProtocolWriter& wr, const CompactSize& cs) {
-    CoinSerialized::WriteVarInt(wr, cs);
+    CoinSerialized::WriteVarUInt64(wr, cs);
     return wr;
 }
 
 const ProtocolReader& operator>>(const ProtocolReader& rd, CompactSize& cs) {
-    auto v = CoinSerialized::ReadVarInt(rd);
+    auto v = CoinSerialized::ReadVarUInt64(rd);
     if (v > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     cs = CompactSize((uint16_t)v);
@@ -1015,10 +1077,10 @@ void CompactBlockMessage::Write(ProtocolWriter& wr) const {
     wr << Nonce;
     CoinSerialized::Write(wr, ShortTxIds);
 
-    CoinSerialized::WriteVarInt(wr, PrefilledTxes.size());
+    CoinSerialized::WriteVarUInt64(wr, PrefilledTxes.size());
     uint16_t prev = uint16_t(-1);
     for (auto& pp : PrefilledTxes) {
-        CoinSerialized::WriteVarInt(wr, pp.first - exchange(prev, pp.first) - 1);
+        CoinSerialized::WriteVarUInt64(wr, pp.first - exchange(prev, pp.first) - 1);
         pp.second.Write(wr);
     }
 }
@@ -1031,12 +1093,12 @@ void CompactBlockMessage::Read(const ProtocolReader& rd) {
     rd >> Nonce;
     CoinSerialized::Read(rd, ShortTxIds);
 
-    auto size = CoinSerialized::ReadVarInt(rd);
+    auto size = CoinSerialized::ReadVarUInt64(rd);
     if (size > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     PrefilledTxes.resize((size_t)size);
     for (size_t i = 0; i < PrefilledTxes.size(); ++i) {
-        auto off = CoinSerialized::ReadVarInt(rd);
+        auto off = CoinSerialized::ReadVarUInt64(rd);
         auto idx = off + (i ? PrefilledTxes[i - 1].first + 1 : 0);
         if (off > UINT16_MAX || idx > UINT16_MAX)
             Throw(ExtErr::Protocol_Violation);
@@ -1044,25 +1106,43 @@ void CompactBlockMessage::Read(const ProtocolReader& rd) {
     }
 }
 
+void CompactBlockMessage::Print(ostream& os) const {
+	base::Print(os);
+	os << Eng().BlockStringId(Hash(Header));
+}
+
 void CompactBlockMessage::Process(Link& link) {
+	CoinEng& eng = Eng();
+
+	if (!eng.Tree.FindInMap(Header.PrevBlockHash)) {
+		BlockHeader bh = eng.BestHeader();
+		link.Send(new GetHeadersMessage(bh ? Hash(bh) : HashValue()));
+		return;
+	}
+
+	vector<BlockHeader> headers(1, Header);
+	if (BlockHeader headerLast = eng.ProcessNewBlockHeaders(headers)) {
+		link.UpdateBlockAvailability(Hash(headerLast));
+	} else
+		return;
 }
 
 void GetBlockTransactionsMessage::Write(ProtocolWriter& wr) const {
     wr << HashBlock;
-    CoinSerialized::WriteVarInt(wr, Indexes.size());
+    CoinSerialized::WriteVarUInt64(wr, Indexes.size());
     uint16_t prev = uint16_t(-1);
     for (auto idx : Indexes)
-        CoinSerialized::WriteVarInt(wr, idx - exchange(prev, idx) - 1);
+        CoinSerialized::WriteVarUInt64(wr, idx - exchange(prev, idx) - 1);
 }
 
 void GetBlockTransactionsMessage::Read(const ProtocolReader& rd) {
     rd >> HashBlock;
-    auto n = CoinSerialized::ReadVarInt(rd);
+    auto n = CoinSerialized::ReadVarUInt64(rd);
     if (n > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     Indexes.resize(n);
     for (size_t i = 0; i < n; ++i) {
-        auto off = CoinSerialized::ReadVarInt(rd);
+        auto off = CoinSerialized::ReadVarUInt64(rd);
         auto idx = off + (i ? Indexes[i - 1] + 1 : 0);
         if (off > UINT16_MAX || idx > UINT16_MAX)
             Throw(ExtErr::Protocol_Violation);

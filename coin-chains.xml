@@ -3,10 +3,10 @@
 	<Chain Name='Bitcoin' Symbol='BTC' ChainID='0' AddressVersion='0' ScriptAddressVersion='5' Hrp='bc'
 		 	Genesis='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f'
 		 	MaxMoney='21000000' MinTxFee='1000' InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF'
-		 	PayToScriptHashHeight='173500' BIP34Height='227931' BIP65Height='388381' BIP66Height='363725' BIP68Height='419327' SegwitHeight='400000'
+		 	PayToScriptHashHeight='173500' BIP34Height='227931' BIP65Height='388381' BIP66Height='363725' BIP68Height='419327' SegwitHeight='481824'
 		 	CheckDupTxHeight='171200'
 		 	 ProtocolMagicHex='D9B4BEF9' DefaultPort='8333'
-			BootUrls='dns://seed.bitcoin.sipa.be dns://bitseed.xf2.org dns://dnsseed.bluematt.me dns://seed.bitcoinstats.com'>
+			BootUrls='dns://seed.bitcoin.sipa.be dns://dnsseed.bluematt.me dns://dnsseed.bitcoin.dashjr.org dns://seed.bitcoinstats.com'>
 
 		<AlertPubKey Key='04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284' />
 
@@ -15,6 +15,7 @@
 		<Checkpoint Block='295000' Hash='00000000000000004d9b4ef50f0f9d686fd69db2e03af35a100370c64632a983' />
 		<Checkpoint Block='351225' Hash='0000000000000000139c3c2ec1821208daeab23e24b278915f93551247668b51' />
 		<Checkpoint Block='500000' Hash='00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04' />
+		<Checkpoint Block='583878' Hash='0000000000000000000b2750d59329dff978b15b0ad82c19c3915ac93374aac2' />
 	</Chain>
 
 	<Chain ChainID='0' Name='Bitcoin-testnet3' Symbol='TBTC3' AddressVersion='111'  Hrp='tb' IsTestNet='1'

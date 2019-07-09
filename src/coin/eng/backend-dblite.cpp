@@ -6,6 +6,7 @@
 #include <el/ext.h>
 
 #include "param.h"
+#include "coin-protocol.h"
 
 #if UCFG_WIN32
 #	include <memoryapi.h>
@@ -459,9 +460,20 @@ HashValue DbliteBlockChainDb::ReadPrevBlockHash(DbReadTransaction& dbt, int heig
 	}
 }
 
+Blob DbliteBlockChainDb::ReadBlob(uint64_t offset, uint32_t size) {
+	Blob r(size, nullptr);
+	m_fileBootstrap.Read(r.data(), size, offset);
+	return r;
+}
+
+void DbliteBlockChainDb::CopyTo(uint64_t offset, uint32_t size, Stream& stm) {
+	PositionOwningFileStream stmFile(m_fileBootstrap, offset, size);
+	stm.CopyTo(stm);
+}
+
 Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& stmBlocks, bool bFullRead) {
 	Block r;
-	r.m_pimpl->Height = height;
+	r->Height = height;
 	BinaryReader rdDb(stmBlocks);
 	if (Eng.Mode == EngMode::Bootstrap) {
 		uint64_t off = rdDb.ReadUInt64();
@@ -471,9 +483,9 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& 
 		if (bFullRead)
 			r.Read(rd);
 		else
-			r.m_pimpl->ReadHeader(rd, false, 0);
-		r.m_pimpl->OffsetInBootstrap = off;
-		r.m_pimpl->ReadDbSuffix(rdDb);
+			r->ReadHeader(rd, false, 0);
+		r->OffsetInBootstrap = off;
+		r->ReadDbSuffix(rdDb);
 	} else {
 		Blob blob;
 		rdDb >> blob;
@@ -481,12 +493,12 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& 
 
 		rdDb >> blob;
 		CMemReadStream ms(blob);
-		r.m_pimpl->Read(DbReader(ms, &Eng));
-		r.m_pimpl->m_hash = hash;
+		r->Read(DbReader(ms, &Eng));
+		r->m_hash = hash;
 
 		rdDb >> blob;
-		r.m_pimpl->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
-		r.m_pimpl->PrevBlockHash = ReadPrevBlockHash(dbt, r.Height);
+		r->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
+		r->PrevBlockHash = ReadPrevBlockHash(dbt, r.Height);
 
 		//!!!	ASSERT(Hash(r) == hash);
 	}
@@ -504,17 +516,25 @@ BlockHeader DbliteBlockChainDb::LoadHeader(DbReadTransaction& dbt, int height, S
 	if (height <= hMaxBlock)
 		return LoadBlock(dbt, height, stmBlocks, false);
 	BlockHeader r(Eng.CreateBlockObj());
-	r.m_pimpl->Height = height;
+	r->Height = height;
 	DbReader rd(stmBlocks);
 	rd.ForHeader = true;
 	Blob blob;
 	rd >> blob;
 	BlockHashValue hash(blob);
-	r.m_pimpl->Read(rd);
-	r.m_pimpl->PrevBlockHash = ReadPrevBlockHash(dbt, height, (height - 1) <= hMaxBlock);
+	r->Read(rd);
+	r->PrevBlockHash = ReadPrevBlockHash(dbt, height, (height - 1) <= hMaxBlock);
 	ASSERT(Hash(r) == hash);
-	r.m_pimpl->m_hash = hash;
+	r->m_hash = hash;
 	return r;
+}
+
+int DbliteBlockChainDb::FindHeight(const HashValue& hash) {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableHashToBlock);
+	if (!c.Get(ReducedBlockHash(hash)))
+		return -1;
+	return (uint32_t)BlockKey(c.Data);
 }
 
 BlockHeader DbliteBlockChainDb::FindHeader(int height) {
@@ -548,13 +568,34 @@ bool DbliteBlockChainDb::HaveBlock(const HashValue& hash) {
 	return height <= GetMaxHeight();
 }
 
+optional<pair<uint64_t, uint32_t>> DbliteBlockChainDb::FindBlockOffset(const HashValue& hash) {
+	if (Eng.Mode != EngMode::Bootstrap)
+		Throw(E_FAIL);
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableHashToBlock);
+	if (!c.Get(ReducedBlockHash(hash)))
+		return nullopt;
+	int height = (uint32_t)BlockKey(c.Data);
+	if (height > GetMaxHeight())
+		return nullopt;
+	DbCursor c1(dbt, m_tableBlocks);
+	if (!c1.Get(c.Data)) {
+		Throw(CoinErr::InconsistentDatabase);
+	}
+	BinaryReader rdDb(c1.DataStream);
+	uint64_t offset = rdDb.ReadUInt64();
+	PositionOwningFileStream stmFile(m_fileBootstrap, offset - 4);
+	uint32_t size = BinaryReader(stmFile).ReadUInt32();
+	return make_pair(offset, size);
+}
+
 Block DbliteBlockChainDb::FindBlock(const HashValue& hash) {
 	Block r(nullptr);
 	DbReadTxRef dbt(m_db);
 	DbCursor c(dbt, m_tableHashToBlock);
 	if (c.Get(ReducedBlockHash(hash))) {
 		int height = (uint32_t)BlockKey(c.Data);
-		if (height < GetMaxHeight()) {
+		if (height <= GetMaxHeight()) {
 			DbCursor c1(dbt, m_tableBlocks);
 			if (!c1.Get(c.Data)) {
 				Throw(CoinErr::InconsistentDatabase);
@@ -582,7 +623,7 @@ vector<BlockHeader> DbliteBlockChainDb::GetBlockHeaders(const LocatorHashes& loc
 	for (int height = locators.FindHeightInMainChain() + 1; c.Get(BlockKey(height)); ++height) {
 		BlockHeader header = LoadHeader(dbt, height, c.DataStream, hMaxBlock);
 		r.push_back(header);
-		if (Hash(header) == hashStop || r.size() >= MAX_HEADERS_RESULTS)
+		if (Hash(header) == hashStop || r.size() >= ProtocolParam::MAX_HEADERS_RESULTS)
 			break;
 	}
 	return r;
@@ -652,7 +693,7 @@ void DbliteBlockChainDb::InsertHeader(const BlockHeader& header) {
 	wrT.ForHeader = true;
 	DbTxRef dbt(m_db);
 	wrT << Span(ReducedBlockHash(hash));
-	header.m_pimpl->Write(wrT);
+	header->Write(wrT);
 	m_tableBlocks.Put(dbt, blockKey, Span(msB), true);
 	m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
 	int32_t h = htole(height);
@@ -691,8 +732,12 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
 		}
 	} else {
 		rd >> Utxo;
-		if (Utxo.empty())
-			LastSpendHeight = uint32_t(Height + rd.Read7BitEncoded());
+		if (Utxo.empty()) {
+			if (rd.BaseStream.Eof())
+				LastSpendHeight = Height; // Inconsistent DB, support for compatibility withh old format
+			else
+				LastSpendHeight = uint32_t(Height + rd.Read7BitEncoded());
+		}
 	}
 }
 
@@ -980,7 +1025,7 @@ void DbliteBlockChainDb::ReadTxes(const BlockObj& bo) {
 		Tx& tx = bo.m_txes[i];
 		tx.EnsureCreate(Eng);
 		tx.Height = bo.Height;
-		tx.m_pimpl->OffsetInBlock = uint32_t(stm.Position);
+		tx->OffsetInBlock = uint32_t(stm.Position);
 		rd >> blob;
 		CMemReadStream stmTx(blob);
 		DbReader drTx(stmTx, &Eng);
@@ -1231,26 +1276,26 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 	case EngMode::Bootstrap: {
 		MemoryStream ms(MAX_BLOCK_SIZE + 8);
 		ProtocolWriter wr(ms);
-		block.m_pimpl->WriteHeader(wr);
-		CoinSerialized::WriteVarInt(wr, txes.size());
+		block->WriteHeader(wr);
+		CoinSerialized::WriteVarUInt64(wr, txes.size());
 		for (size_t i = 0; i < txes.size(); ++i) {
 			txOffsets[i] = uint32_t(ms.Position);
             txes[i].Write(wr);
 		}
-		block.m_pimpl->WriteSuffix(wr);
+		block->WriteSuffix(wr);
 		Span cb = ms;
-		if (!block.m_pimpl->OffsetInBootstrap) {
+		if (!block->OffsetInBootstrap) {
 			vector<uint32_t> ar((cb.size() + 3) / 4 + 2);
 			ar[0] = htole(Eng.ChainParams.ProtocolMagic);
 			ar[1] = htole(uint32_t(cb.size()));
 			memcpy(&ar[2], cb.data(), cb.size());
 			m_fileBootstrap.Write(&ar[0], cb.size() + 8, Eng.OffsetInBootstrap);
 			//!!!?T			m_fileBootstrap.Flush();
-			block.m_pimpl->OffsetInBootstrap = Eng.OffsetInBootstrap + 8;
+			block->OffsetInBootstrap = Eng.OffsetInBootstrap + 8;
 			Eng.NextOffsetInBootstrap = Eng.OffsetInBootstrap += cb.size() + 8;
 		}
-		wrT << block.m_pimpl->OffsetInBootstrap;
-		block.m_pimpl->WriteDbSuffix(wrT);
+		wrT << block->OffsetInBootstrap;
+		block->WriteDbSuffix(wrT);
 	} break;
 #if UCFG_COIN_USE_NORMAL_MODE
 	case EngMode::Normal:
@@ -1266,7 +1311,7 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 		MemoryStream ms;
 		DbWriter wr(ms);
 		wr.ConnectJob.reset(&job);
-		block.m_pimpl->Write(wr);
+		block->Write(wr);
 		//!!!?			wr << uint8_t(0);
 
 		wrT << Span(ReducedBlockHash(hash)) << Span(ms) << EXT_BIN(txHashOutNums);

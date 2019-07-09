@@ -226,7 +226,9 @@ CoinEng::CoinEng(CoinDb& cdb)
 	, OffsetInBootstrap(0)
 	, NextOffsetInBootstrap(0)
 	, aPreferredDownloadPeers(0)
-	, aSyncStartedPeers(0) {
+	, aSyncStartedPeers(0)
+{
+	StallingTimeout = BLOCK_STALLING_TIMEOUT;
 }
 
 CoinEng::~CoinEng() {
@@ -262,6 +264,10 @@ void CoinEng::CommitTransactionIfStarted() {
 #endif
 		}
 	}
+}
+
+String CoinEng::BlockStringId(const HashValue& hashBlock) {
+	return EXT_STR(Db->FindHeight(hashBlock) << "/" << hashBlock);
 }
 
 HashValue CoinEng::HashMessage(RCSpan cbuf) {
@@ -692,9 +698,9 @@ void CoinEng::OnCloseLink(P2P::LinkBase& link) {
 	aPreferredDownloadPeers -= clink.IsPreferredDownload;
 	aSyncStartedPeers -= clink.IsSyncStarted;
 	EXT_LOCK(Mtx) {
-		EXT_FOR(QueuedBlockItem & qbi, clink.BlocksInFlight) {
+		for (QueuedBlockItem& qbi : clink.BlocksInFlight) {
 			MapBlocksInFlight.erase(qbi.HashBlock);
-			TRC(5, "Removing from MapBlocksInFlight: " << qbi.HashBlock);
+			TRC(5, "Removing from MapBlocksInFlight: " << BlockStringId(qbi.HashBlock));
 		}
 	}
 
@@ -762,7 +768,7 @@ void CoinEng::OnMessage(P2P::Message* m) {
 	CCoinEngThreadKeeper engKeeper(this);
 	P2P::Link& link = *m->LinkPtr;
 	try {
-//		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxPrematureSpend);
+		//		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxPrematureSpend);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::IncorrectProofOfWork);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RejectedByCheckpoint);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::AlertVerifySignatureFailed);
@@ -770,7 +776,8 @@ void CoinEng::OnMessage(P2P::Message* m) {
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::BadPrevBlock);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::VersionMessageMustBeFirst);
 
-		TRC(4, link.Peer->get_EndPoint().Address << ": " << *static_cast<CoinMessage*>(m));
+		if (auto cm = dynamic_cast<CoinMessage*>(m))
+			cm->Trace((Link&)link, false);
 
 		if (!link.PeerVersion && !dynamic_cast<VersionMessage*>(m))
 			Throw(CoinErr::VersionMessageMustBeFirst);
@@ -846,10 +853,15 @@ void CoinEng::OnMessage(P2P::Message* m) {
 
 void CoinEng::OnPingTimeout(P2P::Link& link) {
 	CCoinEngThreadKeeper engKeeper(this);
-	ptr<PingMessage> m = new PingMessage();
+
+	Ext::Random rnd;
+	uint64_t nonce;
+	do {
+		rnd.NextBytes(span<uint8_t>((uint8_t*)&nonce, sizeof nonce));
+	} while (nonce == 0);
+	static_cast<Coin::Link&>(link).PingNonceSent = nonce;
 	link.LastPingTimestamp = Clock::now();
-	static_cast<Coin::Link&>(link).PingNonceSent = m->Nonce;
-	link.Send(m);
+	link.Send(new PingMessage(nonce));
 }
 
 size_t CoinEng::GetMessageHeaderSize() {
@@ -910,12 +922,16 @@ void CoinEng::Push(const Inventory& inv) {
 	}
 }
 
-void CoinEng::Push(const Tx& tx) {
+void CoinEng::Push(const TxInfo& txInfo) {
 	EXT_LOCK(MtxPeers) {
-		for (CLinks::iterator it = begin(Links); it != end(Links); ++it) {
-			Link& clink = *static_cast<Link*>((*it).get());
-			if (clink.RelayTxes && EXT_LOCKED(clink.MtxFilter, !clink.Filter || clink.Filter->IsRelevantAndUpdate(tx)))
-				clink.Push(Inventory(InventoryType::MSG_TX, Hash(tx)));
+		for (auto& p : Links) {
+			Link& clink = *static_cast<Link*>(p.get());
+			if (clink.RelayTxes && txInfo.FeeRatePerKB >= clink.MinFeeRate) {
+				EXT_LOCK(clink.MtxFilter) {
+					if (txInfo.FeeRatePerKB >= clink.MinFeeRate && (!clink.Filter || clink.Filter->IsRelevantAndUpdate(txInfo.Tx)))
+						clink.Push(Inventory(InventoryType::MSG_TX, Hash(txInfo.Tx)));
+				}
+			}
 		}
 	}
 }
@@ -924,14 +940,14 @@ bool CoinEng::IsFromMe(const Tx& tx) {
 	return Events.IsFromMe(tx);
 }
 
-void CoinEng::Relay(const Tx& tx) {
-	HashValue hash = Hash(tx);
+void CoinEng::Relay(const TxInfo& txInfo) {
+	HashValue hash = Hash(txInfo.Tx);
 
-	TRC(2, hash);
+	TRC(TRC_LEVEL_TX_MESSAGE, hash);
 
-	if (!tx.IsCoinBase() && !HaveTxInDb(hash)) {
-		EXT_LOCKED(Caches.Mtx, Caches.m_relayHashToTx.insert(make_pair(hash, tx)));
-		Push(tx);
+	if (!txInfo.Tx.IsCoinBase() && !HaveTxInDb(hash)) {
+		EXT_LOCKED(Caches.Mtx, Caches.m_relayHashToTx.insert(make_pair(hash, txInfo.Tx)));
+		Push(txInfo);
 	}
 }
 
@@ -1150,7 +1166,7 @@ void CoinEng::TryStartBootstrap() {
 		path pathBootstrap = GetBootstrapPath();
 		TRC(2, "Checking for " << pathBootstrap);
 		if (exists(pathBootstrap) && Db->GetBoostrapOffset() < file_size(pathBootstrap))
-			(new BootstrapDbThread(_self, pathBootstrap))->Start(); // uses field CoinEng.Runned. Must be called after base::Start()
+			(new BootstrapDbThread(_self, pathBootstrap, true))->Start(); // uses field CoinEng.Runned. Must be called after base::Start()
 	}
 }
 
@@ -1222,45 +1238,50 @@ void GetDataMessage::Process(Link& link) {
 		case InventoryType::MSG_WITNESS_BLOCK:
 		case InventoryType::MSG_FILTERED_BLOCK:
 		case InventoryType::MSG_FILTERED_WITNESS_BLOCK:
-			if (eng.Mode == EngMode::Lite
-#ifdef _UCFG_DEBUG							   //!!!
-				|| eng.Mode == EngMode::Normal // Low performance
-#endif
-			)
-				break;
+			if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::Normal)
+				break;		// Low performance in NormalMode
 
-			{
-				if (Block block = eng.Tree.FindBlock(inv.HashValue)) {
-					//		ASSERT(EXT_LOCKED(eng.Mtx, (block.m_pimpl->m_hash.reset(), Hash(block)==inv.HashValue)));
+			if (eng.Mode == EngMode::Bootstrap) {
+				if (auto o = eng.Db->FindBlockOffset(inv.HashValue)) {
+					ptr<BlockMessage> m = new BlockMessage(Block(nullptr));
+					m->Offset = o.value().first;
+					m->Size = o.value().second;
+					m->WitnessAware = true;	//!!!?
+					link.Send(m);
+					break;
+				}
+			}
 
-					if (inv.Type == InventoryType::MSG_BLOCK || inv.Type == InventoryType::MSG_WITNESS_BLOCK) {
-						TRC(2, "Block Message sending");
+			if (Block block = eng.Tree.FindBlock(inv.HashValue)) {
+				//		ASSERT(EXT_LOCKED(eng.Mtx, (block.m_pimpl->m_hash.reset(), Hash(block)==inv.HashValue)));
 
-						ptr<BlockMessage> m = new BlockMessage(block);
-						m->WitnessAware = bool(inv.Type & InventoryType::MSG_WITNESS_FLAG);
-						link.Send(m);
-					} else {
-						ptr<MerkleBlockMessage> mbm;
-						vector<Tx> matchedTxes = EXT_LOCKED(link.MtxFilter, link.Filter ? (mbm = new MerkleBlockMessage)->Init(block, *link.Filter) : vector<Tx>());
-						if (mbm) {
-							link.Send(mbm);
-							EXT_LOCK(link.Mtx) {
-								for (size_t i = matchedTxes.size(); i--;)
-									if (link.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(matchedTxes[i]))))
-										matchedTxes.erase(matchedTxes.begin() + i);
-							}
-							EXT_FOR(const Tx& tx, matchedTxes) {
-								link.Send(new TxMessage(tx));
-							}
+				if (inv.Type == InventoryType::MSG_BLOCK || inv.Type == InventoryType::MSG_WITNESS_BLOCK) {
+					TRC(2, "Block Message sending");
+
+					ptr<BlockMessage> m = new BlockMessage(block);
+					m->WitnessAware = bool(inv.Type & InventoryType::MSG_WITNESS_FLAG);
+					link.Send(m);
+				} else {
+					ptr<MerkleBlockMessage> mbm;
+					vector<Tx> matchedTxes = EXT_LOCKED(link.MtxFilter, link.Filter ? (mbm = new MerkleBlockMessage)->Init(block, *link.Filter) : vector<Tx>());
+					if (mbm) {
+						link.Send(mbm);
+						EXT_LOCK(link.Mtx) {
+							for (size_t i = matchedTxes.size(); i--;)
+								if (link.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(matchedTxes[i]))))
+									matchedTxes.erase(matchedTxes.begin() + i);
+						}
+						EXT_FOR(const Tx& tx, matchedTxes) {
+							link.Send(new TxMessage(tx));
 						}
 					}
+				}
 
-					if (inv.HashValue == link.HashContinue) {
-						ptr<InvMessage> m = new InvMessage;
-						m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK, Hash(eng.BestBlock())));
-						link.Send(m);
-						link.HashContinue = HashValue::Null();
-					}
+				if (inv.HashValue == link.HashContinue) {
+					ptr<InvMessage> m = new InvMessage;
+					m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK, Hash(eng.BestBlock())));
+					link.Send(m);
+					link.HashContinue = HashValue::Null();
 				}
 			}
 			break;

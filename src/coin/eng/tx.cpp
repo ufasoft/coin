@@ -77,7 +77,7 @@ void TxOut::Write(BinaryWriter& wr) const {
 
 void TxOut::Read(const BinaryReader& rd) {
 	rd >> Value;
-	size_t size = (size_t)CoinSerialized::ReadVarInt(rd);
+	uint32_t size = CoinSerialized::ReadVarSize(rd);
 	if (size > MAX_BLOCK_WEIGHT)	//!!!?
 		Throw(ExtErr::Protocol_Violation);
 	m_scriptPubKey.resize(size, false);
@@ -185,9 +185,9 @@ void TxoMap::Add(const OutPoint& op, int height) {
 }
 
 void TxoMap::AddAllOuts(const HashValue& hashTx, const Tx& tx) {
+	auto& txOuts = tx.TxOuts();
+	OutPoint op(hashTx);
 	EXT_LOCK(m_mtx) {
-		auto& txOuts = tx.TxOuts();
-		OutPoint op(hashTx);
 		for (int i = 0; i < txOuts.size(); ++i) {
 			Txo toh = { txOuts[op.Index = i] };
 			promise<Txo> pr;
@@ -441,17 +441,17 @@ void TxObj::Write(ProtocolWriter& wr) const {
 
 	auto& txIns = TxIns();
 	if (wr.HashTypeAnyoneCanPay) {
-		WriteVarInt(wr, 1);
+		WriteVarUInt64(wr, 1);
 		txIns[wr.NIn].Write(wr, true);
 	} else {
 		size_t nTxIn = txIns.size();
-		WriteVarInt(wr, nTxIn);
+		WriteVarUInt64(wr, nTxIn);
 		for (size_t i = 0; i < nTxIn; ++i)
 			txIns[i].Write(wr, i == wr.NIn);
 	}
 
 	auto nOuts = wr.HashTypeNone ? 0 : wr.HashTypeSingle ? wr.NIn + 1 : (int)TxOuts.size();
-	WriteVarInt(wr, nOuts);
+	WriteVarUInt64(wr, nOuts);
 	for (size_t i = 0; i < nOuts; ++i)
 		if (wr.HashTypeSingle && i != wr.NIn)
 			CoinSerialized::WriteSpan(wr << int64_t(-1), Span());
@@ -460,7 +460,7 @@ void TxObj::Write(ProtocolWriter& wr) const {
 
 	if (hasWitness)
 		for (auto& txIn : txIns) {
-			WriteVarInt(wr, txIn.Witness.size());
+			WriteVarUInt64(wr, txIn.Witness.size());
 			for (auto& chunk : txIn.Witness)
 				CoinSerialized::WriteSpan(wr, chunk);
     	}
@@ -484,10 +484,7 @@ void TxObj::Read(const ProtocolReader& rd) {
 		CoinSerialized::Read(rd, TxOuts);
 		if (flag & 1)
 			for (auto& txIn : m_txIns) {
-                auto wtinessSize = CoinSerialized::ReadVarInt(rd);
-                if (wtinessSize > 100000000)	//!!!
-                    Throw(ExtErr::Protocol_Violation);
-				txIn.Witness.resize((size_t)wtinessSize);
+				txIn.Witness.resize(CoinSerialized::ReadVarSize(rd));
 				for (auto& chunk : txIn.Witness)
 					chunk = CoinSerialized::ReadBlob(rd);
 			}
@@ -714,7 +711,7 @@ int64_t Tx::CalcMinFee(uint32_t size, int64_t feeRate) {
 
 int64_t Tx::GetMinFee(uint32_t blockSize, bool bAllowFree, MinFeeMode mode, uint32_t nBytes) const {
 	CoinEng& eng = Eng();
-	int64_t nBaseFee = mode == MinFeeMode::Relay ? eng.GetMinRelayTxFee() : eng.ChainParams.MinTxFee;
+	int64_t nBaseFee = mode == MinFeeMode::Relay ? g_conf.MinRelayTxFee : eng.ChainParams.MinTxFee;
 
 	if (uint32_t(-1) == nBytes)
 		nBytes = GetSerializeSize();

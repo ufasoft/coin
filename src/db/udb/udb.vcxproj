@@ -415,13 +415,13 @@
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">el/ext.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">el/ext.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="ckdb.cpp" />
+    <ClCompile Include="udb.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_config.h" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ckdb.rc" />
+    <ResourceCompile Include="udb.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

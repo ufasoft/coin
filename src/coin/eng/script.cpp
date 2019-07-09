@@ -366,7 +366,7 @@ Blob Script::DeleteSubpart(RCSpan mb, RCSpan part) {
 		vm.GetOp();
 		ms.Write(mb.subspan(pos, (int)(vm.m_stm->Position - pos)));
 	}
-	return ms.Blob;
+	return ms.AsSpan();
 }
 
 static uint8_t DecodeOp(Opcode opcode) {
@@ -390,31 +390,13 @@ bool Script::IsPayToScriptHash(RCSpan pk) {
 
 bool Script::IsPushOnly(RCSpan script) {
     CMemReadStream stm(script);
-    BinaryReader rd(stm);
-    for (int op; (op = stm.ReadByte()) != -1;) {
-        uint32_t size = 0;
-        switch ((Opcode)op) {
-        case Opcode::OP_0:
-            break;
-        case Opcode::OP_PUSHDATA1:
-            size = rd.ReadByte();
-            break;
-        case Opcode::OP_PUSHDATA2:
-            size = rd.ReadUInt16();
-            break;
-        case Opcode::OP_PUSHDATA4:
-            size = rd.ReadUInt32();
-            break;
-        default:
-            if (int(op) > int(Opcode::OP_16))
-                return false;
-            if (int(op) < int(Opcode::OP_1))
-                size = op;
-        }
-        if (script.size() - stm.Position < size)
-            return false;
-    }
-    return true;
+	for (LiteInstr instr; stm.Position < stm.Length;) {
+		if (!GetInstr(stm, instr))
+			return false;
+		if (instr.OriginalOpcode > Opcode::OP_16)
+			return false;
+	}
+	return true;
 }
 
 // binary, VC don't allow regex for binary data
@@ -577,8 +559,10 @@ HashValue SignatureHasher::Hash(RCSpan script) {
 bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan witnessProgram) {
 	switch (witnessVer) {
 	case 0: {
-		Blob scriptPubKey;
 		auto& witness = m_txoTo.TxIns()[NIn].Witness;
+		if (witness.empty())
+			throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+		Blob scriptPubKey;
 		switch (witnessProgram.size()) {
 		case WITNESS_V0_KEYHASH_SIZE: {
 				if ((vm.Stack = witness).size() != 2)
@@ -589,8 +573,6 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 			}
 			break;
 		case WITNESS_V0_SCRIPTHASH_SIZE:
-			if (witness.empty())
-				throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
 			vm.Stack = vector<StackValue>(witness.begin(), witness.end() - 1);
 			if (HashValue(SHA256().ComputeHash(scriptPubKey = witness.back())) != HashValue(witnessProgram))
 				throw WitnessProgramException(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);

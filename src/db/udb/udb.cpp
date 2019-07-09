@@ -1,4 +1,4 @@
-﻿/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+﻿/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -34,15 +34,17 @@ protected:
 	}
 };
 
-class CCkDbApp : public CConApp {
+class CUdbApp : public CConApp {
 public:
 	void PrintUsage() {
-		cerr << "Usage:\n"
-			<< "  " << path(Argv[0]).filename() << " <filename>.udb" << endl;
+		cerr << "Usage:"
+			<< "\n  " << path(Argv[0]).filename() << " check <filename>.udb"
+			<< "\n  " << path(Argv[0]).filename() << " vacuum <filename>.udb"
+			<< endl;
 	}
 
 	void Execute() override {
-		if (Argc < 2) {
+		if (Argc < 3) {
 			PrintUsage();
 			Environment::ExitCode = 1;
 			return;
@@ -51,10 +53,20 @@ public:
 		storage.UseMMapPager = false;
 		storage.ReadOnly = true;										//!!! Mapping don't work for unaligned ReadOnly file
 		storage.m_accessViewMode = ViewMode::Window;			// to count Pages; ViewMode::Full avoids OpenPage() calls
-		storage.Open(Argv[1]);
-		storage.Check();
-		storage.CheckFreePages();
-		storage.PrintReport();
+
+		String command = Argv[1];
+		if (command == "check") {
+			storage.Open(Argv[2]);
+			storage.Check();
+			storage.CheckFreePages();
+			storage.PrintReport();
+		} else if (command == "vacuum") {
+			storage.Open(Argv[2]);
+			storage.Vacuum();
+		} else {
+			PrintUsage();
+			Environment::ExitCode = 1;
+		}
 	}
 } theApp;
 
@@ -88,7 +100,7 @@ void CkStorage::Check() {
 			if (cht->Top().Pos == 0)
 				goto LAB_AGAIN;
 			cht = cht;
-			
+
 		}
 	}
 	return;
@@ -108,8 +120,8 @@ void CkStorage::Check() {
 	int nProgress = m_stepProgress;
 
 
-	struct Space_Throusands : numpunct<char> { 
-   		char do_thousands_sep() const override { return ' '; } 
+	struct Space_Throusands : numpunct<char> {
+   		char do_thousands_sep() const override { return ' '; }
 		string do_grouping() const override { return "\3"; }
 	};
 	cout.imbue(locale(locale(), new Space_Throusands));
@@ -125,7 +137,7 @@ void CkStorage::Check() {
 
 		os << string((max)(1, 16 - (int)os.tellp()), ' ');
 		os << (td.KeySize ? Convert::ToString(int(td.KeySize)) : String("var"));
-		
+
 		os << string((max)(1, 20 - (int)os.tellp()), ' ');
 		switch ((TableType)td.Type) {
 		case TableType::BTree: 		os << "B-Tree"; break;
@@ -146,7 +158,7 @@ void CkStorage::Check() {
 		cout << os.str();
 
 		DbTable tS(tableName);
-		int64_t nRecords = 0, 
+		int64_t nRecords = 0,
 			bytes = 0;
 		size_t nPages = BmUsedPages.count();
 		for (DbCursor c(txS, tS); c.SeekToNext();) {
@@ -186,5 +198,3 @@ void CkStorage::PrintReport() {
 		cout << endl;
 	}
 }
-
-

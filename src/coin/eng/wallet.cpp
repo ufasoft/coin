@@ -564,7 +564,7 @@ void Wallet::ReacceptWalletTxes() {
 void Wallet::SetNextResendTime(const DateTime& dt) {
 	m_dtNextResend = dt + seconds(Ext::Random().Next(SECONDS_RESEND_PERIODICITY));
 	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
-#ifdef _DEBUG//!!!D
+#ifdef X_DEBUG//!!!D
 	m_dtNextResend = dt + seconds(3);
 #endif
 }
@@ -919,11 +919,15 @@ void Wallet::Relay(const WalletTx& wtx) {
 #endif
 
 	EXT_FOR (const Tx& tx, wtx.PrevTxes) {
-		if (!tx.IsCoinBase())
-			m_eng->Relay(tx);
+		if (!tx.IsCoinBase()) {
+			TxInfo txInfo(tx, tx.GetSerializeSize());
+			m_eng->Relay(txInfo);
+		}
 	}
-	if (!wtx.IsCoinBase())
-		m_eng->Relay(wtx);
+	if (!wtx.IsCoinBase()) {
+		TxInfo txInfo(wtx, wtx.GetSerializeSize());
+		m_eng->Relay(txInfo);
+	}
 }
 
 void Wallet::Commit(WalletTx& wtx) {

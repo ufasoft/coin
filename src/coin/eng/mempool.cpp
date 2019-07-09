@@ -14,17 +14,17 @@ TxPool::TxPool(CoinEng& eng)
 	: Eng(eng)
 {}
 
-TxPool::TxInfo::TxInfo(const class Tx& tx)
+TxInfo::TxInfo(const class Tx& tx, uint32_t serializationSize)
 	: Tx(tx)
-	, FeeRate(tx.Fee * 1000 / tx.GetSerializeSize())
+	, FeeRatePerKB(tx.Fee * 1000 / serializationSize)
 {
 }
 
-void TxPool::Add(const Tx& tx) {
+void TxPool::Add(const TxInfo& txInfo) {
 	EXT_LOCK (Mtx) {
-		m_hashToTxInfo[Hash(tx)] = TxInfo(tx);
-		EXT_FOR (const TxIn& txIn, tx.TxIns()) {
-			m_outPointToNextTx.insert(make_pair(txIn.PrevOutPoint, tx));
+		m_hashToTxInfo[Hash(txInfo.Tx)] = txInfo;
+		EXT_FOR (const TxIn& txIn, txInfo.Tx.TxIns()) {
+			m_outPointToNextTx.insert(make_pair(txIn.PrevOutPoint, txInfo.Tx));
 		}
 	}
 }
@@ -74,7 +74,6 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	if (!g_conf.AcceptNonStdTxn)
 		tx.CheckStandard();
 
-	uint32_t serSize = tx.GetSerializeSize();
 /*!!!?
 	int sigOpCount = tx.SigOpCount;
 	if (sigOpCount > serSize/34 || serSize < 100)
@@ -84,8 +83,8 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	if (Eng.HaveTxInDb(hash))
 		return false;
 
-	if (!tx.IsFinal(Eng.BestBlockHeight() + 1))
-		Throw(CoinErr::ContainsNonFinalTx);
+//!!!?	if (!tx.IsFinal(Eng.BestBlockHeight() + 1))
+//			Throw(CoinErr::ContainsNonFinalTx);
 
 	Tx ptxOld(nullptr);
 	EXT_LOCK (Mtx) {
@@ -99,8 +98,8 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 				ptxOld = it->second;
 				if (i != 0 || tx.IsNewerThan(ptxOld))
 					return false;
-				for (int j = 0; j < tx.TxIns().size(); ++j) {
-					auto o = Lookup(m_outPointToNextTx, tx.TxIns()[j].PrevOutPoint);
+				for (auto& txIn : tx.TxIns()) {
+					auto o = Lookup(m_outPointToNextTx, txIn.PrevOutPoint);
 					if (!o || o.value() != ptxOld)
 						return false;
 				}
@@ -113,7 +112,7 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	int64_t nFees = 0;
 	//!!!TODO:  accepts only transaction with inputs already in the DB. view should check inputs in the mem pool too
 	try {
-		DBG_LOCAL_IGNORE_CONDITION(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::SCRIPT_ERR_CLEANSTACK);
 		
 		tx.ConnectInputs(view, Eng.BestBlockHeight(), nBlockSigOps, nFees, false, false, tx.GetMinFee(1, Eng.AllowFreeTxes, MinFeeMode::Relay), Eng.ChainParams.MaxTarget);	//!!!? MaxTarget
@@ -121,29 +120,39 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 		if (!tx->HasWitness())
 			return false;
 		throw;
-	}
+	}	 
 
-	if (nFees < tx.GetMinFee(1000, Eng.AllowFreeTxes, MinFeeMode::Relay))
+	uint32_t serializationSize = tx.GetSerializeSize();
+	int64_t feeLimit = serializationSize * g_conf.MinRelayTxFee / 1000;
+	if (nFees < feeLimit) {
 		Throw(CoinErr::TxFeeIsLow);
-	if (nFees < Eng.GetMinRelayTxFee()) {
+
+		/*!!! Disable free txes temporarily
 		DateTime now = Clock::now();
 		Eng.m_freeCount = pow(1.0 - 1.0 / 600, (int)duration_cast<seconds>(now - exchange(Eng.m_dtLastFreeTx, now)).count());
 		if (Eng.m_freeCount > 15 * 10000 && !Eng.IsFromMe(tx))
 			Throw(CoinErr::TxRejectedByRateLimiter);
 		Eng.m_freeCount += serSize;
+		*/
 	}
 
 	if (ptxOld)
 		Remove(ptxOld);
-	Add(tx);
+	TxInfo txInfo(tx, serializationSize);
+	Add(txInfo);
 
 	if (ptxOld)
 		Eng.Events.OnEraseTx(Hash(ptxOld));
 	Eng.Events.OnProcessTx(tx);
-	Eng.Relay(tx);
+	Eng.Relay(txInfo);
 
 	vQueue.push_back(hash);
 	return true;
+}
+
+void TxMessage::Trace(Link& link, bool bSend) const {
+	if (CTrace::s_nLevel & (1 << TRC_LEVEL_TX_MESSAGE))
+		base::Trace(link, bSend);
 }
 
 void TxMessage::Process(Link& link) {

@@ -133,7 +133,7 @@ KVStorage::KVStorage()
 	, NewPageCount(0)
 	, Durability(true)
 	, UseFlush(true)
-	, CheckpointPeriod(TimeSpan::FromMinutes(1))
+	, CheckpointPeriod(TimeSpan::FromSeconds(30))	//!!!T was 60
 	, ProtectPages(true)
 	, m_state(OpenState::Closed)
 	, m_salt((uint32_t)Random().Next())
@@ -365,13 +365,6 @@ uint32_t KVStorage::NextFreePgno(COrderedPageSet& newFreePages) {		// .second==t
 		CReleasedPages::iterator it = ReleasedPages.begin();
 		r = *it;
 		ReleasedPages.erase(it);
-	} else if (!FreePages.empty()) {
-		CFreePages::iterator it = FreePages.begin();
-		newFreePages.insert(r = *it);
-		FreePages.erase(it);
-#if UCFG_DB_FREE_PAGES_BITSET
-		FreePagesBitset.reset(r);
-#endif
 	} else if (!PagesFreeAfterCheckpoint.empty()) {
 		auto it = PagesFreeAfterCheckpoint.begin();
 		newFreePages.insert(r = *it);
@@ -380,6 +373,13 @@ uint32_t KVStorage::NextFreePgno(COrderedPageSet& newFreePages) {		// .second==t
 		COrderedPageSet::iterator it = m_nextFreePages.begin();
 		newFreePages.insert(r = *it);
 		m_nextFreePages.erase(it);
+	} else if (!FreePages.empty()) {					// Draw from FreePages last because we use them to Allocate pages during DoCheckpoint()
+		CFreePages::iterator it = FreePages.begin();
+		newFreePages.insert(r = *it);
+		FreePages.erase(it);
+#if UCFG_DB_FREE_PAGES_BITSET
+		FreePagesBitset.reset(r);
+#endif
 	}
 	return r;
 }
@@ -608,7 +608,7 @@ uint32_t KVStorage::TryAllocateMappedFreePage() {
 	const uint64_t mask = (uint64_t(1) << step) - 1;
 
 	EXT_LOCK (MtxViews) {
-		for (uint32_t vno=0; vno<Views.size(); ++vno) {
+		for (uint32_t vno = 0; vno < Views.size(); ++vno) {
 			uint32_t pgBeg = vno << m_bitsViewPageRatio;
 #if UCFG_DB_FREE_PAGES_BITSET
 			uint32_t pgEnd=pgBeg + q;
@@ -682,8 +682,9 @@ Page KVStorage::Allocate(bool bLock) {
 #else
 			if (true) {
 #endif
-				pgno = *FreePages.begin();
-				FreePages.erase(FreePages.begin());
+				CFreePages::iterator it = FreePages.begin();
+				pgno = *it;
+				FreePages.erase(it);
 #if UCFG_DB_FREE_PAGES_BITSET
 				FreePagesBitset.reset(pgno);
 #endif
@@ -984,6 +985,7 @@ void DbTransaction::Rollback() {
 
 SnapshotGenObj::~SnapshotGenObj() {
 	ASSERT(!Storage.MtxFreePages.try_lock());		// always called under MtxFreePages lock
+	ASSERT(Storage.m_state != KVStorage::OpenState::Closed || PagesToFree.empty());
 
 	Storage.OldestAliveGen = NextGen.get();
 	EXT_FOR(uint32_t pgno, PagesToFree) {

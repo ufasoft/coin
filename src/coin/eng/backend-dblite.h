@@ -61,21 +61,21 @@ public:
 class SavepointTransaction;
 
 class BlockKey {
+private:
+	uint32_t m_beH;
 public:
 	BlockKey(uint32_t h)
-		:	m_beH(htobe(h))
+		: m_beH(htobe(h))
 	{}
 
 	BlockKey(RCSpan cbuf)
-		:	m_beH(0)
+		: m_beH(0)
 	{
 		memcpy((uint8_t*)&m_beH + 1, cbuf.data(), BLOCKID_SIZE);
 	}
 
 	operator uint32_t() const { return betoh(m_beH); }
 	operator Span() const { return Span((const uint8_t*)&m_beH + 1, BLOCKID_SIZE); }
-private:
-	uint32_t m_beH;
 };
 
 
@@ -111,8 +111,10 @@ public:
 	void TryUpgradeDb(const Version& verTarget) override;
 	bool HaveHeader(const HashValue& hash) override;
 	bool HaveBlock(const HashValue& hash) override;
+	int FindHeight(const HashValue& hash) override;
 	BlockHeader FindHeader(int height) override;
 	BlockHeader FindHeader(const HashValue& hash) override;
+	optional<pair<uint64_t, uint32_t>> FindBlockOffset(const HashValue& hash) override;
 	Block FindBlock(const HashValue& hash) override;
 	Block FindBlock(int height) override;
 	Block FindBlockPrefixSuffix(int height) override;
@@ -159,7 +161,7 @@ public:
 		{}
 
 		TxDatas(TxDatas&& x)
-			: Items(std::forward<vector<TxData>>(x.Items))
+			: Items(move(x.Items))
 			, Index(x.Index)
 		{}
 
@@ -232,6 +234,8 @@ protected:
 private:
 	HashValue ReadPrevBlockHash(DbReadTransaction& dbt, int height, bool bFromBlock = false);
 	BlockHeader LoadHeader(DbReadTransaction& dbt, int height, Stream& stmBlocks, int hMaxBlock = -2);
+	Blob ReadBlob(uint64_t offset, uint32_t size) override;
+	void CopyTo(uint64_t offset, uint32_t size, Stream& stm) override;
 	Block LoadBlock(DbReadTransaction& dbt, int height, Stream& stmBlocks, bool bFullRead = true);
 	bool TryToConvert(const path& p);
 	uint64_t GetBlockOffset(int height);

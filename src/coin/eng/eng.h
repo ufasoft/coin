@@ -390,29 +390,28 @@ public:
 
 class CoinMessage : public P2P::Message, public CoinSerialized, public CPrintable {
 	typedef P2P::Message Base;
-
 public:
 	const char* const Cmd;
 	uint32_t Checksum;
-	bool WitnessAware;
+	bool WitnessAware = true;
 
 	CoinMessage(const char* cmd)
 		: Cmd(cmd)
-		, WitnessAware(true)
 	{}
 
 	static ptr<CoinMessage> ReadFromStream(Link& link, const BinaryReader& rd);
 	virtual void Write(ProtocolWriter& wr) const;
     virtual void Read(const ProtocolReader& rd);
+	virtual void Trace(Coin::Link& link, bool bSend) const;
 protected:
 	void Print(ostream& os) const override;
 	virtual void Process(Coin::Link& link) {}
 	void ProcessMsg(P2P::Link& link) override;
-
-	friend class CoinEng;
 private:
     void Write(BinaryWriter& wr) const override { Write((ProtocolWriter&)wr); }
     void Read(const BinaryReader& rd) override { Read((const ProtocolReader&)rd); }
+
+	friend class CoinEng;
 };
 
 extern const Version
@@ -471,8 +470,10 @@ public:
 
 	virtual bool HaveHeader(const HashValue& hash) = 0;
 	virtual bool HaveBlock(const HashValue& hash) = 0;
+	virtual int FindHeight(const HashValue& hash) = 0;
 	virtual BlockHeader FindHeader(int height) = 0;
 	virtual BlockHeader FindHeader(const HashValue& hash) = 0;
+	virtual optional<pair<uint64_t, uint32_t>> FindBlockOffset(const HashValue& hash) = 0;
 	virtual Block FindBlock(const HashValue& hash) = 0;
 	virtual Block FindBlock(int height) = 0;
 	virtual Block FindBlockPrefixSuffix(int height) { return FindBlock(height); }
@@ -516,6 +517,8 @@ public:
 
 	virtual int32_t GetLastPrunedHeight() { return 0; }
 	virtual void SetLastPrunedHeight(int32_t height) {}
+	virtual Blob ReadBlob(uint64_t offset, uint32_t size) { return Blob();  }
+	virtual void CopyTo(uint64_t offset, uint32_t size, Stream& stm) { }
 };
 
 ptr<IBlockChainDb> CreateBlockChainDb();
@@ -543,6 +546,7 @@ public:
 	typedef unordered_map<HashValue, BlockTreeItem> CMap; //!!!TODO change to unordered_set<BlockTreeItem> to save space
 	CMap Map;
 	int HeightLastCheckpointed;
+	//----
 
 	BlockTree() : HeightLastCheckpointed(-1) {}
 
@@ -581,18 +585,18 @@ public:
 };
 
 
+class TxInfo {
+public:
+	uint64_t FeeRatePerKB;
+	Tx Tx;
+
+	TxInfo() {}
+	TxInfo(const class Tx& tx, uint32_t serializationSize);
+};
+
 // Tx Pool
 class TxPool {
 public:
-	class TxInfo {
-	public:
-		Tx Tx;
-		uint64_t FeeRate;	// per KB
-
-		TxInfo() {}
-		TxInfo(const class Tx& tx);
-	};
-
 	CoinEng& Eng;
 
 	recursive_mutex Mtx;
@@ -604,12 +608,14 @@ public:
 	COutPointToNextTx m_outPointToNextTx;
 
 	typedef unordered_map<HashValue, Tx> CHashToOrphan;
-	typedef unordered_multimap<HashValue, HashValue> CHashToHash;
 	CHashToOrphan m_hashToOrphan;
+
+	typedef unordered_multimap<HashValue, HashValue> CHashToHash;
 	CHashToHash m_prevHashToOrphanHash;
+	//----
 
 	TxPool(CoinEng& eng);
-	void Add(const Tx& tx);
+	void Add(const TxInfo& txInfo);
 	void Remove(const Tx& tx);
 	void EraseOrphanTx(const HashValue& hash);
 	void AddOrphan(const Tx& tx);
@@ -618,6 +624,7 @@ public:
 
 class CoinConf : public Ext::Inet::P2P::P2PConf {
 public:
+	int64_t MinTxFee, MinRelayTxFee;	// Fee rate per KB (1000 bytes)
 	String RpcUser, RpcPassword;
 	int RpcPort, RpcThreads;
 	int KeyPool;
@@ -741,7 +748,7 @@ public:
 	Block GetPrevBlockPrefixSuffixFromMainTree(const Block& block);
 	bool IsFromMe(const Tx& tx);
 	void Push(const Inventory& inv);
-	void Push(const Tx& tx);
+	void Push(const TxInfo& txInfo);
 	void ExportToBootstrapDat(const path& pathBoostrap);
 	virtual void ClearByHeightCaches();
 	Block GetBlockByHeight(uint32_t height);
@@ -752,6 +759,7 @@ public:
 	void CommitTransactionIfStarted();
 	void Reorganize(const BlockHeader& header);
 
+	String BlockStringId(const HashValue& hashBlock);
 	virtual HashValue HashMessage(RCSpan cbuf);
 	virtual HashValue HashForSignature(RCSpan cbuf);
 	virtual HashValue HashFromTx(const Tx& tx, bool widnessAware = false);
@@ -769,12 +777,13 @@ public:
 
 	DateTime GetTimestampForNextBlock();
 
-	void Relay(const Tx& tx);
+	void Relay(const TxInfo& txInfo);
 
 	bool IsInitialBlockDownload();
 	bool MarkBlockAsReceived(const HashValue& hashBlock);
 	void MarkBlockAsInFlight(GetDataMessage& mGetData, Link& link, const Inventory& inv);
 	void OnPeriodicMsgLoop(const DateTime& now) override;
+	BlockHeader ProcessNewBlockHeaders(const vector<BlockHeader>& headers);
 	CoinPeer* CreatePeer() override;
 
 	uint64_t CheckMoneyRange(uint64_t v) {
@@ -784,8 +793,6 @@ public:
 	}
 
 	virtual double ToDifficulty(const Target& target);
-
-	virtual int64_t GetMinRelayTxFee() { return ChainParams.CoinValue / 10000; }
 
 	virtual Target GetNextTarget(const BlockHeader& headerLast, const Block& block);
 
@@ -905,12 +912,13 @@ class BootstrapDbThread : public Thread {
 public:
 	CoinEng& Eng;
 	path PathBootstrap;
-	CBool Exporting;
+	CBool Exporting, Indexing;
 
-	BootstrapDbThread(CoinEng& eng, const path& pathBootstrap)
+	BootstrapDbThread(CoinEng& eng, const path& pathBootstrap, bool bIndexing = false)
 		: base(&eng.m_tr)
 		, Eng(eng)
 		, PathBootstrap(pathBootstrap)
+		, Indexing(bIndexing)
 	{}
 protected:
 	void BeforeStart() override;

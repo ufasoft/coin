@@ -245,9 +245,10 @@ void HashTable::Split(uint32_t nPage, int level) {
 
 bool HtCursor::UpdateImpl(RCSpan k, RCSpan d, bool bInsert) {
 	pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.size());
-	size_t ksize = Map->KeySize ? Map->KeySize - m_pagePos.Page.Header().KeyOffset() : 1 + k.size();
+	uint8_t mapKeySize = Map->KeySize;
+	size_t ksize = mapKeySize ? mapKeySize - m_pagePos.Page.Header().KeyOffset() : 1 + k.size();
 	size_t entrySize = GetEntrySize(ppEntry, ksize, d.size());
-	if (m_pagePos.Page.SizeLeft(Map->KeySize) < entrySize) {
+	if (m_pagePos.Page.SizeLeft(mapKeySize) < entrySize) {
 		for (int level = BitOps::ScanReverse(NPage); level < Ht->MaxLevel; ++level) {
 			if (!Ht->GetPgno((1 << level) | NPage)) {
 				Ht->Split(NPage, level);

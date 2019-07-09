@@ -178,7 +178,7 @@
       <ModuleDefinitionFile>coineng.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -224,7 +224,7 @@
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -269,7 +269,7 @@
       <ModuleDefinitionFile>coineng-64.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254,4199 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -313,7 +313,7 @@
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x12F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -363,7 +363,7 @@
       <ModuleDefinitionFile>coineng.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -413,7 +413,7 @@
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x2F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -463,7 +463,7 @@
       <ModuleDefinitionFile>coineng-64.def</ModuleDefinitionFile>
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)/lib</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -513,7 +513,7 @@
       <ProgramDatabaseFile>$(OutDir)/PDB/$(TargetName).pdb</ProgramDatabaseFile>
       <BaseAddress>0x12F200000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <ImportLibrary>$(OutDir)\lib\$(ProjectName).lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)lib\$(ProjectName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
       <AdditionalOptions>/IGNORE:4254 %(AdditionalOptions)</AdditionalOptions>
       <SupportNobindOfDelayLoadedDLL>true</SupportNobindOfDelayLoadedDLL>
@@ -607,6 +607,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="blocktree.cpp" />
     <ClCompile Include="bootstrap.cpp" />
     <ClCompile Include="buggy-aes.cpp" />
     <ClCompile Include="coinconf.cpp" />

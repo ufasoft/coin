@@ -62,7 +62,10 @@ bool DbTable::Delete(DbTransaction& tx, RCSpan k) {
 }
 
 void KVStorage::Vacuum() {
-	path tmpPath = Path::GetTempFileName(FilePath.parent_path(), "tmp").first;
+	path pathParent = FilePath.parent_path();
+	if (pathParent.empty())
+		pathParent = ".";
+	path tmpPath = Path::GetTempFileName(pathParent, "tmp").first;
 	lock_guard<mutex> lkWrite(MtxWrite);
 	unique_lock<shared_mutex> lk(ShMtx, defer_lock);
 	try {

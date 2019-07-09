@@ -13,7 +13,7 @@ namespace Coin {
 
 void Block::Disconnect() const {
 	CoinEng& eng = Eng();
-	TRC(3, Height << " " << Hash(_self));
+	TRC(3, Height << "/" << Hash(_self));
 
 	if (Height <= eng.Db->GetLastPrunedHeight())
 		Throw(CoinErr::CannotReorganizeBeyondPrunedBlocks);
@@ -56,7 +56,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 
 	Tree.Add(header);
 	BlockHeader lastCommon = Tree.LastCommonAncestor(Hash(header), Hash(BestHeader()));
-	TRC(1, "Last Common Block: " << lastCommon.Height << " " << Hash(lastCommon));
+	TRC(1, "Last Common Block: " << lastCommon.Height << "/" << Hash(lastCommon));
 
 	for (BlockHeader h = header; h.Height > lastCommon.Height; h = h.GetPrevHeader())
 		vConnect.push_back(h);

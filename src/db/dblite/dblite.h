@@ -80,13 +80,6 @@ struct LiteEntry {
 		PutLeUInt32(P - 4, v);
 	}
 
-	/*!!R  not used
-	uint64_t DataSize(uint8_t keySize, uint8_t keyOffset) const {
-		const uint8_t* p = P + (keySize ? keySize - keyOffset : 1 + P[0]);
-		return Read7BitEncoded(p);
-	}
-	*/
-
 	struct CLocalData {
 		Span Span;
 		uint64_t DataSize;
@@ -223,9 +216,8 @@ public:
 	bool IsUnderflowed(uint8_t keySize);
 };
 
-} // namespace KV
-} // namespace DB
-} // namespace Ext
+}}} // Ext::DB::KV
+
 EXT_DEF_HASH(Ext::DB::KV::Page)
 namespace Ext {
 namespace DB {
@@ -688,13 +680,11 @@ public:
 
 	DbTransaction(KVStorage& storage, bool bReadOnly = false);
 	~DbTransaction();
-
 	DbTransaction& Current();
 	BTree& Table(RCString name);
 	Page Allocate(PageAlloc pa, Page* pCopyFrom = 0);
 	vector<uint32_t> AllocatePages(int n);
 	Page OpenPage(uint32_t pgno) override;
-
 	void Commit() override;
 	void Rollback() override;
 private:

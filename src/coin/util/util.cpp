@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -184,11 +184,21 @@ HashValue160::HashValue160(RCString s) {
 	reverse_copy(blob.constData(), blob.constData() + 20, data());
 }
 
-COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
+void HashValue::Print(ostream& os, bool bFull) const {
+	const uint8_t* b = data();
+	int size = 32;
+	if (!bFull)
+		for (; size != 2 && !b[size - 1]; --size)
+			;
 	uint8_t buf[32];
-	memcpy(buf, hash.data(), 32);
-	std::reverse(buf, buf + 32);
-	return os << ConstBuf(buf, 32);
+	memcpy(buf, b, size);
+	std::reverse(buf, buf + size);
+	os << ConstBuf(buf, size);
+}
+
+COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash) {
+	hash.Print(os);
+	return os;
 }
 
 COIN_UTIL_API wostream& operator<<(wostream& os, const HashValue& hash) {
@@ -211,18 +221,26 @@ Blob CalcSha256Midstate(RCSpan mb) {
 	return r;
 }
 
-void CoinSerialized::WriteVarInt(BinaryWriter& wr, uint64_t v) {
-	if (v < 0xFD)
-		wr << uint8_t(v);
-	else if (v <= 0xFFFF)
-		wr << uint8_t(0xFD) << uint16_t(v);
-	else if (v <= 0xFFFFFFFFUL)
-		wr << uint8_t(0xFE) << uint32_t(v);
-	else
-		wr << uint8_t(0xFF) << v;
+void CoinSerialized::WriteVarUInt64(BinaryWriter& wr, uint64_t v) {
+	if (v < 0xFD) {
+		wr.Write(&v, 1);
+		return;
+	}
+	uint8_t buf[9];
+	*(UNALIGNED uint64_t*)(buf + 1) = htole(v);
+	if (v <= 0xFFFF) {
+		buf[0] = 0xFD;
+		wr.Write(buf, 3);
+	} else if (v <= 0xFFFFFFFFUL) {
+		buf[0] = 0xFE;
+		wr.Write(buf, 5);
+	} else {
+		buf[0] = 0xFF;
+		wr.Write(buf, 9);
+	}
 }
 
-uint64_t CoinSerialized::ReadVarInt(const BinaryReader& rd) {
+uint64_t CoinSerialized::ReadVarUInt64(const BinaryReader& rd) {
 	switch (uint8_t pref = rd.ReadByte()) {
 	case 0xFD: return rd.ReadUInt16();
 	case 0xFE: return rd.ReadUInt32();
@@ -231,17 +249,22 @@ uint64_t CoinSerialized::ReadVarInt(const BinaryReader& rd) {
 	}
 }
 
+uint32_t CoinSerialized::ReadVarSize(const BinaryReader& rd) {
+	uint64_t size = ReadVarUInt64(rd);
+	if (size > 50000000)	//!!!
+		Throw(ExtErr::Protocol_Violation);
+	return (uint32_t)size;
+}
+
 void CoinSerialized::WriteString(BinaryWriter& wr, RCString s) {
 	const char *p = s;
 	size_t len = strlen(p);
-	WriteVarInt(wr, len);
+	WriteVarUInt64(wr, len);
 	wr.Write(p, len);
 }
 
 Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
-	size_t size = (size_t)ReadVarInt(rd);
-	if (size > 100000000)	//!!!
-		Throw(ExtErr::Protocol_Violation);
+	uint32_t size = ReadVarSize(rd);
 	return rd.ReadBytes(size);
 }
 
@@ -251,7 +274,7 @@ String CoinSerialized::ReadString(const BinaryReader& rd) {
 }
 
 void CoinSerialized::WriteSpan(BinaryWriter& wr, RCSpan mb) {
-	WriteVarInt(wr, mb.size());
+	WriteVarUInt64(wr, mb.size());
 	wr.Write(mb.data(), mb.size());
 }
 
@@ -387,4 +410,3 @@ HashValue Hash(RCSpan mb) {
 
 
 } // Coin::
-
