@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -12,8 +12,8 @@ namespace Coin {
 // params
 TimeSpan XPT_PING_PERIOD = TimeSpan::FromMinutes(1);
 
-void AuthXptMessage::Process(P2P::Link& link) {	Throw(E_NOTIMPL); }
-void SubmitShareXptMessage::Process(P2P::Link& link) {	Throw(E_NOTIMPL); }
+void AuthXptMessage::ProcessMsg(P2P::Link& link) {	Throw(E_NOTIMPL); }
+void SubmitShareXptMessage::ProcessMsg(P2P::Link& link) {	Throw(E_NOTIMPL); }
 
 const size_t MAX_JOB_QUEUE_SIZE = 400;
 
@@ -21,7 +21,7 @@ static XptClient& ToClient(P2P::Link& link) {
 	return static_cast<XptClient&>(link);
 }
 
-void Workdata1XptMessage::Process(P2P::Link& link) {
+void Workdata1XptMessage::ProcessMsg(P2P::Link& link) {
 	XptClient& client = ToClient(link);
 	EXT_LOCK (client.MtxData) {
 		if (client.ProtocolVersion != 4) {
@@ -85,7 +85,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 						return;
 					ptr<XptWorkData> wd = new XptWorkData;
 					wd->Client.reset(&client);
-					wd->Data.Size = 128;
+					wd->Data.resize(128);
 					wd->Height = MinerBlock->Height;
 					wd->Version = MinerBlock->Ver;
 					wd->Bits = MinerBlock->DifficultyTargetBits;
@@ -130,7 +130,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 
 					ptr<XptWorkData> wd = new XptWorkData;
 					wd->Client.reset(&client);
-					wd->Data.Size = 128;
+					wd->Data.resize(128);
 					wd->Height = b.Height;
 					wd->Version = b.Version;
 					wd->Bits = b.Bits;
@@ -161,7 +161,7 @@ void Workdata1XptMessage::Process(P2P::Link& link) {
 	client.Miner.m_evGetWork.Set();
 }
 
-void ShareAckXptMessage::Process(P2P::Link& link) {
+void ShareAckXptMessage::ProcessMsg(P2P::Link& link) {
 	XptClient& client = ToClient(link);
 
 	ptr<BitcoinWorkData> wd = EXT_LOCKED(client.MtxData, client.LastShare);
@@ -169,12 +169,12 @@ void ShareAckXptMessage::Process(P2P::Link& link) {
 	++client.Miner.aSubmittedCount;
 }
 
-void MessageXptMessage::Process(P2P::Link& link) {
+void MessageXptMessage::ProcessMsg(P2P::Link& link) {
 	XptClient& client = ToClient(link);
 	*client.Miner.m_pWTraceStream << "\nXPT Server Message: " << Message << endl;
 }
 
-void PingXptMessage::Process(P2P::Link& link) {
+void PingXptMessage::ProcessMsg(P2P::Link& link) {
 
 }
 
@@ -198,7 +198,7 @@ XptClient::XptClient(Coin::BitcoinMiner& miner)
 ptr<XptMessage> XptClient::Recv() {
    	uint32_t opSize = R.ReadUInt32();
    	Blob blob(0, opSize >> 8);
-   	R.BaseStream.ReadBuffer(blob.data(), blob.Size);
+   	R.BaseStream.ReadBuffer(blob.data(), blob.size());
    	ptr<XptMessage> m;
    	switch (uint8_t opcode = (uint8_t)opSize) {
    	case XPT_OPC_C_AUTH_REQ:		m = new AuthXptMessage;			break;
@@ -222,8 +222,8 @@ void XptClient::PrintStats() {
 	case HashAlgo::Prime:
 		{
 			ostringstream os;
-			for (int len=5; len<aLenStats.size(); ++len) {
-				os << (len>5 ? "   " : "") << len << "ch: " << aLenStats[len];
+		for (int len = 5; len < aLenStats.size(); ++len) {
+				os << (len>5 ? "   " : "") << len << "ch: " << aLenStats[len].load();
 				if (len<aLenStats.size()-1 &&  0==aLenStats[len] && 0==aLenStats[len+1])
 					break;
 			}
@@ -278,7 +278,7 @@ void XptClient::Execute() {
 				throw Exception(0x8FFF0000 | ack->ErrorCode, ack->Reason);
 			DateTime dtNextPing = Clock::now() + XPT_PING_PERIOD;
 			while (!m_bStop) {
-				XptClient::Recv()->Process(_self);
+				XptClient::Recv()->ProcessMsg(_self);
 				DateTime now = Clock::now();
 				if (now > dtNextPing) {
 					dtNextPing = now + XPT_PING_PERIOD;

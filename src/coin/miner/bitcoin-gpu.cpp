@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -287,32 +287,32 @@ static bool TryCompileCal(const CResID& resId, CALtarget target, CalObject& obj)
 
 struct Section {
 	String Name;
-	Buf Mb;
+	Span Mb;
 };
 
-Buf FindTextSectionFromElf(const Buf& mb) {
-	if (0 == mb.Size)
+Span FindTextSectionFromElf(const Span& mb) {
+	if (0 == mb.size())
 		Throw(E_FAIL);
-	if (mb.Size < 1024)
+	if (mb.size() < 1024)
 		Throw(E_FAIL);
-	Elf32_Ehdr& hdr = *(Elf32_Ehdr*)mb.P;
+	Elf32_Ehdr& hdr = *(Elf32_Ehdr*)mb.data();
 	if (memcmp(hdr.e_ident, "\x7F\x45\x4C\x46\x01\x01\x01", 7))
 		Throw(E_FAIL);
 	if (0 == hdr.e_shoff)
 		Throw(E_FAIL);
-	Elf32_Shdr& sech = *(Elf32_Shdr*)(mb.P+hdr.e_shoff+hdr.e_shstrndx*hdr.e_shentsize);
-	const uint8_t *sh = mb.P + hdr.e_shoff;
+	Elf32_Shdr& sech = *(Elf32_Shdr*)(mb.data() + hdr.e_shoff + hdr.e_shstrndx * hdr.e_shentsize);
+	const uint8_t *sh = mb.data() + hdr.e_shoff;
 
 	vector<Section> vSec;
 	for (int i=0; i<hdr.e_shnum; ++i) {
 		Elf32_Shdr& entry = *(Elf32_Shdr*)(sh+i*hdr.e_shentsize);
 		Section sec;
-		sec.Name = (const char*)mb.P+sech.sh_offset+entry.sh_name;
-		sec.Mb = Buf(mb.P+entry.sh_offset, entry.sh_size);
+		sec.Name = (const char*)mb.data() + sech.sh_offset + entry.sh_name;
+		sec.Mb = Span(mb.data() + entry.sh_offset, entry.sh_size);
 		vSec.push_back(sec);
 	}
 	Section *sec = 0;
-	for (int i=0; i<vSec.size(); ++i) {
+	for (int i = 0; i < vSec.size(); ++i) {
 		if (vSec[i].Name == ".text") {
 			sec = &vSec[i];
 			return sec->Mb;
@@ -485,7 +485,7 @@ class OpenClArchitecture : public GpuArchitecture {
 							binary = blob; */
 					} catch (RCExc) {
 					}
-					if (0 == binary.Size) {
+					if (0 == binary.size()) {
 						try {
 							binary = ExtractImageFromCl(dev.m_clDevice, miner.GetOpenclCode(), bEvergreen);
 
@@ -498,7 +498,7 @@ class OpenClArchitecture : public GpuArchitecture {
 					}
 				}
 				ptr<GpuMiner> gm;
-				if (0 != binary.Size) {
+				if (0 != binary.size()) {
 					gm = CreateOpenclMiner(miner, dev.m_clDevice, binary);
 				} else {
 #if UCFG_BITCOIN_USE_CAL
@@ -528,7 +528,7 @@ class OpenClArchitecture : public GpuArchitecture {
 					gdev->Description = Convert::ToString(dev.m_clDevice.MaxComputeUnits)+" SIMDs";
 #endif
 	//				gdev->Index = i;
-					gdev->Miner = StaticCast<Object>(gm);
+					gdev->Miner = StaticCast<InterlockedObject>(gm);
 					miner.Devices.push_back(gdev.get());
 				}
 

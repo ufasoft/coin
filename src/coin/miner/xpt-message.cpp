@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -58,13 +58,13 @@ void XptMessage::Read(const BinaryReader& rd) {
 
 void XptMessage::WriteString8(BinaryWriter& wr, RCString s) {
 	Blob blob = Encoding::UTF8.GetBytes(s);
-	uint8_t len = (uint8_t)blob.Size;
+	uint8_t len = (uint8_t)blob.size();
 	(wr << len).BaseStream.WriteBuffer(blob.constData(), len);
 }
 
 void XptMessage::WriteString16(BinaryWriter& wr, RCString s) {
 	Blob blob = Encoding::UTF8.GetBytes(s);
-	uint16_t len = (uint16_t)blob.Size;
+	uint16_t len = (uint16_t)blob.size();
 	(wr << len).BaseStream.WriteBuffer(blob.constData(), len);
 }
 
@@ -83,8 +83,8 @@ Blob XptMessage::ReadBlob16(const BinaryReader& rd) {
 }
 
 void XptMessage::WriteBlob16(BinaryWriter& wr, RCSpan cbuf) {
-	uint16_t len = (uint16_t)cbuf.Size;
-	(wr << len).BaseStream.WriteBuffer(cbuf.P, len);
+	uint16_t len = (uint16_t)cbuf.size();
+	(wr << len).BaseStream.WriteBuffer(cbuf.data(), len);
 }
 
 void XptMessage::WriteBigInteger(BinaryWriter& wr, const BigInteger& bi) {
@@ -235,7 +235,7 @@ void SubmitShareXptMessage::Write(BinaryWriter& wr) const {
 
 	ASSERT(xpt.Algo == MinerShare->Algo);
 
-	wr << MinerShare->m_merkleRoot.get() << MinerShare->PrevBlockHash << MinerShare->Ver << (uint32_t)to_time_t(MinerShare->Timestamp) << MinerShare->Nonce << MinerShare->DifficultyTargetBits;
+	wr << MinerShare->m_merkleRoot.value() << MinerShare->PrevBlockHash << MinerShare->Ver << (uint32_t)to_time_t(MinerShare->Timestamp) << MinerShare->Nonce << MinerShare->DifficultyTargetBits;
 	switch (Xpt().Algo) {
 	case HashAlgo::Momentum:
 		wr << MinerShare->BirthdayA << MinerShare->BirthdayB;
@@ -289,10 +289,10 @@ void SubmitShareXptMessage::Read(const BinaryReader& rd) {
 	case HashAlgo::SCrypt:
 	case HashAlgo::Metis:
 		rd >> MinerShare->MerkleRootOriginal;
-		MinerShare->ExtraNonce.Size = rd.ReadByte();
-		if (MinerShare->ExtraNonce.Size > 16)
+		MinerShare->ExtraNonce.resize(rd.ReadByte());
+		if (MinerShare->ExtraNonce.size() > 16)
 			Throw(ExtErr::Protocol_Violation);
-		MinerShare->ExtraNonce = rd.ReadBytes(MinerShare->ExtraNonce.Size);
+		MinerShare->ExtraNonce = rd.ReadBytes(MinerShare->ExtraNonce.size());
 		break;
 #if UCFG_COIN_PRIME
 	case HashAlgo::Prime:
@@ -392,7 +392,7 @@ XptPeer::XptPeer(thread_group *tr)
 
 void XptPeer::SendBuf(RCSpan cbuf) {
 	EXT_LOCK (MtxSend) {
-		W.BaseStream.WriteSpan(cbuf);
+		W.BaseStream.Write(cbuf);
 	}
 }
 
@@ -401,8 +401,8 @@ void XptPeer::Send(ptr<P2P::Message> m) {
 
 	MemoryStream ms;
 	BinaryWriter(ms).Ref() << (uint32_t)static_cast<XptMessage*>(m.get())->Opcode << *m;
-	Blob blob = ms;
-	*(uint32_t*)blob.data() |= htole(uint32_t(blob.Size-4) << 8);
+	Blob blob = ms.Blob;
+	*(uint32_t*)blob.data() |= htole(uint32_t(blob.size() - 4) << 8);
 	SendBuf(blob);
 }
 

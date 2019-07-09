@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -17,7 +17,6 @@
 #		pragma comment(lib, "el-std")
 #	endif
 #	pragma comment(lib, "libext")
-#	pragma comment(lib, "cryp")
 #	pragma comment(lib, "coinutil")
 //#	pragma comment(lib, "miner")
 #endif // defined(_MSC_VER) && !defined(_AFXDLL)
@@ -31,6 +30,8 @@
 #endif
 
 using namespace Coin;
+
+#pragma comment(lib, "miner")
 
 
 #if UCFG_BITCOIN_SOLO_MINING
@@ -56,7 +57,7 @@ protected:
 	void OnProcessBlock(const Block& block) override {
 		cerr << Eng.ChainParams.Name << " Block " << block.Height << flush;
 	}
-	
+
 	void OnProcessTx(const Tx& tx) override {}
 
 	void OnEraseTx(const HashValue& hashTx) override {}
@@ -64,7 +65,7 @@ protected:
 	void OnPeriodic() override {}
 
 	void OnSetProgress(float v) override {}
-	
+
 	void OnChange() override {}
 
 	bool IsFromMe(const Tx& tx) override { return false; }
@@ -124,7 +125,7 @@ void SoloMiner::StartChainEngs() {
 
 class CMinerApp : public CConApp, public BitcoinMiner {
 public:
-	thread_group m_tr;		
+	thread_group m_tr;
 
 	CMinerApp() {
 		FileDescription = VER_FILEDESCRIPTION_STR;
@@ -169,7 +170,7 @@ public:
 				"  -S                  Install service\n"
 				"  -U                  Uninstall service\n"
 #endif
-			    "  -v                  Verbose output\n"			
+			    "  -v                  Verbose output\n"
 				"  -x type=host:port   Use HTTP or SOCKS proxy. Examples: -x http=127.0.0.1:3128, -x socks=127.0.0.1:1080\n"
 			 << endl;
 	}
@@ -314,7 +315,7 @@ public:
 
 		if (!bMine) {
 			PrintUsage();
-			
+
 			cerr << "Device List:\n";
 			for (size_t i=0; i<Devices.size(); ++i) {
 				ComputationDevice& dev = *Devices[i];
@@ -328,14 +329,14 @@ public:
 
 		if (selectedDevs.empty())  {
 			if (Devices.size() > 1)
-				Devices.erase(Devices.begin());							// disable CPU if we have other devices		
+				Devices.erase(Devices.begin());							// disable CPU if we have other devices
 		} else {
 			vector<ptr<ComputationDevice>> devices;
 			for (int i=0; i<selectedDevs.size(); ++i) {
 				String s = selectedDevs[i];
 				if (int idx = atoi(s)) {
 					if (idx > Devices.size())
-						Throw(E_INVALIDARG);
+						Throw(errc::invalid_argument);
 					devices.push_back(Devices[idx-1]);
 				} else {
 					for (int j=0; j<Devices.size(); ++j) {
@@ -366,10 +367,10 @@ public:
 		} catch (system_error& ex) {
 			if (ex.code() != error_condition(ERROR_FAILED_SERVICE_CONTROLLER_CONNECT, win32_category()))
 				throw;
-		}		
+		}
 #endif
 
-		cout << "Mining for " << MainBitcoinUrl << endl;		
+		cout << "Mining for " << MainBitcoinUrl << endl;
 		bool bComma = false;
 		cout << "Using ";
 		for (int i=0; i<Devices.size(); ++i) {
@@ -385,7 +386,7 @@ public:
 		miner->Start(&m_tr);
 
 		while (!s_bSigBreak) {
-			Thread::Sleep(2000);			
+			Thread::Sleep(2000);
 			ostringstream os;
 			os << setprecision(4);
 			if (miner->HashAlgo == Coin::HashAlgo::Prime)
@@ -398,7 +399,7 @@ public:
 				os << Speed/1000000000 << " GH";
 			os << "/s ";
 			if (miner->HashAlgo == Coin::HashAlgo::Prime)
-				os << "  " << setprecision(2) << CPD << " CPD ";			
+				os << "  " << setprecision(2) << CPD << " CPD ";
 			os << String(' ' , max(0, 35 - int(os.tellp())));
 
 			struct NTemp {
@@ -441,9 +442,9 @@ public:
 		}
 		miner->Stop();		//!!! we can't stop LongPolling with easy libcurl
 
-		double sec = duration_cast<milliseconds>(DateTime::UtcNow()-DtStart).count() / 1000.0;
+		double sec = duration_cast<milliseconds>(Clock::now()-DtStart).count() / 1000.0;
 		cerr << "\nProcessed: " << EntireHashCount/1000000 << " Mhash, " << int(sec) << " s with average Rate: " << miner->Speed/1000000  << " MHash/s"
-			<< "\nAccepted: " << aAcceptedCount << ", average: " << aAcceptedCount*60/(sec > 1 ? sec : 1) << " shares/min"
+			 << "\nAccepted: " << aAcceptedCount.load() << ", average: " << aAcceptedCount * 60 / (sec > 1 ? sec : 1) << " shares/min"
 			<< endl;
 	}
 
@@ -457,5 +458,3 @@ protected:
 
 
 EXT_DEFINE_MAIN(theApp)
-
-

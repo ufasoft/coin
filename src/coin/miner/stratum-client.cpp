@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #include <el/ext.h>
 
 #include "miner.h"
@@ -10,7 +15,7 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 	r->JobId = json[0];
 
 	Blob blob = Swab32(Blob::FromHexString(json[5].ToString()));
-	if (blob.Size != 4)
+	if (blob.size() != 4)
 		Throw(ExtErr::Protocol_Violation);
 	r->Ver = letoh(*(uint32_t*)blob.constData());
 		
@@ -26,11 +31,11 @@ ptr<MinerBlock> MinerBlock::FromStratumJson(const VarValue& json) {
 	for (int i=0; i<r->MerkleBranch.Vec.size(); ++i)
 		r->MerkleBranch.Vec[i] = HashValue(Blob::FromHexString(vMerk[i].ToString()));
 		
-	if ((blob = Swab32(Blob::FromHexString(json[6].ToString()))).Size != 4)
+	if ((blob = Swab32(Blob::FromHexString(json[6].ToString()))).size() != 4)
 		Throw(ExtErr::Protocol_Violation);
 	r->DifficultyTargetBits = letoh(*(uint32_t*)blob.constData());
 
-	if ((blob = Swab32(Blob::FromHexString(json[7].ToString()))).Size != 4)
+	if ((blob = Swab32(Blob::FromHexString(json[7].ToString()))).size() != 4)
 		Throw(ExtErr::Protocol_Violation);
 	r->SetTimestamps(DateTime::from_time_t(letoh(*(uint32_t*)blob.constData())));
 
@@ -133,7 +138,7 @@ void StratumClient::OnLine(RCString line) {
 		} else if (method == "mining.authorize") {
 			if (resp.Result != VarValue(true)) {
 				m_bStop = true;
-				Throw(HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD));
+				Throw(ExtErr::InvalidPassword);
 			}
 		} else if (method == "mining.submit") {	
 			StratumTask *task = (StratumTask*)resp.Request.get();

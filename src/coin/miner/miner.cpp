@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -13,7 +13,7 @@
 
 #include "resource.h"
 
-#include <el/libext/ext-http.h>
+#include <el/inet/http.h>
 
 #include "../util/wallet-client.h"
 
@@ -23,6 +23,12 @@
 #if UCFG_COIN_PRIME
 #	include "xpt.h"
 #endif
+
+#if defined(_MSC_VER)
+#	pragma comment(lib, "cryp")
+#	pragma comment(lib, "inet")
+#endif
+
 
 extern "C" {
 
@@ -124,13 +130,13 @@ ptr<BitcoinWorkData> BitcoinWorkData::FromJson(RCString sjson, Coin::HashAlgo al
 		r.Hash1 = Blob::FromHexString(jres["hash1"].ToString());
 	if (jres.HasKey("target")) {
 		Blob t = Blob::FromHexString(jres["target"].ToString());
-		if (t.Size != 32)
+		if (t.size() != 32)
 			Throw(errc::invalid_argument);
 		copy(t.begin(), t.end(), r.HashTarget.data());
 	}
 	if (jres.HasKey("target_share")) {
 		Blob t = Blob::FromHexString(jres["target_share"].ToString().substr(2));
-		if (t.Size != 32)
+		if (t.size() != 32)
 			Throw(errc::invalid_argument);
 		reverse_copy(t.begin(), t.end(), r.HashTarget.data());
 	}
@@ -139,7 +145,7 @@ ptr<BitcoinWorkData> BitcoinWorkData::FromJson(RCString sjson, Coin::HashAlgo al
 	r.LastNonce = nonceRange.second;
 
 	if (Coin::HashAlgo::Sha256 == r.HashAlgo) {
-		if (0 == r.Hash1.Size) {
+		if (0 == r.Hash1.size()) {
 			static const uint8_t s_hash1[64] = {
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -148,7 +154,7 @@ ptr<BitcoinWorkData> BitcoinWorkData::FromJson(RCString sjson, Coin::HashAlgo al
 			};
 			r.Hash1 = Blob(s_hash1, sizeof s_hash1);
 		}
-		if (0 == r.Midstate.Size)
+		if (0 == r.Midstate.size())
 			r.Midstate = CalcSha256Midstate(r.Data);
 		else {
 			ASSERT(r.Midstate == CalcSha256Midstate(r.Data));
@@ -481,8 +487,8 @@ void BitcoinMiner::SetNewData(const BitcoinWorkData& wd, bool bClearOld) {
 	if (exchange(s_hashAlgo, wd.HashAlgo) != wd.HashAlgo)
 		*m_pTraceStream << "Algo: " << AlgoToString(wd.HashAlgo) << endl;
 
-	if (wd.Data.Size != 128 && wd.Data.Size != 80 ||
-		wd.HashAlgo == Coin::HashAlgo::Sha256 && (wd.Midstate.Size != 32 || wd.Hash1.Size != 64))
+	if (wd.Data.size() != 128 && wd.Data.size() != 80 ||
+		wd.HashAlgo == Coin::HashAlgo::Sha256 && (wd.Midstate.size() != 32 || wd.Hash1.size() != 64))
 		Throw(E_FAIL);
 
 	DateTime now = Clock::now();
@@ -667,7 +673,7 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkFromMinerBlock(const DateTime& now, Co
 	return GetTestData();
 #endif
 
-	size_t cbN2 = minerBlock->ExtraNonce2.Size;
+	size_t cbN2 = minerBlock->ExtraNonce2.size();
 	uint8_t *pN2 = minerBlock->ExtraNonce2.data();
 	if (cbN2 == 1)
 		++*pN2;
@@ -685,10 +691,11 @@ ptr<BitcoinWorkData> BitcoinMiner::GetWorkFromMinerBlock(const DateTime& now, Co
 	wd->Height = minerBlock->Height;
 
 	MemoryStream stm;
-	minerBlock->WriteHeader(BinaryWriter(stm).Ref());
-	Blob blob = stm;
-	size_t len = blob.Size;
-	blob.Size = 128;
+	ProtocolWriter wr(stm);
+	minerBlock->WriteHeader(wr);
+	Blob blob = stm.AsSpan();
+	size_t len = blob.size();
+	blob.resize(128);
 	FormatHashBlocks(blob.data(), len);
 
 	wd->Hash1 = Blob(0, 64);
@@ -884,7 +891,7 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 		ProtocolWriter wr(ms);
 		mblock.WriteHeader(wr);
 
-		CoinSerialized::WriteVarInt(wr, txes.size());
+		CoinSerialized::WriteVarUInt64(wr, txes.size());
 		wr.BaseStream.Write(tx0);
 		for (size_t i = 1; i < txes.size(); ++i)
 			wr.BaseStream.Write(txes[i].Data);
@@ -1133,7 +1140,11 @@ void BitcoinMiner::CreateConnectionClient(RCString s) {
 #endif
 	} else
 		Throw(errc::invalid_argument);
-	ConnectionClient->SetEpServer(IPEndPoint(uri.Host, (uint16_t)uri.Port));
+	String shost = uri.Host;
+	IPAddress ip;
+	if (!IPAddress::TryParse(shost, ip))
+		ip = Dns::GetHostAddresses(shost).at(1);
+	ConnectionClient->SetEpServer(IPEndPoint(ip, (uint16_t)uri.Port));
 	ConnectionClientThread->Start();
 }
 

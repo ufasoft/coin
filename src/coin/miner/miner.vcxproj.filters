@@ -37,9 +37,6 @@
     <ClCompile Include="stratum-client.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\el\crypto\sha256.cpp">
-      <Filter>Comp\Crypto</Filter>
-    </ClCompile>
     <ClCompile Include="miner-fpga-modminer.cpp">
       <Filter>Source Files\devices</Filter>
     </ClCompile>
@@ -77,9 +74,6 @@
       <Filter>Source Files\hasher</Filter>
     </ClCompile>
     <ClCompile Include="hasher\hasher-sha3.cpp">
-      <Filter>Source Files\hasher</Filter>
-    </ClCompile>
-    <ClCompile Include="hasher\hasher-solid.cpp">
       <Filter>Source Files\hasher</Filter>
     </ClCompile>
     <ClCompile Include="hasher\hasher-prime.cpp">
@@ -128,12 +122,6 @@
     </Filter>
     <Filter Include="Source Files\devices">
       <UniqueIdentifier>{fadfd800-2a01-4c95-acc5-5708712fc027}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Comp\Crypto">
-      <UniqueIdentifier>{852f7fed-e0c2-45d3-a04c-4c1904447caf}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Comp\Crypto\x86x64">
-      <UniqueIdentifier>{63160de2-bdb2-44e7-be6d-f3a16a6e505b}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\inc">
       <UniqueIdentifier>{324f8e1f-aad2-4b83-a2f1-5459fe26b6bd}</UniqueIdentifier>
@@ -191,9 +179,6 @@
   <ItemGroup>
     <MASM Include="bitcoin_sha256_x86x64.asm">
       <Filter>Source Files\asm</Filter>
-    </MASM>
-    <MASM Include="..\..\el\crypto\x86x64\sha256_x86x64.asm">
-      <Filter>Comp\Crypto\x86x64</Filter>
     </MASM>
     <MASM Include="bitset-op.asm">
       <Filter>Source Files\asm</Filter>

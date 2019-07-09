@@ -112,7 +112,7 @@ class ComputationDevice : public Object {
 public:
 	typedef InterlockedPolicy interlocked_policy;
 
-	ptr<Object> Miner;
+	ptr<InterlockedObject> Miner;
 	String Name, Description;
 	Ext::Temperature Temperature;
 	atomic<int> aHwErrors;
@@ -120,7 +120,7 @@ public:
 //!!!	int Index;
 
 	ComputationDevice()
-		:	aHwErrors(0)
+		: aHwErrors(0)
 	{}
 
 	virtual void Start(BitcoinMiner& miner, thread_group *tr) =0;
@@ -153,7 +153,6 @@ protected:
 	String SysName;
 
 	bool TimeToDetect();
-
 };
 
 class FpgaArchitecture : public SerialDeviceArchitecture {
@@ -512,15 +511,15 @@ public:
 	virtual int ParseResults() =0;
 };
 
-class GpuMiner : public Object {
+class GpuMiner : public InterlockedObject {
 public:
 	BitcoinMiner& Miner;
 	uint32_t DevicePortion;
 	CBool m_bIsVector2;
 
 	GpuMiner(BitcoinMiner& miner)
-		:	Miner(miner)
-		,	DevicePortion(1024*1024/UCFG_BITCOIN_NPAR)
+		: Miner(miner)
+		, DevicePortion(1024*1024/UCFG_BITCOIN_NPAR)
 	{}
 
 //!!!	virtual void InitBeforeRun() {}

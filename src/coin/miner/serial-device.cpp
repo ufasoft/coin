@@ -33,14 +33,14 @@ public:
 
 namespace Coin {
 
-void SerialDeviceThread::Write(const ConstBuf& cbuf) {
+void SerialDeviceThread::Write(RCSpan cbuf) {
 #if UCFG_USE_POSIX
 	CCheck(fwrite(cbuf.P, cbuf.Size, 1, m_file));
 	CCheck(fflush(m_file));
 	fseek(m_file, 0, SEEK_CUR);				// don't check retval, switch after reading, bug in the MSC CRT fflush() for non-buffered streams
 #else
-	int rc = CCheck(_write(fileno(m_file), cbuf.P, cbuf.Size));
-	if (rc != cbuf.Size) {
+	int rc = CCheck(_write(fileno(m_file), cbuf.data(), cbuf.size()));
+	if (rc != cbuf.size()) {
 		*Miner.m_pTraceStream << "write() not complete" << endl;
 		throw StopException();
 	}
@@ -78,12 +78,12 @@ Blob SerialDeviceThread::Command(const ConstBuf cmd, size_t replySize) {
 			if (rc == 1)
 				continue;
 			break;
-		} else if (replySize==size_t(-1)) {
-			int rc = _read(fd, buf.data(), buf.Size);
+		} else if (replySize == size_t(-1)) {
+			int rc = _read(fd, buf.data(), buf.size());
 			if (rc < 1)
 				Throw(E_FAIL);
-			if (replySize==size_t(-1))
-				buf.Size = rc;
+			if (replySize == size_t(-1))
+				buf.resize(rc);
 			else if (rc != replySize) {
 				Throw(E_FAIL);
 			}
@@ -159,7 +159,7 @@ void SerialDeviceThread::Stop() {
 }
 
 bool SerialDeviceArchitecture::TimeToDetect() {
-	DateTime now = DateTime::UtcNow();
+	DateTime now = Clock::now();
 	if (now < m_dtNextDetect)
 		return false;
 	m_dtNextDetect = now+TimeSpan::FromSeconds(10);

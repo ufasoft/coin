@@ -36,6 +36,10 @@ public:
 
 class ScryptOpenclTask : public OpenclTask {
 	typedef OpenclTask base;
+
+	Blob m_iodata, m_ihashes;
+	cl::Buffer m_iobuf;
+	CBool m_bComplete;
 public:
 	ScryptOpenclTask(OpenclMiner& clMiner);
 	void Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) override;
@@ -43,10 +47,6 @@ public:
 	int ParseResults() override;
 	bool IsComplete() override;
 private:
-	Blob m_iodata, m_ihashes;
-	cl::Buffer m_iobuf;
-	CBool m_bComplete;
-
 	void OnComplete();
 	static void CL_CALLBACK Callback(cl_event, cl_int, void *ctx);
 };
@@ -64,7 +64,7 @@ public:
 //	cl::Event EvKernSync;
 	queue<pair<cl::Buffer, cl::Event>> ScratchQueue;
 
-	OpenclMiner(BitcoinMiner& miner, const cl::Device& dev, const ConstBuf& binary);
+	OpenclMiner(BitcoinMiner& miner, const cl::Device& dev, RCSpan binary);
 
 //!!!	void InitBeforeRun() override;
 	ptr<GpuTask> CreateTask() override {
@@ -208,11 +208,11 @@ int OpenclTask::ParseResults() {
 	return r;
 }
 
-ptr<GpuMiner> CreateOpenclMiner(BitcoinMiner& miner, cl::Device& dev, const ConstBuf& binary) {
+ptr<GpuMiner> CreateOpenclMiner(BitcoinMiner& miner, cl::Device& dev, RCSpan binary) {
 	return new OpenclMiner(miner, dev, binary);
 }
 
-OpenclMiner::OpenclMiner(BitcoinMiner& miner, const cl::Device& dev, const ConstBuf& binary)
+OpenclMiner::OpenclMiner(BitcoinMiner& miner, const cl::Device& dev, RCSpan binary)
 	:	base(miner)
 	,	Device(dev)
 {
@@ -245,8 +245,8 @@ ScryptOpenclTask::ScryptOpenclTask(OpenclMiner& clMiner)
 #endif
 	Queue = cl::CommandQueue(m_clMiner.Ctx, m_clMiner.Device, prop);
 
-	m_iodata.Size = size_t(clMiner.DevicePortion) * UCFG_BITCOIN_NPAR * 128;
-	m_ihashes.Size = size_t(clMiner.DevicePortion) * UCFG_BITCOIN_NPAR * 32;
+	m_iodata.resize(size_t(clMiner.DevicePortion) * UCFG_BITCOIN_NPAR * 128);
+	m_ihashes.resize(size_t(clMiner.DevicePortion) * UCFG_BITCOIN_NPAR * 32);
 }
 
 void ScryptOpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) {
@@ -264,7 +264,7 @@ void ScryptOpenclTask::Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt)
 
 		ConstBuf password(data, sizeof data);
 		SHA256 sha;
-		Blob ihash(sha.ComputeHash(password));
+		Blob ihash(Span(sha.ComputeHash(password)));
 		const uint32_t *pIhash = (uint32_t*)ihash.constData();
 		memcpy(m_ihashes.data()+32*n, pIhash, 32);
 
@@ -301,7 +301,7 @@ int ScryptOpenclTask::ParseResults() {
 	for (int n=0; n<m_npar; ++n) {
 		uint32_t tmp[32];
 		UnShuffleForSalsa(tmp, (uint32_t*)(m_iodata.data() + n*128));
-		Blob blob(CalcPbkdf2Hash((uint32_t*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1));
+		Blob blob(Span(CalcPbkdf2Hash((uint32_t*)(m_ihashes.data()+32*n), ConstBuf(tmp, sizeof tmp), 1)));
 		const uint32_t *p = (const uint32_t*)blob.constData();
 		if (p[7] < 0x10000) {
 			++r;
@@ -361,7 +361,7 @@ void CL_CALLBACK OclProfileCallback(cl_event ev, cl_int st, void *ctx) {
 
 void ScryptOpenclTask::Run() {
 	vector<cl::Event> events(2);
-	OCL_PROFILE_EVENT(events[0] = Queue.enqueueWriteBuffer(m_iobuf, false, 0, m_iodata.Size, m_iodata.constData()));
+	OCL_PROFILE_EVENT(events[0] = Queue.enqueueWriteBuffer(m_iobuf, false, 0, m_iodata.size(), m_iodata.constData()));
 	Kern.setArg(0, m_iobuf);
 	EXT_LOCK (m_clMiner.MtxEvent) {
 		cl::Buffer scratch;
@@ -380,7 +380,7 @@ void ScryptOpenclTask::Run() {
 		OCL_PROFILE_EVENT(events[0]);
 	}
 	events.resize(1);
-	m_ev = Queue.enqueueReadBuffer(m_iobuf, false, 0, m_iodata.Size, m_iodata.data(), &events);
+	m_ev = Queue.enqueueReadBuffer(m_iobuf, false, 0, m_iodata.size(), m_iodata.data(), &events);
 	if (m_pwt)
 		m_ev.Retain().setCallback(&Callback, this);
 	OCL_PROFILE_EVENT(m_ev);

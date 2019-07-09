@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -34,14 +34,14 @@ static const Blob BITSTREAM_SHA256SUM = Blob::FromHexString("2f90ac200f33d89ac2d
 class MmqDevice;
 class MmqThread;
 
-class MmqChip : public Object, public DynClockDevice {
+class MmqChip : public NonInterlockedObject, public DynClockDevice {
 public:
 	String Name;
 	Ext::Temperature Temperature;
 	ptr<BitcoinWorkData> WorkData, PrevWorkData;
 	DateTime DtStartRound, DtNextWorkData;
 	observer_ptr<Coin::MmqThread> MmqThread;
-	byte Id;
+	uint8_t Id;
 
 	MmqChip() {
 		FreqDatas.resize(MAX_FPGA_FREQUENCY/2+1);
@@ -76,7 +76,7 @@ public:
 	void CommunicateDevice() override;
 
 	void StatusRead() {
-		byte buf;
+		uint8_t buf;
 #if UCFG_USE_POSIX
 		int rc = fread(&buf, 1, 1, m_file);
 		CCheck(rc);
@@ -100,7 +100,7 @@ public:
 	}
 
 	void Sync() {
-		byte cmdNoop[46] = { 0 };
+		uint8_t cmdNoop[46] = { 0 };
 		memset(cmdNoop+1, 0xFF, (sizeof cmdNoop)-1);
 		Command(ConstBuf(cmdNoop, sizeof cmdNoop), 0);
 	}
@@ -113,37 +113,38 @@ public:
 		return *Command(ConstBuf("\x02", 1), 1).constData();
 	}
 
-	Temperature GetTemperature(byte devid) {
-		byte cmd[2] = { 10, devid };
+	Temperature GetTemperature(uint8_t devid) {
+		uint8_t cmd[2] = { 10, devid };
 		return Temperature::FromCelsius(*Command(ConstBuf(cmd, sizeof cmd), 1).constData());
 	}
 
-	bool SetClock(byte devid, int mhz) {
-		byte cmd[6] = { 6, devid, (byte)min(250, max(1, mhz & ~1)), 0, 0, 0 };
+	bool SetClock(uint8_t devid, int mhz) {
+		uint8_t cmd[6] = { 6, devid, (uint8_t)min(250, max(1, mhz & ~1)), 0, 0, 0 };
 		bool r = *Command(ConstBuf(cmd, sizeof cmd), 1).constData();
 		*Miner.m_pTraceStream << "Setting " << Dev.Chips[devid]->Name << " CLK = " << mhz << " MHz " << endl;
 		return r;	
 	}
 
-	uint32_t GetUserId(byte devid) {
-		byte cmd[2] = { 4, devid};
+	uint32_t GetUserId(uint8_t devid) {
+		uint8_t cmd[2] = { 4, devid};
 		return letoh(*(uint32_t*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
 	}
 
-	static const byte DEVID_ALL = 4;
+	static const uint8_t DEVID_ALL = 4;
 
-	void UploadBitstream(byte devid, const ConstBuf& bitstream) {
-		byte cmd[6] = { 5, devid, byte(bitstream.Size), byte(bitstream.Size >> 8), byte(bitstream.Size >> 16), byte(bitstream.Size >> 24)};
-		byte rc = *Command(ConstBuf(cmd, sizeof cmd), 1).constData();
+	void UploadBitstream(uint8_t devid, RCSpan bitstream) {
+		uint8_t cmd[6] = { 5, devid, uint8_t(bitstream.size()), uint8_t(bitstream.size() >> 8), uint8_t(bitstream.size() >> 16), uint8_t(bitstream.size() >> 24)};
+		uint8_t rc = *Command(ConstBuf(cmd, sizeof cmd), 1).constData();
 		if (rc != 1) {
 			Throw(E_FAIL);
 		}
-		for (int i=0; i<bitstream.Size && !m_bStop; i+=32) {
-			int len = min(32, int(bitstream.Size-i));
-			Write(ConstBuf(bitstream.P+i, len));
+		for (int i = 0; i < bitstream.size() && !m_bStop; i += 32) {
+			int len = min(32, int(bitstream.size() - i));
+			Write(ConstBuf(bitstream.data() + i, len));
 			StatusRead();
 			if (!(i & 0xFFF))
-				*Miner.m_pTraceStream << "Programming FPGA" << (devid==DEVID_ALL ? String("") : " "+Dev.Chips[devid]->Name) << ", please DONT'T EXIT until complete: " << i*100/bitstream.Size << "%                      \r" << flush;
+				*Miner.m_pTraceStream << "Programming FPGA" << (devid == DEVID_ALL ? String("") : " " + Dev.Chips[devid]->Name)
+				<< ", please DONT'T EXIT until complete: " << i * 100 / bitstream.size() << "%                      \r" << flush;
 		}
 		if (m_bStop)
 			Throw(ExtErr::ThreadInterrupted);
@@ -153,15 +154,15 @@ public:
 		*Miner.m_pTraceStream << "Programming FPGA complete                                                     " << endl;
 	}
 
-	void SendWorkData(byte devid, const BitcoinWorkData& wd) {
-		byte cmd[46] = { 8, devid };
+	void SendWorkData(uint8_t devid, const BitcoinWorkData& wd) {
+		uint8_t cmd[46] = { 8, devid };
 		memcpy(cmd+2, wd.Midstate.constData(), 32);
 		memcpy(cmd+2+32, wd.Data.constData()+64, 12);
 		Command(ConstBuf(cmd, sizeof cmd));
 	}
 
-	uint32_t GetNonce(byte devid) {
-		byte cmd[2] = { 9, devid};
+	uint32_t GetNonce(uint8_t devid) {
+		uint8_t cmd[2] = { 9, devid};
 		return letoh(*(uint32_t*)Command(ConstBuf(cmd, sizeof cmd), 4).constData());
 	}
 };
@@ -174,8 +175,8 @@ public:
 		SysName = "ModMiner";
 	}
 
-	void CheckBitstream(BitcoinMiner& miner, const ConstBuf& cbuf) {
-		if (SHA256().ComputeHash(cbuf) != BITSTREAM_SHA256SUM) {
+	void CheckBitstream(BitcoinMiner& miner, RCSpan cbuf) {
+		if (!Equal(SHA256().ComputeHash(cbuf), BITSTREAM_SHA256SUM)) {
 			*miner.m_pTraceStream << "Invalid Bitstream Checksum" << endl;
 			Throw(E_FAIL);
 		}			
@@ -310,7 +311,7 @@ void MmqThread::CommunicateDevice() {
 	if (!n)
 		return;
 	const char * const suffixes[4] = { "a", "b", "c", "d" };
-	for (byte devid=0; devid<n; ++devid) {
+	for (uint8_t devid=0; devid<n; ++devid) {
 		MmqChip *chip = new MmqChip;
 		(Dev.Chips[chip->Id = devid] = chip)->Name = Dev.Name + suffixes[devid];
 		chip->MmqThread.reset(this);
@@ -325,7 +326,7 @@ void MmqThread::CommunicateDevice() {
 	m_evStartMining.lock();
 	if (m_bStop)
 		return;
-	for (byte devid=0; devid < n; ++devid) {
+	for (uint8_t devid=0; devid < n; ++devid) {
 		uint32_t userId = GetUserId(devid);
 		if (userId != BISTREAM_USER_ID) {
 			*Miner.m_pTraceStream << Dev.Chips[devid]->Name << " has not BITSTREAM uploaded" << endl;
@@ -333,7 +334,7 @@ void MmqThread::CommunicateDevice() {
 			break;
 		}
 	}
-	for (byte devid=0; devid<n; ++devid) {
+	for (uint8_t devid=0; devid<n; ++devid) {
 		if (Dev.Chips[devid]) {
 			Dev.Chips[devid]->SetClock(DEFAULT_FPGA_FREQUENCY);
 			GetNonce(devid);	// read prev  results
@@ -343,7 +344,7 @@ void MmqThread::CommunicateDevice() {
 	DateTime dtPrev;
 	while (!m_bStop) {
 		Temperature tempMax = Temperature::FromCelsius(0);
-		for (byte devid=0; devid<4; ++devid) {
+		for (uint8_t devid=0; devid<4; ++devid) {
 			if (Dev.Chips[devid]) {
 				MmqChip& chip = *Dev.Chips[devid];
 				chip.Temperature = GetTemperature(devid);
@@ -353,7 +354,7 @@ void MmqThread::CommunicateDevice() {
 		Dev.Temperature = tempMax;
 
 		int hashrate = 0;
-		for (byte devid=0; devid<4; ++devid) {
+		for (uint8_t devid=0; devid<4; ++devid) {
 			if (Dev.Chips[devid]) {
 				MmqChip& chip = *Dev.Chips[devid];
 				hashrate += chip.GetClock();
@@ -371,7 +372,7 @@ void MmqThread::CommunicateDevice() {
 					else {
 						++nErr;
 						++Dev.aHwErrors;
-						*Miner.m_pTraceStream << chip.Name << " Hardware Error (" << Dev.aHwErrors << ")" << endl;
+						*Miner.m_pTraceStream << chip.Name << " Hardware Error (" << Dev.aHwErrors.load() << ")" << endl;
 					}
 				}
 				if (nTotal)
@@ -379,8 +380,8 @@ void MmqThread::CommunicateDevice() {
 			}				
 		}
 
-		DateTime now = DateTime::UtcNow();
-		for (byte devid=0; devid<4; ++devid) {
+		DateTime now = Clock::now();
+		for (uint8_t devid=0; devid<4; ++devid) {
 			if (Dev.Chips[devid]) {
 				MmqChip& chip = *Dev.Chips[devid];
 				if (now > chip.DtNextWorkData) {
