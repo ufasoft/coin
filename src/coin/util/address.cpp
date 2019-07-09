@@ -42,7 +42,7 @@ AddressObj::AddressObj(HasherEng& hasher, RCString s, RCString comment)
 			DecodeBech32(hasher, s);
 		else {
 			Blob blob = ConvertFromBase58(s.Trim());
-			if (blob.Size < 21)
+			if (blob.size() < 21)
 				Throw(CoinErr::InvalidAddress);
 			uint8_t ver = blob.constData()[0];
 			if (ver == Hasher.AddressVersion)
@@ -192,8 +192,8 @@ void AddressObj::DecodeBech32(HasherEng& hasher, RCString s) {
 		wchar_t ch = s[i];
 		if (ch < 33 || ch > 126)
 			Throw(CoinErr::InvalidAddress);
-		bHasLower |= islower(ch);
-		bHasUpper |= isupper(ch);
+		bHasLower |= (bool)islower(ch);
+		bHasUpper |= (bool)isupper(ch);
 		lower[i] = (char)tolower(ch);
 	}
 	lower[s.length()] = 0;
@@ -212,7 +212,7 @@ void AddressObj::DecodeBech32(HasherEng& hasher, RCString s) {
 	if (data.length() < 11)
 		Throw(CoinErr::InvalidAddress);
 	Blob witnessProgram = Convert::FromBase32String(data.substr(1, data.length() - 7), s_base32FromChar);
-	Data.resize(witnessProgram.Size);
+	Data.resize(witnessProgram.size());
 	memcpy(Data.data(), witnessProgram.constData(), Data.size());
 	if ((WitnessVer = buf[hrpLen * 2 + 1]) > 16)
 		Throw(CoinErr::InvalidAddress);

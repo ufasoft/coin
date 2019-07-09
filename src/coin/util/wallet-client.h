@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2012-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2012-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -9,6 +9,7 @@
 using namespace std::decimal;
 
 #include <el/inet/http.h>
+using namespace Ext::Inet;
 
 #include "util.h"
 #include "block-template.h"
