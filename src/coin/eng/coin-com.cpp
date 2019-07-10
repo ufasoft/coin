@@ -18,6 +18,12 @@ namespace Coin {
 
 class WalletCom;
 
+struct CommaSeparatedNumpunct : numpunct<char> {
+	char do_thousands_sep() const override { return ','; }
+	string do_grouping() const override { return "\03"; }
+};
+static locale s_localeCommaSeparated(locale(), new CommaSeparatedNumpunct);
+
 class AddressCom : public IDispatchImpl<AddressCom, IAddress>
 	, public ISupportErrorInfoImpl<IAddress>
 {
@@ -425,6 +431,7 @@ public:
 
 				if (Block bestBlock = m_wallet.Eng.BestBlock()) {
 					BlockHeader bestHeader = m_wallet.Eng.BestHeader();
+					os.imbue(s_localeCommaSeparated);
 					if (bestBlock.Height < bestHeader.Height)
 						os << "/ " << bestHeader.get_Height() << " headers. ";
 					TimeSpan span = Clock::now() - bestBlock.Timestamp;
@@ -471,7 +478,7 @@ public:
 
 	HRESULT __stdcall AddRecipient(BSTR addr, BSTR comment, IAddress **r)
 	METHOD_BEGIN {
-		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecipientAlreadyPresents);		
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::RecipientAlreadyPresents);
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
 		Address a(m_wallet.Eng, addr, comment);
 		m_str2addr.erase(addr);

@@ -680,7 +680,7 @@ namespace Coin {
         public Uri IconUri { get { return new Uri("images/" + Wallet.CurrencyName + ".ico", UriKind.Relative); } }
         public string CurrencySymbol { get { return Wallet.CurrencySymbol; } }
         public string Balance { get { return Wallet.Balance.ToString("0.########"); } }
-        public int BlockHeight { get { return Wallet.LastBlock; } }
+        public string BlockHeight =>  Wallet.LastBlock.ToString("n0", CultureInfo.InvariantCulture);
         public string State { get { return Wallet.State; } }
         public int Peers { get { return Wallet.Peers; } }
         public bool MiningEnabled { get { return Wallet.MiningEnabled; } set { Wallet.MiningEnabled = value; } }

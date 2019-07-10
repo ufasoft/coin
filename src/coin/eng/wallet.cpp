@@ -599,7 +599,7 @@ void Wallet::Start() {
 #endif
 
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		if (m_eng->Mode!=EngMode::Lite) {
+		if (m_eng->Mode != EngMode::Lite) {
 			if (!bIsInitialBlockDownload)
 				ReacceptWalletTxes();												//!!!TODO
 
