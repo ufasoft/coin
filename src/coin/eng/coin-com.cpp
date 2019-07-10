@@ -424,13 +424,16 @@ public:
 				}
 
 				if (Block bestBlock = m_wallet.Eng.BestBlock()) {
-					TimeSpan span = Clock::now()-bestBlock.Timestamp;
+					BlockHeader bestHeader = m_wallet.Eng.BestHeader();
+					if (bestBlock.Height < bestHeader.Height)
+						os << "/ " << bestHeader.get_Height() << " headers. ";
+					TimeSpan span = Clock::now() - bestBlock.Timestamp;
 					if (span > hours(1)) {
-						int n;
-						if (span < hours(24))
-							os << (n = duration_cast<hours>(span).count()) << " hour";
+						int n = duration_cast<hours>(span).count();
+						if (n < 24)
+							os << n << " hour";
 						else
-							os << (n = duration_cast<hours>(span).count() / 24) << " day";
+							os << n / 24 << " day";
 						if (n > 1)
 							os << "s";
 						os << " ago";
