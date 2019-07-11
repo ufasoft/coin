@@ -35,7 +35,7 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::TxNotFound										, "Transaction not found in Database"			}
 	, { CoinErr::DupNonSpentTx									, "Duplicated Transaction Non-spent Transaction"	}
 	, { CoinErr::FirstTxIsNotTheOnlyCoinbase					, "First Transaction is not the only Coinbase"	}
-	, { CoinErr::RescanDisabledDuringInitialDownload			, "Rescan disabled during initial chain download"	}
+	, { CoinErr::RescanIsDisabledDuringInitialDownload			, "Rescan is disabled during initial chain download"	}
 	, { CoinErr::BlockDoesNotHaveOurChainId						, "Block Does Not Have Our ChainID"				}
 	, { CoinErr::MerkleRootMismatch								, "Merkle Root Mismatch"						}
 	, { CoinErr::BlockTimestampInTheFuture						, "Block Timestamp too far in the Future"		}
@@ -76,7 +76,7 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::GetBlocksLocatorSize							, "getblocks message has too many locators"		}
 	, { CoinErr::TxMissingInputs								, "Missing inputs"								}
 	, { CoinErr::TxPrematureSpend								, "Premature Spend"								}
-	, { CoinErr::CannotReorganizeBeyondPrunedBlocks				, "Cannot reorganize beyond pruned blocks"		}	
+	, { CoinErr::CannotReorganizeBeyondPrunedBlocks				, "Cannot reorganize beyond pruned blocks"		}
 
 	, { CoinErr::SCRIPT_ERR_UNKNOWN_ERROR						, "Unknown Script error"						}
 	, { CoinErr::SCRIPT_ERR_EVAL_FALSE							, "Script evaluated without error but finished with a false/empty top stack element"	}

@@ -35,7 +35,7 @@ enum class CoinErr {
 	, TxNotFound
 	, DupNonSpentTx
 	, FirstTxIsNotTheOnlyCoinbase
-	, RescanDisabledDuringInitialDownload
+	, RescanIsDisabledDuringInitialDownload
 	, BlockDoesNotHaveOurChainId
 	, MerkleRootMismatch
 	, VeryBigPayload
