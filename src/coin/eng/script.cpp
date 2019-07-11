@@ -326,7 +326,7 @@ const Vm::Value Vm::TrueValue(Span(&s_b1, 1)), Vm::FalseValue;
 Vm::Value& Vm::GetStack(unsigned idx) {
 	if (idx >= Stack.size())
 		Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
-	return Stack.end()[-1 - idx];
+	return Stack.end()[-1 - (ssize_t)idx];	// cast is necessary to avoid signed/unsigned conversion error
 }
 
 Vm::Value Vm::Pop() {
@@ -680,7 +680,7 @@ bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInM
 	} catch (CryptoException& DBG_PARAM(ex)) {
 		if (!bInMultiSig) {
 			TRC(2, ex.what() << "    PubKey: " << pubKey);
-		}		
+		}
 		return false;
 	}
 }

@@ -481,7 +481,7 @@ void Wallet::Rescan() {
 	if (m_eng->Mode == EngMode::Lite) {
 		m_eng->PurgeDatabase();
 	} else if (m_eng->IsInitialBlockDownload())
-		Throw(CoinErr::RescanDisabledDuringInitialDownload);
+		Throw(CoinErr::RescanIsDisabledDuringInitialDownload);
 
 	EXT_LOCK (Mtx) {
 		EXT_LOCK (m_eng->m_cdb.MtxDb) {
