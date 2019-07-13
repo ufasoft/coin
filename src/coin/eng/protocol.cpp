@@ -679,8 +679,14 @@ void Link::OnPeriodic(const DateTime& now) {
 
 void Link::Push(const Inventory& inv) {
 	EXT_LOCK (Mtx) {
-		if (!KnownInvertorySet.count(inv))
+		if (!KnownInvertorySet.count(inv)) {
+#ifdef _DEBUG//!!!D
+			if (inv.Type == InventoryType::MSG_BLOCK) {
+				int _wd = 2;
+			}
+#endif
 			InvertorySetToSend.insert(inv);
+		}
 	}
 }
 

@@ -157,7 +157,7 @@ void TxMessage::Trace(Link& link, bool bSend) const {
 
 void TxMessage::Process(Link& link) {
 	CoinEng& eng = static_cast<CoinEng&>(*link.Net);
-	CCoinEngThreadKeeper keeper(&eng, &ScriptPolicy(true));
+	CCoinEngThreadKeeper keeper(&eng, &ScriptPolicy(true), true);
 
 	HashValue hash = Hash(Tx);
 

@@ -63,8 +63,8 @@ public:
 	Inventory() {}
 
 	Inventory(InventoryType typ, const Coin::HashValue& hash)
-		: Type(typ)
-		, HashValue(hash)
+		: HashValue(hash)
+		, Type(typ)
 	{}
 
 	bool operator==(const Inventory& inv) const {
@@ -99,6 +99,7 @@ public:
 
 	typedef unordered_set<Inventory> CInvertorySetToSend;
 	CInvertorySetToSend InvertorySetToSend;
+	//---- Under Mtx
 
 	Block m_curMerkleBlock;
 	vector<HashValue> m_curMatchedHashes;

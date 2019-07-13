@@ -326,7 +326,7 @@ const Vm::Value Vm::TrueValue(Span(&s_b1, 1)), Vm::FalseValue;
 Vm::Value& Vm::GetStack(unsigned idx) {
 	if (idx >= Stack.size())
 		Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
-	return Stack.end()[-1 - (ssize_t)idx];	// cast is necessary to avoid signed/unsigned conversion error
+	return Stack.end()[-1 - (ptrdiff_t)idx];	// cast is necessary to avoid signed/unsigned conversion error
 }
 
 Vm::Value Vm::Pop() {
@@ -606,39 +606,42 @@ bool SignatureHasher::VerifyScript(RCSpan scriptSig, RCSpan scriptPk) {
 	Vm vm(this);
 	bool r = vm.Eval(scriptSig);
 	if (r) {
-		Vm vmInner(this);
-		if (t_features.PayToScriptHash)
-			vmInner.Stack = vm.Stack;
+		bool enabledP2SH = t_features.PayToScriptHash;
+		vector<Vm::Value> stackCopy = enabledP2SH ? vm.Stack : vector<Vm::Value>();
 		if (r = (vm.Eval(scriptPk)
 			&& !vm.Stack.empty() && ToBool(vm.Stack.back())))
 		{
 			auto pp = Script::WitnessProgram(scriptPk);
 			bool bP2SH = false;
-			if (!pp.first.data() && t_features.PayToScriptHash) {
+			if (!pp.first.data() && enabledP2SH) {
 				if (bP2SH = Script::IsPayToScriptHash(scriptPk)) {
-					StackValue pubKeySerialized = vmInner.Stack.back();
+					if (!Script::IsPushOnly(scriptSig))
+						Throw(CoinErr::SCRIPT_ERR_SIG_PUSHONLY);
+					StackValue pubKeySerialized = stackCopy.back();
 					pp = Script::WitnessProgram(pubKeySerialized);
-
-					vmInner.Stack.pop_back();
-					r = vmInner.Eval(pubKeySerialized)
-						&& !vmInner.Stack.empty() && ToBool(vmInner.Stack.back());
+					stackCopy.pop_back();
+					swap(vm.Stack, stackCopy);
+					r = vm.Eval(pubKeySerialized)
+						&& !vm.Stack.empty() && ToBool(vm.Stack.back());
 					if (!r)
 						return false;
 				}
 			}
 
-			if (pp.first.data()) {
+			if (t_features.SegWit && pp.first.data()) {
 				if (!bP2SH && !scriptSig.empty())
 					Throw(CoinErr::SCRIPT_ERR_WITNESS_MALLEATED);
 				if (!(r = VerifyWitnessProgram(vm, pp.second, pp.first)))
 					return false;
 				vm.Stack.resize(1);
 			}
+
+			if (t_scriptPolicy.CleanStack && vm.Stack.size() != 1) {
+				TRC(2, "SCRIPT_ERR_CLEANSTACK " << m_txoTo.m_hash);
+				Throw(CoinErr::SCRIPT_ERR_CLEANSTACK);
+			}
 		}
 	}
-	if (t_scriptPolicy.CleanStack && vm.Stack.size() != 1)
-		Throw(CoinErr::SCRIPT_ERR_CLEANSTACK);
-
 	return r;
 }
 

@@ -988,7 +988,7 @@ void Block::Connect() const {
 		eng.Caches.DtBestReceived = Clock::now();
 
 		EXT_LOCK (eng.Caches.Mtx) {
-			eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)Height, hashBlock));
+			eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)height, hashBlock));
 		}
 
 		eng.Events.OnBlockConnectDbtx(_self);
@@ -1001,13 +1001,13 @@ void Block::Connect() const {
 	EXT_LOCK(eng.MtxPeers) {
 		for (CoinEng::CLinks::iterator it = begin(eng.Links); it != end(eng.Links); ++it) {
 			Link& link = static_cast<Link&>(**it);
-			if (Height > link.LastReceivedBlock-2000)
+			if (height > link.LastReceivedBlock - 2000)
 				link.Push(inv);
 		}
 	}
 
 	EXT_LOCK(eng.Caches.Mtx) {
-		eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)Height, hashBlock));
+		eng.Caches.HeightToHashCache.insert(make_pair((ChainCaches::CHeightToHashCache::key_type)height, hashBlock));
 		eng.Caches.HashToBlockCache.insert(make_pair(hashBlock, _self));
 	}
 

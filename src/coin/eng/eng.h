@@ -628,7 +628,7 @@ public:
 	String RpcUser, RpcPassword;
 	int RpcPort, RpcThreads;
 	int KeyPool;
-	bool Checkpoints, Server, AcceptNonStdTxn;
+	bool Checkpoints, Server, AcceptNonStdTxn, Testnet;
 
 	CoinConf();
 };

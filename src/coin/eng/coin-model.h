@@ -960,10 +960,7 @@ struct EnabledFeatures {
 	bool PayToScriptHash, CheckLocktimeVerify, VerifyDerEnc, CheckSequenceVerify, SegWit;
 
 	EnabledFeatures(bool bSet = false) {
-		if (bSet)
-			memset(this, 0xFF, sizeof(*this));
-		else
-			ZeroStruct(*this);
+		PayToScriptHash = CheckLocktimeVerify = VerifyDerEnc = CheckSequenceVerify = SegWit = bSet;
 	}
 };
 
@@ -971,10 +968,7 @@ struct ScriptPolicy {
 	bool CleanStack, DiscourageUpgradableWidnessProgram;
 
 	ScriptPolicy(bool bSet = false) {
-		if (bSet)
-			memset(this, 0xFF, sizeof(*this));
-		else
-			ZeroStruct(*this);
+		CleanStack = DiscourageUpgradableWidnessProgram = bSet;
 	}
 };
 

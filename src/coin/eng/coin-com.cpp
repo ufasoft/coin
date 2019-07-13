@@ -698,14 +698,16 @@ public:
 			String xml = CoinEng::GetCoinChainsXml();
 #if UCFG_WIN32
 			XmlDocument doc = new XmlDocument;
-			doc.LoadXml(xml);		// LoadXml() instead of Load() to eliminate loading shell32.dll
+			doc.LoadXml(xml);		// LoadXml() instead of Load() to avoid loading of shell32.dll
 			XmlNodeReader rd(doc);
 #else
 			istringstream is(xml.c_str());
 			XmlTextReader rd(is);
 #endif
-			for (bool b = rd.ReadToDescendant("Chain"); b; b=rd.ReadToNextSibling("Chain"))
-				names.push_back(rd.GetAttribute("Name"));
+			for (bool b = rd.ReadToDescendant("Chain"); b; b = rd.ReadToNextSibling("Chain")) {
+				if ((rd.GetAttribute("IsTestNet") == "1") == g_conf.Testnet)
+					names.push_back(rd.GetAttribute("Name"));
+			}
 
 			EXT_FOR (const String& name, names) {
 				m_vWalletEng.push_back(new WalletAndEng(m_cdb, name));
