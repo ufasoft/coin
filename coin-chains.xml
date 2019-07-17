@@ -18,6 +18,24 @@
 		<Checkpoint Block='583878' Hash='0000000000000000000b2750d59329dff978b15b0ad82c19c3915ac93374aac2' />
 	</Chain>
 
+	<Chain Name='LiteCoin' Symbol='LTC' Algo='scrypt' FullPeriod='1' AddressVersion='48' ScriptAddressVersion='5' Hrp='ltc'
+			Genesis='12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2' InitBlockValue='50' BlockSpan='150'
+			MaxMoney='84000000' MinTxFee='100000'
+			HalfLife='840000' MaxTargetHex='1E0FFFFF'
+			PayToScriptHashHeight='218579' BIP34Height='710000' BIP65Height='918684' BIP66Height='811879' SegwitHeight='1201536'
+			ProtocolMagicHex='DBB6C0FB' DefaultPort='9333'
+			BootUrls='dns://seed-a.litecoin.loshan.co.uk dns://dnsseed.litecointools.com dns://dnsseed.litecoinpool.org dns://dnsseed.koin-project.com' >
+
+		<Checkpoint Block='1' 		Hash='80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f' />
+		<Checkpoint Block='80000' 	Hash='4fcb7c02f676a300503f49c764a89955a8f920b46a8cbecb4867182ecdb2e90a' />
+		<Checkpoint Block='240000' 	Hash='7140d1c4b4c2157ca217ee7636f24c9c73db39c4590c4e6eab2e3ea1555088aa' />
+		<Checkpoint Block='500000' 	Hash='65858117fadcff3b591ad4cbd320ecd3b0a63ffda1db9609822cf09ade790aa9' />
+		<Checkpoint Block='1000000' Hash='8ceae698f0a2d338e39b213eb9c253a91a270ca6451a4d9bba7bf2c9e637dfda' />
+		<Checkpoint Block='1600000' Hash='d136037e14d275b7b71c06994b83a297297e045b74d48b84dc0ad5c893fc7fa9' />
+
+	</Chain>
+
+
 	<Chain ChainID='0' Name='Bitcoin-testnet3' Symbol='TBTC3' AddressVersion='111'  Hrp='tb' IsTestNet='1'
 			Genesis='000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943'
 			InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF' PayToScriptHashHeight='46800' CheckDupTxHeight='46850'

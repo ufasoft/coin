@@ -141,13 +141,18 @@ public:
 	Alert m_alert;
 
 	AlertCom(WalletCom& wallet, const Alert& alert)
-		:	m_wallet(wallet)
-		,	m_alert(alert)
+		: m_wallet(wallet)
+		, m_alert(alert)
 	{}
 
 	HRESULT __stdcall get_UntilTimestamp(DATE *r)
 	METHOD_BEGIN {
 		*r = m_alert.RelayUntil.ToOADate();
+#ifdef _DEBUG //!!!D
+		auto s1 = m_alert.RelayUntil.ToString();
+		auto s2 = m_alert.Expiration.ToString();
+		s2 = s2;
+#endif
 	} METHOD_END
 
 	HRESULT __stdcall get_Comment(BSTR *r);

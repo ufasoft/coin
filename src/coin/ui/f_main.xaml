@@ -57,8 +57,8 @@
                                 <GridViewColumn Header="Currency" DisplayMemberBinding="{Binding Path=CurrencySymbol}" Width="70" />
                                 <GridViewColumn Header="Balance" DisplayMemberBinding="{Binding Path=Balance}" Width="80" />
 							    <GridViewColumn Header="Block" DisplayMemberBinding="{Binding Path=BlockHeight}" Width="62"/>
-							    <GridViewColumn Header="State" DisplayMemberBinding="{Binding Path=State}" Width="300" />
-        					    <GridViewColumn Header="Peers" DisplayMemberBinding="{Binding Path=Peers}" Width="50" />
+							    <GridViewColumn Header="State" DisplayMemberBinding="{Binding Path=State}" Width="350" />
+        					    <GridViewColumn Header="Peers" DisplayMemberBinding="{Binding Path=Peers}" Width="40" />
         				    </GridView>
                         </ListView.View>
                     </ListView>

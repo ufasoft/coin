@@ -779,8 +779,16 @@ void CoinEng::OnMessage(P2P::Message* m) {
 		if (auto cm = dynamic_cast<CoinMessage*>(m))
 			cm->Trace((Link&)link, false);
 
-		if (!link.PeerVersion && !dynamic_cast<VersionMessage*>(m))
-			Throw(CoinErr::VersionMessageMustBeFirst);
+		if (!link.PeerVersion) {
+			if (auto reject = dynamic_cast<RejectMessage*>(m)) {
+				if (reject->Command == "version" && reject->Code == RejectReason::Obsolete) {
+					link.NetManager->BanPeer(*link.Peer);		//!!!? Should find  better way to communicate
+					link.Stop();
+					return;
+				}
+			} else if (!dynamic_cast<VersionMessage*>(m))
+				Throw(CoinErr::VersionMessageMustBeFirst);
+		}
 		m->ProcessMsg(link);
 	} catch (const DbException&) {
 		EXT_LOCK(Mtx) {
@@ -1241,12 +1249,12 @@ void GetDataMessage::Process(Link& link) {
 			if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::Normal)
 				break;		// Low performance in NormalMode
 
-			if (eng.Mode == EngMode::Bootstrap) {
+			if (eng.Mode == EngMode::Bootstrap && link.HasWitness && bool(inv.Type & InventoryType::MSG_WITNESS_FLAG)) {
 				if (auto o = eng.Db->FindBlockOffset(inv.HashValue)) {
 					ptr<BlockMessage> m = new BlockMessage(Block(nullptr));
 					m->Offset = o.value().first;
 					m->Size = o.value().second;
-					m->WitnessAware = true;	//!!!?
+					m->WitnessAware = true;
 					link.Send(m);
 					break;
 				}

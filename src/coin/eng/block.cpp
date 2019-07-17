@@ -1118,8 +1118,10 @@ bool BlockHeader::HasBestChainWork() const {
 	return forkWork > work;
 }
 
-void BlockHeader::Accept() {
-	CoinEng& eng = Eng();
+void BlockHeader::Accept(Link *link) {
+	int nRepeated = 0;
+LAB_REPEAT:
+	CoinEng& eng = static_cast<CoinEng&>(*link->Net);
 
 	HashValue hash = Hash(_self);
 	if (eng.Tree.FindHeader(hash))
@@ -1130,6 +1132,16 @@ void BlockHeader::Accept() {
 	else if (BlockTreeItem btiPrev = eng.Tree.FindHeader(PrevBlockHash))
 		m_pimpl->Height = btiPrev.Height + 1;
 	else {
+		if (auto sym = DetectBlockchain(PrevBlockHash)) {
+			switch (eng.TryJumpToBlockchain(sym, link)) {
+			case JumpAction::Retry:
+				if (!nRepeated++)
+					goto LAB_REPEAT;
+			case JumpAction::Break:
+				return;
+			}
+		}
+
 		TRC(4, "BadPrevBlock: " <<  PrevBlockHash);
 		Throw(CoinErr::BadPrevBlock);
 	}
@@ -1153,7 +1165,7 @@ void BlockHeader::Accept() {
 	}
 }
 
-void Block::Accept() {
+void Block::Accept(Link *link) {
 	CoinEng& eng = Eng();
 
 	int height = 0;
@@ -1239,7 +1251,7 @@ void Block::Process(Link *link, bool bRequested) {
 		throw;
 	}
 	if (eng.HaveAllBlocksUntil(PrevBlockHash) || hash == eng.ChainParams.Genesis) {
-		Accept();
+		Accept(link);
 
 		vector<HashValue> vec;
 		vec.push_back(hash);
@@ -1262,7 +1274,7 @@ LAB_AGAIN:
 		LAB_FOUND_ORPHAN:
 			if (blk) {
 				try {
-					blk.Accept();
+					blk.Accept(link);
 					vec.push_back(Hash(blk));
 				} catch (RCExc) {
 					goto LAB_AGAIN;
@@ -1271,7 +1283,7 @@ LAB_AGAIN:
 				vector<Block> nexts = eng.Tree.FindNextBlocks(h);
 				EXT_FOR(Block& blk, nexts) {
 					try {
-						blk.Accept();
+						blk.Accept(link);
 						vec.push_back(Hash(blk));
 					} catch (RCExc) {
 					}

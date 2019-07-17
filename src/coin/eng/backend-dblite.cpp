@@ -468,7 +468,7 @@ Blob DbliteBlockChainDb::ReadBlob(uint64_t offset, uint32_t size) {
 
 void DbliteBlockChainDb::CopyTo(uint64_t offset, uint32_t size, Stream& stm) {
 	PositionOwningFileStream stmFile(m_fileBootstrap, offset, size);
-	stm.CopyTo(stm);
+	stmFile.CopyTo(stm);
 }
 
 Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& stmBlocks, bool bFullRead) {

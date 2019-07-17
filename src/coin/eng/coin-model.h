@@ -391,7 +391,7 @@ public:
 	void CalcWitnessCache();
 	HashValue Hash(RCSpan script);
 	bool VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan witnessProgram);
-	bool VerifyScript(RCSpan scriptSig, RCSpan scriptPk);
+	bool VerifyScript(RCSpan scriptSig, Span scriptPk);
 	const OutPoint& GetOutPoint() const;
 	void VerifySignature(RCSpan scriptPk);
 	bool CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInMultiSig = false);
@@ -766,7 +766,7 @@ public:
 	void UpdateLastCheckpointed() const;
 	bool HasBestChainWork() const;
 	virtual void Connect() const;
-	virtual void Accept();
+	virtual void Accept(Link *link);
 };
 
 class COIN_CLASS Block : public BlockHeader {
@@ -830,7 +830,7 @@ public:
     void ContextualCheck(const BlockHeader& blockPrev);
 	void Connect() const override;
 	void Disconnect() const;
-	void Accept() override;
+	void Accept(Link *link) override;
 	void Process(Link* link = 0, bool bRequested = true);
 
 	Block Clone() const {

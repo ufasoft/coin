@@ -238,7 +238,7 @@ ptr<CoinMessage> CoinMessage::ReadFromStream(Link& link, const BinaryReader& rd)
 		r->LinkPtr = &link;
 		try {
 			DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
-			ProtocolReader prd(ms, link.HaveWitness);
+			ProtocolReader prd(ms, link.HasWitness);
 			r->Read(prd);
 		} catch (RCExc ex) {
 			link.Send(new RejectMessage(RejectReason::Malformed, r->Cmd, "error parsing message"));
@@ -324,7 +324,7 @@ void VerackMessage::Process(Link& link) {
 
 	if (link.PeerVersion < ProtocolVersion::SHORT_IDS_BLOCKS_VERSION)
 		return;
-	if (link.HaveWitness)
+	if (link.HasWitness)
 		link.Send(new SendCompactBlockMessage(2, false));
 	link.Send(new SendCompactBlockMessage(1, false));
 }
@@ -673,7 +673,7 @@ void Link::OnPeriodic(const DateTime& now) {
 	}
 
 	RequestHeaders();
-	if (HaveWitness || eng.BestBlock().SafeHeight < eng.ChainParams.SegwitHeight)
+	if (HasWitness || eng.BestBlock().SafeHeight < eng.ChainParams.SegwitHeight)
 		RequestBlocks();
 }
 
@@ -697,12 +697,10 @@ void Link::Send(ptr<P2P::Message> msg) {
 	m.Trace(_self, true);
 
     MemoryStream stm;
-    ProtocolWriter wr(stm);
-	wr.WitnessAware = m.WitnessAware;
-    m.Write(wr);
+	m.Write(ProtocolWriter(stm, m.WitnessAware));
     Span s(stm);
 
-	MessageHeader header = {
+	SMessageHeader header = {
 		htole(eng.ChainParams.ProtocolMagic),
 		{ 0 },
 		htole(uint32_t(s.size())),
@@ -710,9 +708,8 @@ void Link::Send(ptr<P2P::Message> msg) {
 	};
 	strncpy(header.Command, m.Cmd, sizeof header.Command);
 
-	MemoryStream stmMessage;
-	BinaryWriter wrMessage(stmMessage);
-	wrMessage.WriteStruct(header);
+	MemoryStream stmMessage(sizeof header + s.size());
+	BinaryWriter(stmMessage).WriteStruct(header);
 	stmMessage.Write(s);
 	SendBinary(stmMessage);
 }
@@ -892,7 +889,10 @@ void BlockMessage::Read(const ProtocolReader& rd) {
 
 void BlockMessage::Print(ostream& os) const {
 	base::Print(os);
-	os << Eng().BlockStringId(Hash(Block));
+	if (Block)
+		os << Eng().BlockStringId(Hash(Block));
+	else
+		os << "Offset: " << Offset << ", Size: " << Size;
 }
 
 bool CoinEng::CheckSelfVerNonce(uint64_t nonce) {
@@ -914,13 +914,45 @@ void CoinEng::RemoveVerNonce(Link& link) {
 	}
 }
 
+JumpAction CoinEng::TryJumpToBlockchain(int sym, Link *link) {
+	String symbol = MulticharToString(sym);
+	if (symbol == ChainParams.Symbol)
+		return JumpAction::Continue;	
+	TRC(2, symbol);
+	if (!link)
+		return JumpAction::Break;
+	EXT_LOCK(link->NetManager->MtxNets) {
+		EXT_FOR(P2P::Net * net, link->NetManager->m_nets) {
+			CoinEng* e = dynamic_cast<CoinEng*>(net);
+			if (e->ChainParams.Symbol == symbol) {
+				link->Net.reset(net);
+				return JumpAction::Retry;
+			}
+		}
+		link->Stop();
+		return JumpAction::Break;
+	}
+}
+
 void VersionMessage::Process(Link& link) {
 	if (ProtocolVer < ProtocolVersion::MIN_PEER_PROTO_VERSION)
 		Throw(ExtErr::ObsoleteProtocolVersion);
 
-	CoinEng& eng = Eng();
+	int nRepeated = 0;
+LAB_REPEAT:
+	CoinEng& eng = static_cast<CoinEng&>(*link.Net);
 	if (link.PeerVersion)
 		Throw(CoinErr::DupVersionMessage);
+
+	if (auto sym = DetectBlockchain(UserAgent)) {
+		switch (eng.TryJumpToBlockchain(sym, &link)) {
+		case JumpAction::Retry:
+			if (!nRepeated++)
+				goto LAB_REPEAT;
+		case JumpAction::Break:
+			return;
+		}
+	}
 
 	if (eng.CheckSelfVerNonce(Nonce)) {
 		link.PeerVersion = ProtocolVer;
@@ -929,7 +961,7 @@ void VersionMessage::Process(Link& link) {
 		link.RelayTxes = RelayTxes;
 		link.IsClient = !(Services & NodeServices::NODE_NETWORK) && !(Services & NodeServices::NODE_NETWORK_LIMITED);
 		link.IsLimitedNode = !(Services & NodeServices::NODE_NETWORK) && (Services & NodeServices::NODE_NETWORK_LIMITED);
-        link.HaveWitness = Services & NodeServices::NODE_WITNESS;
+        link.HasWitness = Services & NodeServices::NODE_WITNESS;
 		link.Peer->Services = Services;
 
 		eng.aPreferredDownloadPeers += (link.IsPreferredDownload = !link.Incoming && !link.IsOneShot && !link.IsClient);
@@ -1127,7 +1159,7 @@ void CompactBlockMessage::Process(Link& link) {
 	}
 
 	vector<BlockHeader> headers(1, Header);
-	if (BlockHeader headerLast = eng.ProcessNewBlockHeaders(headers)) {
+	if (BlockHeader headerLast = eng.ProcessNewBlockHeaders(headers, &link)) {
 		link.UpdateBlockAvailability(Hash(headerLast));
 	} else
 		return;

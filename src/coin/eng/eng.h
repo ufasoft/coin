@@ -113,20 +113,25 @@ class ChainParams {
 	typedef ChainParams class_type;
 
 public:
+	HashValue Genesis;
 	vector<String> BootUrls;
+
+	vector<Blob> AlertPubKeys;
+	Blob CheckpointMasterPubKey;
 
 	typedef vector<pair<int, HashValue>> CCheckpoints;
 	CCheckpoints Checkpoints;
+	int LastCheckpointHeight;
 
 	unordered_set<IPEndPoint> Seeds;
 	String Name, Symbol;
-	HashValue Genesis;
 	seconds BlockSpan;
 	int64_t InitBlockValue;
 	int64_t CoinValue;
 	uint64_t MaxMoney;
     int64_t MinTxFee, DustRelayFee;
 	int64_t MinTxOutAmount;
+	double PowOfDifficultyToHalfSubsidy;
 	int HalfLife;
 	int CoinbaseMaturity;
 	int AnnualPercentageRate;
@@ -140,7 +145,6 @@ public:
 	int PayToScriptHashHeight;
 	int CheckDupTxHeight;
 	int BIP34Height, BIP65Height, BIP66Height, BIP68Height, SegwitHeight;
-	double PowOfDifficultyToHalfSubsidy;
 
 	CBool AuxPowEnabled;
 	Coin::HashAlgo HashAlgo;
@@ -149,15 +153,11 @@ public:
 	CInt<uint8_t> AddressVersion, ScriptAddressVersion;
 	String Hrp;
 	int AuxPowStartBlock;
+	unsigned MedianTimeSpan;
 	bool IsTestNet;
 	bool AllowLiteMode;
 	bool MiningAllowed;
 	bool Listen;
-	size_t MedianTimeSpan;
-
-	int LastCheckpointHeight;
-	vector<Blob> AlertPubKeys;
-	Blob CheckpointMasterPubKey;
 
 	ChainParams() : LastCheckpointHeight(-1) { Init(); }
 
@@ -635,6 +635,11 @@ public:
 
 extern CoinConf g_conf;
 
+enum class JumpAction {
+	Continue
+	, Retry
+	, Break
+};
 
 class COIN_CLASS CoinEng : public HasherEng, public P2P::Net, public ITransactionable {
 	typedef CoinEng class_type;
@@ -703,7 +708,6 @@ private:
 	DateTime m_dtLastFreeTx;
 	double m_freeCount;
 public:
-
 	EngMode get_Mode() { return m_mode; }
 	void put_Mode(EngMode mode);
 	DEFPROP(EngMode, Mode);
@@ -783,8 +787,9 @@ public:
 	bool MarkBlockAsReceived(const HashValue& hashBlock);
 	void MarkBlockAsInFlight(GetDataMessage& mGetData, Link& link, const Inventory& inv);
 	void OnPeriodicMsgLoop(const DateTime& now) override;
-	BlockHeader ProcessNewBlockHeaders(const vector<BlockHeader>& headers);
+	BlockHeader ProcessNewBlockHeaders(const vector<BlockHeader>& headers, Link *link);
 	CoinPeer* CreatePeer() override;
+	JumpAction TryJumpToBlockchain(int sym, Link *link);
 
 	uint64_t CheckMoneyRange(uint64_t v) {
 		if (v > ChainParams.MaxMoney)
@@ -1008,6 +1013,9 @@ public:
 	CEngStateDescription(CoinEng& eng, RCString s);
 	~CEngStateDescription();
 };
+
+int DetectBlockchain(RCString userAgent);
+int DetectBlockchain(const HashValue& hashGenesis);
 
 #if UCFG_COIN_USE_NORMAL_MODE
 void RecoverPubKey(CConnectJob* connJob, const OutPoint* pop, TxObj* pTxObj, int nIn);

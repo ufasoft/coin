@@ -33,13 +33,13 @@ const DbReader& operator>>(const DbReader& rd, WalletTx& wtx) {
 }
 
 Wallet::Wallet(CoinEng& eng)
-	:	base(eng)
+	: base(eng)
 {
 	Init();
 }
 
 Wallet::Wallet(CoinDb& cdb, RCString name)
-	:	m_peng(CoinEng::CreateObject(cdb, name))
+	: m_peng(CoinEng::CreateObject(cdb, name))
 {
 	m_eng.reset(m_peng.get());
 	Init();
@@ -52,9 +52,9 @@ void Wallet::Init() {
 }
 
 WalletTx::WalletTx(const Tx& tx)
-	:	base(tx)
-	,	To(Eng())
-	,	Timestamp(Clock::now())
+	: base(tx)
+	, To(Eng())
+	, Timestamp(Clock::now())
 {}
 
 void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {

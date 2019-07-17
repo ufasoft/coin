@@ -231,6 +231,12 @@
     <ClCompile Include="prune.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="blocktree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="blockchain-detector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">

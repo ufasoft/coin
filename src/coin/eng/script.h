@@ -196,6 +196,7 @@ public:
 	void Init(RCSpan mbScript);
 	bool Eval(RCSpan mbScript);
 	Instr GetOp();
+	bool FastVerifyP2SH(const HashValue160& hash160) { return Hash160(GetStack(0)) == hash160; }
 private:
 	int m_pc;
 	int m_posCodeHash;

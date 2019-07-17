@@ -9,10 +9,9 @@
     <StartupObject>Coin.App</StartupObject>
     <RootNamespace>Coin</RootNamespace>
     <AssemblyName>Coin</AssemblyName>
-    <Company>Ufasoft</Company>
     <Product>Coin</Product>
     <Description>Multi-cryptocurrency client.&#10; Bitcoin, Litecoin, etc.</Description>
-    <Version>1.0.1</Version>
+    <Version>1.1.9</Version>
     <Copyright>Copyright © Ufasoft 2011-2019</Copyright>
     <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
     <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>
@@ -32,11 +31,15 @@
 
     <ProjectReference Include="..\..\m\guicomp\guicomp.csproj" />
 
-    <Reference Include="Interop.coineng"> <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath> </Reference>
+    <Reference Include="Interop.coineng">
+         <HintPath>$(OutputPath)\inc\Interop.coineng.dll</HintPath>
+         <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
 
-    <Resource Include="..\images\coin.ico"          ><Link>coin.ico                 </Link></Resource>
-    <Resource Include="..\images\bitcoin.ico"       ><Link>images\bitcoin.ico       </Link></Resource>
-    <Resource Include="..\images\bitcoin-testnet3.ico"><Link>images\bitcoin-testnet3.ico</Link></Resource>
-    <Resource Include="..\images\groestlcoin.ico"   ><Link>images\groestlcoin.ico   </Link></Resource>
+    <Resource Include="..\images\coin.ico"              ><Link>coin.ico                     </Link></Resource>
+    <Resource Include="..\images\bitcoin.ico"           ><Link>images\bitcoin.ico           </Link></Resource>
+    <Resource Include="..\images\bitcoin-testnet3.ico"  ><Link>images\bitcoin-testnet3.ico  </Link></Resource>
+    <Resource Include="..\images\groestlcoin.ico"       ><Link>images\groestlcoin.ico       </Link></Resource>
+    <Resource Include="..\images\litecoin.ico"          ><Link>images\litecoin.ico          </Link></Resource>
   </ItemGroup>
 </Project>

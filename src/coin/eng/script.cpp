@@ -379,7 +379,8 @@ static uint8_t DecodeOp(Opcode opcode) {
 
 // Return <program, version>
 pair<Span, uint8_t> Script::WitnessProgram(RCSpan pk) {
-    return between(pk.size(), size_t(4), MAX_WITNESS_PROGRAM + 2) && (pk[0] == (uint8_t)Opcode::OP_0 || pk[0] >= (uint8_t)Opcode::OP_1 && pk[0] <= (uint8_t)Opcode::OP_16) && pk[1] + 2 == pk.size()
+    return between(pk.size(), size_t(4), MAX_WITNESS_PROGRAM + 2)
+				&& (pk[0] == (uint8_t)Opcode::OP_0 || pk[0] >= (uint8_t)Opcode::OP_1 && pk[0] <= (uint8_t)Opcode::OP_16) && pk[1] + 2 == pk.size()
         ? make_pair(pk.subspan(2), DecodeOp((Opcode)pk[0]))
         : pair<Span, uint8_t>();
 }
@@ -602,31 +603,24 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 	}
 }
 
-bool SignatureHasher::VerifyScript(RCSpan scriptSig, RCSpan scriptPk) {
+bool SignatureHasher::VerifyScript(RCSpan scriptSig, Span scriptPk) {
 	Vm vm(this);
 	bool r = vm.Eval(scriptSig);
 	if (r) {
-		bool enabledP2SH = t_features.PayToScriptHash;
-		vector<Vm::Value> stackCopy = enabledP2SH ? vm.Stack : vector<Vm::Value>();
-		if (r = (vm.Eval(scriptPk)
-			&& !vm.Stack.empty() && ToBool(vm.Stack.back())))
-		{
+		bool bP2SH = t_features.PayToScriptHash && Script::IsPayToScriptHash(scriptPk);
+
+		StackValue pubKeySerialized;
+		if (bP2SH) {
+			if (!Script::IsPushOnly(scriptSig))
+				Throw(CoinErr::SCRIPT_ERR_SIG_PUSHONLY);
+			if (!vm.FastVerifyP2SH(HashValue160(scriptPk.subspan(2, 20))))
+				return false;
+			pubKeySerialized = vm.Stack.back();
+			vm.Stack.pop_back();
+			scriptPk = pubKeySerialized;
+		}
+		if (r = (vm.Eval(scriptPk) && !vm.Stack.empty() && ToBool(vm.Stack.back()))) {
 			auto pp = Script::WitnessProgram(scriptPk);
-			bool bP2SH = false;
-			if (!pp.first.data() && enabledP2SH) {
-				if (bP2SH = Script::IsPayToScriptHash(scriptPk)) {
-					if (!Script::IsPushOnly(scriptSig))
-						Throw(CoinErr::SCRIPT_ERR_SIG_PUSHONLY);
-					StackValue pubKeySerialized = stackCopy.back();
-					pp = Script::WitnessProgram(pubKeySerialized);
-					stackCopy.pop_back();
-					swap(vm.Stack, stackCopy);
-					r = vm.Eval(pubKeySerialized)
-						&& !vm.Stack.empty() && ToBool(vm.Stack.back());
-					if (!r)
-						return false;
-				}
-			}
 
 			if (t_features.SegWit && pp.first.data()) {
 				if (!bP2SH && !scriptSig.empty())

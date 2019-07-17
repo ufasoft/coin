@@ -83,7 +83,7 @@ void CoinEng::MarkBlockAsInFlight(GetDataMessage& mGetData, Link& link, const In
 	MarkBlockAsReceived(inv.HashValue);
 	MapBlocksInFlight[inv.HashValue] = link.BlocksInFlight.insert(link.BlocksInFlight.end(), QueuedBlockItem(link, inv.HashValue, Clock::now()));
 	InventoryType invType = (Mode == EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : inv.Type)
-		| (link.HaveWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
+		| (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
 	mGetData.Invs.push_back(Inventory(invType, inv.HashValue));
 }
 
@@ -124,7 +124,7 @@ void InvMessage::Process(Link& link) {
 	if (!eng.BestBlock()) {
 		TRC(1, "Requesting for block " << eng.ChainParams.Genesis);
 
-		m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK | (link.HaveWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0), eng.ChainParams.Genesis));
+		m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK | (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0), eng.ChainParams.Genesis));
 	}
 
 	bool bCloseToBeSync = false;
@@ -142,7 +142,7 @@ void InvMessage::Process(Link& link) {
 #endif
 
 		bool bIsBlockInv = inv.Type == InventoryType::MSG_BLOCK || eng.Mode == EngMode::Lite && inv.Type == InventoryType::MSG_FILTERED_BLOCK;
-		if (bIsBlockInv)
+		if (bIsBlockInv && (link.HasWitness || eng.BestBlockHeight() < eng.ChainParams.SegwitHeight))	//!!!?
 			link.UpdateBlockAvailability(inv.HashValue);
 
 		if (eng.AlreadyHave(inv)) {
@@ -192,13 +192,13 @@ void InvMessage::Process(Link& link) {
 	}
 }
 
-BlockHeader CoinEng::ProcessNewBlockHeaders(const vector<BlockHeader>& headers) {
+BlockHeader CoinEng::ProcessNewBlockHeaders(const vector<BlockHeader>& headers, Link* link) {
 	BlockHeader headerLast;
 	for (size_t i = 0; i < headers.size(); ++i) {
 		if (BlockHeader headerPrev = exchange(headerLast, headers[i]))
 			if (Hash(headerPrev) != headerLast.PrevBlockHash)
 				throw PeerMisbehavingException(20);
-		headerLast.Accept();
+		headerLast.Accept(link);
 	}
 	return headerLast;
 }
@@ -212,7 +212,7 @@ void HeadersMessage::Process(Link& link) {
 	if (eng.UpgradingDatabaseHeight)
 		return;
 
-	if (BlockHeader headerLast = eng.ProcessNewBlockHeaders(Headers)) {
+	if (BlockHeader headerLast = eng.ProcessNewBlockHeaders(Headers, &link)) {
 		HashValue hashLast = Hash(headerLast);
 		link.UpdateBlockAvailability(hashLast);
 		if (Headers.size() == ProtocolParam::MAX_HEADERS_RESULTS) {
@@ -241,7 +241,7 @@ void Link::RequestHeaders() {
 			}
 		} else {
 			InventoryType invType = (eng.Mode == EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK)
-				| (HaveWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
+				| (HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
 			ptr<GetDataMessage> m = new GetDataMessage;
 			m->Invs.push_back(Inventory(invType, eng.ChainParams.Genesis));
 			Send(m);
@@ -352,10 +352,22 @@ void BlockMessage::Process(Link& link) {
 		return;
 	ProcessContent(link, bRequested);
 
-	if (Eng().Mode != EngMode::Lite) { // for LiteMode we wait until txes downloaded
+	if (eng.Mode != EngMode::Lite) { // for LiteMode we wait until txes are downloaded
 		if (EXT_LOCKED(eng.Mtx, link.BlocksInFlight.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER/2))
 			link.RequestBlocks();
 	}
+
+#ifdef X_DEBUG//!!!D
+	if (link.HasWitness) {
+		if (auto o = eng.Db->FindBlockOffset(hash)) {
+			ptr<BlockMessage> m = new BlockMessage(Coin::Block(nullptr));
+			m->Offset = o.value().first;
+			m->Size = o.value().second;
+			m->WitnessAware = true;
+			link.Send(m);
+		}
+	}
+#endif
 }
 
 void MerkleBlockMessage::ProcessContent(Link& link, bool bRequested) {
