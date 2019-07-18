@@ -303,14 +303,14 @@ class ProtocolWriter : public BinaryWriter {
     typedef BinaryWriter base;
 public:
 	// Used in SignatureHash only
-	int NIn;
 	Span ClearedScript;
+	int NIn;		
 	CBool ForSignatureHash, HashTypeSingle, HashTypeNone, HashTypeAnyoneCanPay;
 	CBool WitnessAware;
 
-    explicit ProtocolWriter(Stream& stm)
+    explicit ProtocolWriter(Stream& stm, bool bWitnessAware = true)
         : base(stm)
-		, WitnessAware(true)
+		, WitnessAware(bWitnessAware)
 	{
     }
 
