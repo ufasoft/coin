@@ -8,6 +8,8 @@
 #include <el/crypto/hash.h>
 using namespace Ext::Crypto;
 
+#include <random>
+
 #include EXT_HEADER_OPTIONAL
 
 #ifndef UCFG_COIN_ECC
@@ -15,7 +17,7 @@ using namespace Ext::Crypto;
 #endif
 
 #ifndef UCFG_COIN_USE_OPENSSL
-#	define UCFG_COIN_USE_OPENSSL 1
+#	define UCFG_COIN_USE_OPENSSL 0
 #endif
 
 #if UCFG_COIN_ECC != 'S' && UCFG_COIN_USE_OPENSSL
@@ -170,11 +172,13 @@ public:
 COIN_UTIL_API ostream& operator<<(ostream& os, const HashValue& hash);
 COIN_UTIL_API wostream& operator<<(wostream& os, const HashValue& hash);
 
+/*!!!R collision with tests
 inline String ToString(const HashValue& hash) {
 	ostringstream os;
 	os << hash;
 	return os.str();
 }
+*/
 
 /*!!!?
 inline wostream& operator<<(wostream& os, const HashValue& hash) {
@@ -304,7 +308,7 @@ class ProtocolWriter : public BinaryWriter {
 public:
 	// Used in SignatureHash only
 	Span ClearedScript;
-	int NIn;		
+	int NIn;
 	CBool ForSignatureHash, HashTypeSingle, HashTypeNone, HashTypeAnyoneCanPay;
 	CBool WitnessAware;
 
@@ -472,18 +476,17 @@ public:
 	~CHasherEngThreadKeeper();
 };
 
-class PrivateKey : public CPrintable {
+class PrivateKey : public array<uint8_t, 32>, public CPrintable{
 public:
-	PrivateKey() {
+	bool Compressed;
+
+	PrivateKey()
+		: Compressed(false)
+	{
 	}
 	PrivateKey(RCSpan cbuf, bool bCompressed);
 	explicit PrivateKey(RCString s);
-	pair<Blob, bool> GetPrivdataCompressed() const;
 	String ToString() const override;
-
-private:
-	typedef vararray<uint8_t, 33> CData;
-	CData m_data;
 };
 
 class CanonicalPubKey {
@@ -514,6 +517,9 @@ public:
 	}
 	DEFPROP_GET(HashValue160, Hash160);
 
+	HashValue160 get_ScriptHash() const;
+	DEFPROP_GET(HashValue160, ScriptHash);
+
 	bool IsValid() const {
 		uint8_t b0 = Data.constData()[0];
 		return (Data.size() == 33 && (b0 == 2 || b0 == 3)) || (Data.size() == 65 || b0 == 4);
@@ -541,6 +547,8 @@ enum class AddressType : uint8_t {				// Used in WalletDb in pubkeys.type field
 	, WitnessV0KeyHash = 7
 	, WitnessUnknown = 8
 	, NonStandard = 9
+	, P2WPKH_IN_P2SH = 10
+	, P2WSH_IN_P2SH = 11
 };
 
 class COIN_CLASS AddressObj : public InterlockedObject {
@@ -560,7 +568,7 @@ public:
 	AddressObj(HasherEng& hasher, RCString s, RCString comment);
 	String ToString() const;
 	Blob ToScriptPubKey() const;
-	void DecodeBech32(HasherEng& hasher, RCString s);
+	void DecodeBech32(RCString hrp, RCString s);
 	void CheckVer(HasherEng& hasher) const;
 };
 
@@ -607,10 +615,18 @@ public:
 	}
 };
 
+class Rng : noncopyable {
+	mt19937 m_rng;
+	uniform_int_distribution<> m_ud;;
+public:
+	Rng();
+	uint8_t operator()() { return (uint8_t)m_ud(m_rng); }
+};
+
 class KeyInfoBase : public InterlockedObject {
 	typedef KeyInfoBase class_type;
 
-	Blob m_privKey;
+	PrivateKey m_privKey;
 public:
 	CanonicalPubKey PubKey;
 
@@ -619,27 +635,29 @@ public:
 #endif
 
 	DateTime Timestamp;
-	String Comment;
+	String Comment;					// nullptr for change or reserved
 	AddressType AddressType;
+	bool Reserved;
 
 	KeyInfoBase()
 		: AddressType(AddressType::Legacy)
+		, Reserved(false)
 	{
 	}
 
-	void GenRandom(bool bCompressed = true);
+	void GenRandom(Rng& rng, bool bCompressed = true);
 
 	Blob PlainPrivKey() const;
 
-	Blob get_PrivKey() const {
+	const PrivateKey& get_PrivKey() const {
 		return m_privKey;
 	}
-	DEFPROP_GET(Blob, PrivKey);
+	DEFPROP_GET(const PrivateKey&, PrivKey);
 
 	vararray<uint8_t, 25> ToPubScript() const;
 	Address ToAddress() const;
-	void SetPrivData(RCSpan cbuf, bool bCompressed);
-	void SetPrivData(const PrivateKey& privKey);
+	void SetPrivData(const PrivateKey& privKey, bool bCompressed);
+	void SetPrivData(const PrivateKey& privKey) { SetPrivData(privKey, privKey.Compressed); }
 	void SetKeyFromPubKey();
 	String ToString(RCString password) const; // To WIF / BIP0038 formats
 	Blob SignHash(RCSpan cbuf);
@@ -665,6 +683,12 @@ template <> struct hash<Coin::HashValue160> {
 	size_t operator()(const Coin::HashValue160& v) const {
 		return *(size_t*)v.data();
 		//		return hash<std::array<uint8_t, 20>>()(v);
+	}
+};
+
+template <> struct hash<Coin::Address> {
+	size_t operator()(const Coin::Address& a) const {
+		return hash<String>()(a.ToString());		//!!!TODO Optimize
 	}
 };
 

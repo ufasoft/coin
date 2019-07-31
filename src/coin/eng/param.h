@@ -29,7 +29,11 @@ static const int64_t
 
 //!!!static const int64_t MIN_TX_FEE = 50000;
 //!!!static const int64_t MIN_RELAY_TX_FEE = 10000;
-static const int KEYPOOL_SIZE = 100;
+#ifdef _DEBUG
+	static const int DEFAULT_KEYPOOL_SIZE = 10;
+#else
+	static const int DEFAULT_KEYPOOL_SIZE = 1000;
+#endif
 
 const int INITIAL_BLOCK_THRESHOLD = 120;
 

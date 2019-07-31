@@ -49,7 +49,7 @@ VarValue Rpc::GetBlockchainInfo() {
 	VarValue r;
 	r.Set("chain", Eng->ChainParams.Name);
 	r.Set("blocks", Eng->BestBlockHeight());
-	r.Set("bestblockhash", ToString(Hash(Eng->BestBlock())));
+	r.Set("bestblockhash", Hash(Eng->BestBlock()).ToString());
 	r.Set("initialblockdownload", Eng->IsInitialBlockDownload());
 	return r;
 }
@@ -58,7 +58,7 @@ VarValue Rpc::GetBlockHash(const VarValue& varHeight) {
 	auto height = varHeight.ToInt64();
 	if (height < 0 || height > Eng->BestHeaderHeight())
 		Throw(CoinErr::RPC_INVALID_PARAMETER);
-	return ToString(Hash(Eng->GetBlockByHeight((uint32_t)height)));
+	return Hash(Eng->GetBlockByHeight((uint32_t)height)).ToString();
 }
 
 VarValue Rpc::CallMethod(RCString name, const VarValue& params) {
@@ -91,7 +91,7 @@ void Rpc::ListAccounts(JsonTextWriter& wr) {
 		EXT_FOR (const CoinDb::CHash160ToKey::value_type& kv, Eng->m_cdb.Hash160ToKey) {
 			KeyInfo ki = kv.second;
 			SqliteCommand cmd("SELECT SUM(value) FROM coins INNER JOIN mytxes ON txid=mytxes.id WHERE mytxes.netid=? AND (blockord > -2 OR fromme) AND keyid=?", Eng->m_cdb.m_dbWallet);
-			m[ki.Comment] += double(cmd.Bind(1, Wallet->m_dbNetId).Bind(2, ki.KeyRowId).ExecuteInt64Scalar()) / -(Eng->ChainParams.CoinValue);
+			m[ki->Comment] += double(cmd.Bind(1, Wallet->m_dbNetId).Bind(2, ki->KeyRowId).ExecuteInt64Scalar()) / -(Eng->ChainParams.CoinValue);
 		}
 	}
 	wr.Write(m);

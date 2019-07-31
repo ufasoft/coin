@@ -155,39 +155,6 @@ void AuxPow::Check(const Block& blockAux) {
 		Throw(CoinErr::AUXPOW_WrongIndex);
 }
 
-PrivateKey::PrivateKey(RCString s) {
-	try {
-		Blob blob = ConvertFromBase58(s.Trim());
-		if (blob.size() < 10)
-			Throw(CoinErr::InvalidAddress);
-		uint8_t ver = blob.constData()[0];
-		//!!! common ver for all Nets		if (ver != Eng().ChainParams.AddressVersion+128)
-		if (!(ver & 128))
-			Throw(CoinErr::InvalidAddress);
-		m_data = CData(blob.constData() + 1, blob.size() - 1);
-	} catch (RCExc) {
-		Throw(CoinErr::InvalidAddress);
-	}
-}
-
-PrivateKey::PrivateKey(RCSpan cbuf, bool bCompressed)
-{
-	if (cbuf.size() > 33)
-		Throw(E_INVALIDARG);
-	m_data = vararray<uint8_t, 33>(cbuf.data(), cbuf.size());
-	if (bCompressed) {
-		if (m_data.size() >= 33)
-			Throw(E_INVALIDARG);
-		m_data.push_back(1);
-	}
-}
-
-String PrivateKey::ToString() const {
-	uint8_t ver = 128; //!!!  for all nets, because Private Keys are common // Eng().ChainParams.AddressVersion+128;
-	Blob blob = Span(&ver, 1) + m_data;
-	return ConvertToBase58(blob);
-}
-
 ChainCaches::ChainCaches()
 	: m_bestHeader(nullptr)
 	, m_bestBlock(nullptr)

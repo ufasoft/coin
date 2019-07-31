@@ -27,7 +27,7 @@ static SqliteVfs s_sqliteVfs;			// enable atomic writes
 
 CoinDb::CoinDb()
 	: IrcManager(_self)
-	, CmdAddNewKey("INSERT INTO privkeys (privkey, pubkey, timestamp, comment, reserved) VALUES(?, ?, ?, ?, ?)"										, m_dbWallet)
+	, CmdAddNewKey("INSERT INTO privkeys (privkey, type, pubkey, timestamp, comment, reserved) VALUES(?, ?, ?, ?, ?, ?)"	, m_dbWallet)
 	, m_cmdIsFromMe("SELECT coins.rowid"
 		" FROM coins INNER JOIN mytxes ON txid=mytxes.id"
 		" WHERE mytxes.netid=? AND mytxes.hash=? AND nout=?"
@@ -102,14 +102,16 @@ KeyInfo CoinDb::AddNewKey(KeyInfo ki) {
 		}
 	}
 
-	CmdAddNewKey.Bind(1, !m_masterPassword.empty() ? EncryptedPrivKey(aes, ki) : ki.PlainPrivKey)
-		.Bind(2, ki.PubKey.ToCompressed())
-		.Bind(3, to_time_t(Clock::now()))
-		.Bind(4, ki.Comment)
-		.Bind(5, ki.Comment == nullptr)
+	CmdAddNewKey
+		.Bind(1, !m_masterPassword.empty() ? EncryptedPrivKey(aes, ki) : ki.PlainPrivKey)
+		.Bind(2, (int)ki.AddressType)
+		.Bind(3, ki.PubKey.ToCompressed())
+		.Bind(4, to_time_t(ki->Timestamp))
+		.Bind(5, ki->Comment)
+		.Bind(6, ki->Reserved)
 		.ExecuteNonQuery();
 
-	ki.KeyRowId = m_dbWallet.LastInsertRowId;
+	ki->KeyRowId = m_dbWallet.LastInsertRowId;
 	return Hash160ToKey.insert(make_pair(ki.PubKey.Hash160, ki)).first->second;
 }
 
@@ -136,14 +138,16 @@ bool CoinDb::get_NeedPassword() {
 	return m_masterPassword == nullptr;
 }
 
-void CoinDb::TopUpPool(int lim) {
+void CoinDb::TopUpPool() {
 	if (NeedPassword)
 		Throw(HRESULT_FROM_WIN32(ERROR_PASSWORD_RESTRICTION));
+	Rng rng;
 	EXT_LOCK (MtxDb) {
 		int nRes = (int)SqliteCommand("SELECT COUNT(*) FROM privkeys WHERE reserved", m_dbWallet).ExecuteInt64Scalar();
-		for (int i = 0; i < lim - nRes; ++i) {
+		for (int i = 0; i < g_conf.KeyPool - nRes; ++i) {
 			KeyInfo keyInfo;
-			keyInfo.m_pimpl->GenRandom();
+			keyInfo->GenRandom(rng);
+			keyInfo->Reserved = true;
 			AddNewKey(keyInfo);
 		}
 	}
@@ -154,8 +158,8 @@ bool CoinDb::SetPrivkeyComment(const HashValue160& hash160, RCString comment) {
 		CHash160ToKey::iterator it = Hash160ToKey.find(hash160);
 		if (it != Hash160ToKey.end()) {
 			KeyInfo key = it->second;
-			key.Comment = comment;
-			SqliteCommand(EXT_STR("UPDATE privkeys SET comment=?, reserved=? WHERE id=" << key.KeyRowId), m_dbWallet)
+			key->Comment = comment;
+			SqliteCommand(EXT_STR("UPDATE privkeys SET comment=?, reserved=? WHERE id=" << key->KeyRowId), m_dbWallet)
 				.Bind(1, comment)
 				.Bind(2, comment == nullptr)
 				.ExecuteNonQuery();
@@ -165,11 +169,11 @@ bool CoinDb::SetPrivkeyComment(const HashValue160& hash160, RCString comment) {
 	return false;
 }
 
-KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment, int lim) {
+KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment) {
 	EXT_LOCK (MtxDb) {
 		KeyInfo ki = FindReservedKey(type);
 		if (!ki) {
-			TopUpPool(lim);
+			TopUpPool();
 			ki = FindReservedKey(type);
 		}
 		SetPrivkeyComment(ki.get_PubKey().Hash160, comment);
@@ -248,7 +252,7 @@ void CoinDb::CreateDbWallet() {
 		GetSystemURandomReader().BaseStream.ReadBuffer(Salt.data(), sizeof Salt);
 		m_dbWallet.ExecuteNonQuery(EXT_STR("INSERT INTO globals (name, value) VALUES(\'salt\', " << *(int64_t*)Salt.data() << ")"));
 
-		GenerateNewAddress(AddressType::P2SH, "", 4);	//!!! reserve more keys
+		GenerateNewAddress(AddressType::P2SH, "");	//!!! reserve more keys
 	} catch (RCExc) {
 		m_dbWallet.Close();
 		filesystem::remove(DbWalletFilePath);
@@ -343,13 +347,6 @@ bool CoinDb::get_PeersDatabaseExists() {
 
 void CoinDb::LoadKeys(RCString password) {
 	// Eng() is not defined here
-#ifdef X_DEBUG	//!!!D
-	ptr<CoinEng> peng;
-	for (CurrencyFactoryBase* p = CurrencyFactoryBase::Root; p; p = p->Next)
-		if (p->Name == "GroestlCoin")
-			peng = p->CreateEng(_self);
-#endif
-
 	BuggyAes aesA;
 	BuggyAes aesB;
 	if (!password.empty()) {
@@ -363,17 +360,17 @@ void CoinDb::LoadKeys(RCString password) {
 		SqliteCommand cmd("SELECT id, privkey, pubkey, type, timestamp, comment FROM privkeys", m_dbWallet);
 		for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
 			KeyInfo ki;
-			ki.KeyRowId = dr.GetInt32(0);
+			ki->KeyRowId = dr.GetInt32(0);
 			ki.PubKey = CanonicalPubKey::FromCompressed(dr.GetBytes(2));
 			ki.AddressType = (AddressType)dr.GetInt64(3);
-			ki.Timestamp = DateTime::from_time_t(dr.GetInt64(4));
-			ki.Comment = dr.IsDBNull(4) ? nullptr : dr.GetString(5);
+			ki->Timestamp = DateTime::from_time_t(dr.GetInt64(4));
+			ki->Comment = dr.IsDBNull(4) ? nullptr : dr.GetString(5);
 
 			Span buf = dr.GetBytes(1);
 			if (buf.size() < 2)
 				Throw(E_FAIL);
 			switch (buf[0]) {
-			case 0: ki.m_pimpl->SetPrivData(buf.subspan(1), ki.PubKey.IsCompressed());
+			case 0: ki.m_pimpl->SetPrivData(PrivateKey(buf.subspan(1), ki.PubKey.IsCompressed()));
 				break;
 			case 'A':
 			case 'B':
@@ -394,7 +391,7 @@ void CoinDb::LoadKeys(RCString password) {
 						Blob ptext = pAes->Decrypt(buf.subspan(1));
 						if (ptext.size() < 5)
 							Throw(CoinErr::InconsistentDatabase);
-						ki.m_pimpl->SetPrivData(Blob(ptext.constData(), ptext.size() - 4), ki.PubKey.IsCompressed());
+						ki.m_pimpl->SetPrivData(PrivateKey(Span(ptext.constData(), ptext.size() - 4), ki.PubKey.IsCompressed()));
 						if (!Equal(Crc32().ComputeHash(ki.m_pimpl->get_PrivKey()), Blob(ptext.constData() + ptext.size() - 4, 4)))
 							Throw(ExtErr::LogonFailure);
 					} catch (OpenSslException&) {
@@ -417,10 +414,8 @@ void CoinDb::LoadKeys(RCString password) {
 
 			keys.insert(make_pair(ki.PubKey.Hash160, ki));
 
-			if (ki.PubKey.IsCompressed()) {
-				Blob redeemScript = Address(*(CoinEng*)0, AddressType::P2PKH, ki.PubKey.Hash160).ToScriptPubKey();
-				redeemScripts.insert(make_pair(Hash160(redeemScript), ki));
-			}
+			if (ki.PubKey.IsCompressed())
+				redeemScripts.insert(make_pair(ki.PubKey.ScriptHash, ki));
 		}
 #ifdef X_DEBUG//!!!T
 		if (!password.IsEmpty()) {
@@ -438,6 +433,17 @@ void CoinDb::LoadKeys(RCString password) {
 #endif
 		Hash160ToKey = keys;
 		P2SHToKey = redeemScripts;
+
+#ifdef _DEBUG//!!!D
+		int _count = 0;
+		for (auto& kv : P2SHToKey) {
+			auto typ = kv.second.AddressType;
+			if (typ != AddressType::P2PKH) {
+				++_count;
+			}
+		}
+#endif
+
 		Filter = new CoinFilter(Hash160ToKey.size() * 2, 0.0000001, Ext::Random().Next(), CoinFilter::BLOOM_UPDATE_ALL);
 		EXT_FOR (const CoinDb::CHash160ToKey::value_type& kv, Hash160ToKey) {
 			Filter->Insert(kv.first);
@@ -644,7 +650,7 @@ void CoinDb::ChangePassword(RCString oldPassword, RCString newPassword) {
 		for (CHash160ToKey::iterator it = Hash160ToKey.begin(), e = Hash160ToKey.end(); it != e; ++it) {
 			const KeyInfo& ki = it->second;
 			cmd.Bind(1, !newPassword.empty() ? EncryptedPrivKey(aes, ki) : ki.PlainPrivKey)
-				.Bind(2, ki.KeyRowId)
+				.Bind(2, ki->KeyRowId)
 				.ExecuteNonQuery();
 		}
 		dbtx.Commit();
@@ -676,4 +682,3 @@ P2P::Link *CoinDb::CreateLink(thread_group& tr) {
 
 
 } // Coin::
-

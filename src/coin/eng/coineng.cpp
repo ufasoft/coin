@@ -83,7 +83,7 @@ void ChainParams::Init() {
 
 Blob EncryptedPrivKey(BuggyAes& aes, const KeyInfo& key) {
 	uint8_t typ = DEFAULT_PASSWORD_ENCRYPT_METHOD;
-	Blob privKey = key.PrivKey;
+	const PrivateKey& privKey = key.PrivKey;
 	return Blob(&typ, 1) + aes.Encrypt(privKey + Crc32().ComputeHash(privKey));
 }
 
@@ -272,6 +272,10 @@ String CoinEng::BlockStringId(const HashValue& hashBlock) {
 
 HashValue CoinEng::HashMessage(RCSpan cbuf) {
 	return Coin::Hash(cbuf);
+}
+
+HashValue CoinEng::HashForWallet(RCSpan s) {
+	return Coin::Hash(s);
 }
 
 HashValue CoinEng::HashForSignature(RCSpan cbuf) {

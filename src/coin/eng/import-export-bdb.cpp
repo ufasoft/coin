@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -38,9 +38,8 @@ class BdbWriter : protected BinaryWriter {
 	typedef BinaryWriter base;
 public:
 	BdbWriter(Stream& stm)
-		:	base(stm)
+		: base(stm)
 	{}
-
 
 	void WriteCompactSize(size_t v) {
 		if (v < 253)
@@ -100,7 +99,7 @@ public:
 	Db m_db;
 
 	BdbWallet(DbEnv& env, RCString name)
-		:	m_db(&env, 0)
+		: m_db(&env, 0)
 	{
 		m_db.open(0, name, "main", DB_BTREE, DB_CREATE, 0);
 
@@ -134,44 +133,42 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 	path dir = filepath.parent_path(),
 		name = filepath.filename();
     DbEnv dbenv(0);
+//	dbenv.set_lg_dir(dir.string().c_str());
+//	dbenv.set_errfile(fopen((dir / "db.log").string().c_str(), "a")); /// debug
     dbenv.set_flags(DB_AUTO_COMMIT, 1);
     dbenv.set_flags(DB_TXN_WRITE_NOSYNC, 1);
-	dbenv.log_set_config(DB_LOG_AUTO_REMOVE, 1);
+	dbenv.log_set_config(DB_LOG_AUTO_REMOVE | DB_LOG_IN_MEMORY, 1);
 
-	int ret = dbenv.open(dir.string().c_str(),
-					DB_CREATE     |
-                     DB_INIT_LOCK  |
-                     DB_INIT_LOG   |
-                     DB_INIT_MPOOL |
-                     DB_INIT_TXN   |
-                     DB_THREAD     |
-					DB_RECOVER  ,
-
-					S_IRUSR | S_IWUSR);
+	int ret = dbenv.open(dir.string().c_str()
+		, DB_CREATE | DB_INIT_TXN | DB_INIT_LOCK
+		  | DB_INIT_LOG | DB_INIT_MPOOL
+		//| DB_THREAD
+		| DB_RECOVER					
+		, S_IRUSR | S_IWUSR);
 
 	EXT_LOCK (Eng.m_cdb.MtxDb) {
 		BdbWallet w(dbenv, name.native());
 		{
 			SqliteCommand cmd("SELECT pubkey, reserved FROM privkeys ORDER BY id", Eng.m_cdb.m_dbWallet);
 			int64_t nPool = 0;
-			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
+			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
 				KeyInfo ki = Eng.m_cdb.Hash160ToKey[Hash160(CanonicalPubKey::FromCompressed(dr.GetBytes(0)).Data)];
 				w.Write(make_pair(string("key"), Span(ki.PubKey.Data)), ki.m_pimpl->ToPrivateKeyDER());
 
 				if (dr.GetInt32(1)) {
-					KeyPool pool = { ki.Timestamp, ki.PubKey };
+					KeyPool pool = { ki->Timestamp, ki.PubKey };
 					w.Write(make_pair(string("pool"), ++nPool), pool);
 				}
 
-				if (!ki.Comment.empty()) {
+				if (!ki->Comment.empty()) {
 					Address addr = ki.ToAddress();
-					w.Write(make_pair(string("name"), addr.ToString()), ki.Comment);
+					w.Write(make_pair(string("name"), addr.ToString()), ki->Comment);
 				}
 			}
 		}
 		{
 			SqliteCommand cmd("SELECT hash160, type, comment, nets.name FROM pubkeys JOIN nets ON pubkeys.netid=nets.netid", Eng.m_cdb.m_dbWallet);
-			for (DbDataReader dr=cmd.ExecuteReader(); dr.Read();) {
+			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
 				String comment = dr.GetString(2);
 				if (!comment.empty()) {
 					Address addr(*m_eng, AddressType(dr.GetInt32(1)), HashValue160(dr.GetBytes(0)), 0, comment);
@@ -200,8 +197,6 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 
 
 #endif	// HAVE_BERKELEY_DB
-
-
 
 
 

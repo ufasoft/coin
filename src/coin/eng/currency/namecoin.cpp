@@ -96,12 +96,12 @@ public:
 	CBool ResolverMode;
 
 	NamecoinSqliteDb()
-		:	ResolverMode(true)
-		,	m_cmdInsertDomain("INSERT INTO domains (name, txid) VALUES (?, ?)"				, m_db)
-		,	m_cmdUpdateDomain("UPDATE domains SET txid=? WHERE name=?"						, m_db)
-		,	m_cmdFindDomain("SELECT txid FROM domains WHERE name=?"							, m_db)
-		,	m_cmdDeleteDomain("DELETE FROM domains WHERE txid=?"							, m_db)
-		,	m_cmdNameHeight("SELECT blockid FROM domains JOIN txes ON domains.txid=txes.id WHERE name=?"	, m_db)
+		: ResolverMode(true)
+		, m_cmdInsertDomain("INSERT INTO domains (name, txid) VALUES (?, ?)"				, m_db)
+		, m_cmdUpdateDomain("UPDATE domains SET txid=? WHERE name=?"						, m_db)
+		, m_cmdFindDomain("SELECT txid FROM domains WHERE name=?"							, m_db)
+		, m_cmdDeleteDomain("DELETE FROM domains WHERE txid=?"							, m_db)
+		, m_cmdNameHeight("SELECT blockid FROM domains JOIN txes ON domains.txid=txes.id WHERE name=?"	, m_db)
 	{
 		if (ResolverMode) {
 			m_cmdFindDomain.CommandText = "SELECT address, height FROM domains WHERE name=?";
@@ -466,4 +466,3 @@ INamecoinDb& NamecoinEng::NamecoinDb() {
 static CurrencyFactory<NamecoinEng> s_namecoin("Namecoin");
 
 } // Coin::
-

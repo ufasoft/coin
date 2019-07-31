@@ -245,7 +245,7 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 							.Bind(1, txid)
 							.Bind(2, i)
 							.Bind(3, txOut.Value)
-							.Bind(4, ki.KeyRowId)
+							.Bind(4, ki->KeyRowId)
 							.Bind(5, txOut.get_ScriptPubKey())
 							.ExecuteNonQuery();
 
@@ -578,7 +578,7 @@ void Wallet::Start() {
 	bool bIsInitialBlockDownload = m_eng->IsInitialBlockDownload();
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		{
-			SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=?", m_eng->m_cdb.m_dbWallet);
+			SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=? COLLATE NOCASE", m_eng->m_cdb.m_dbWallet);
 			DbDataReader dr = cmd.Bind(1, m_eng->ChainParams.Name).ExecuteVector();
 			m_dbNetId = dr.GetInt32(0);
 			Span mb = dr.GetBytes(1);
@@ -628,12 +628,15 @@ void Wallet::Close() {
 	Stop();
 }
 
-vector<Address> Wallet::get_MyAddresses() {
-	vector<Address> r;
+unordered_set<Address> Wallet::get_MyAddresses() {
+	unordered_set<Address> r;
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		for (CoinDb::CHash160ToKey::iterator it = m_eng->m_cdb.Hash160ToKey.begin(), e = m_eng->m_cdb.Hash160ToKey.end(); it != e; ++it)
-			if (it->second.Comment != nullptr)
-				r.push_back(it->second.ToAddress());
+		for (auto& kv : m_eng->m_cdb.Hash160ToKey)
+			if (kv.second->Comment != nullptr)
+				r.insert(kv.second.ToAddress());
+		for (auto& kv : m_eng->m_cdb.P2SHToKey)
+			if (kv.second->Comment != nullptr)
+				r.insert(kv.second.ToAddress());
 	}
 	return r;
 }
@@ -643,26 +646,36 @@ vector<Address> Wallet::get_Recipients() {
 
 	vector<Address> r;
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		for (DbDataReader dr = m_eng->m_cdb.CmdRecipients.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();)
-			r.push_back(Address(*m_eng, AddressType(dr.GetInt32(0)), HashValue160(dr.GetBytes(1)), 0, dr.GetString(2))); //!!!?
+		for (DbDataReader dr = m_eng->m_cdb.CmdRecipients.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();) {
+			auto typ = AddressType(dr.GetInt32(0));
+			Span data = dr.GetBytes(1);
+			Address a = typ == AddressType::Bech32
+				? TxOut::CheckStandardType(data)
+				: Address(*m_eng, typ, HashValue160(data));
+			a->Type = typ;			// override for Bech32
+			a->Comment = dr.GetString(2);
+			r.push_back(a);
+		}			
 	}
 	return r;
 }
 
 void Wallet::AddRecipient(const Address& a) {
-	if (a.Type != AddressType::P2PKH && a.Type != AddressType::P2SH)	//!!!TODO
+	if (a.Type != AddressType::P2PKH && a.Type != AddressType::P2SH && a.Type != AddressType::Bech32)
 		Throw(E_NOTIMPL);
-	HashValue160 hash160(a);
+	Blob data = a.Type == AddressType::Bech32
+		? a.ToScriptPubKey()
+		: Span(HashValue160(a));
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		SqliteCommand cmdSel(EXT_STR("SELECT netid FROM pubkeys WHERE netid=" << m_dbNetId << " AND type=? AND hash160=?"), m_eng->m_cdb.m_dbWallet);
 		cmdSel.Bind(1, (int)a.Type)
-			.Bind(2, hash160);
+			.Bind(2, data);
 		if (cmdSel.ExecuteReader().Read())
 			Throw(CoinErr::RecipientAlreadyPresents);
 
 		SqliteCommand cmd(EXT_STR("INSERT INTO pubkeys (netid, type, hash160, comment) VALUES(" << m_dbNetId << ", ?, ?, ?)"), m_eng->m_cdb.m_dbWallet);
 		cmd.Bind(1, (int)a.Type)
-			.Bind(2, hash160)
+			.Bind(2, data)
 			.Bind(3, a.Comment);
 		cmd.ExecuteNonQuery();
 	}
@@ -670,12 +683,15 @@ void Wallet::AddRecipient(const Address& a) {
 
 void Wallet::RemoveRecipient(RCString s) {
 	Address a(*m_eng, s);
-	if (a.Type != AddressType::P2PKH && a.Type != AddressType::P2SH)	//!!!TODO
+	if (a.Type != AddressType::P2PKH && a.Type != AddressType::P2SH && a.Type != AddressType::Bech32)
 		Throw(E_NOTIMPL);
-	HashValue160 hash160(a);
+	Blob data = a.Type == AddressType::Bech32
+		? a.ToScriptPubKey()
+		: Span(HashValue160(a));
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		SqliteCommand(EXT_STR("DELETE FROM pubkeys WHERE netid=" << m_dbNetId << " AND hash160=?"), m_eng->m_cdb.m_dbWallet)
-			.Bind(1, hash160)
+		SqliteCommand(EXT_STR("DELETE FROM pubkeys WHERE netid=" << m_dbNetId << " AND type=? AND hash160=?"), m_eng->m_cdb.m_dbWallet)
+			.Bind(1, (int)a.Type)
+			.Bind(1, data)
 			.ExecuteNonQuery();
 	}
 }
@@ -856,9 +872,9 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 
 				TxIn txIn;
 				txIn.PrevOutPoint = penny.OutPoint;
-				tx.m_pimpl->m_txIns.push_back(txIn);
+				tx->m_txIns.push_back(txIn);
 			}
-			tx.m_pimpl->m_bLoadedIns = true;
+			tx->m_bLoadedIns = true;
 			int64_t nChange = ppCoins.second - nVal - fee;
 
 			if (fee < m_eng->ChainParams.MinTxFee && nChange > 0 && nChange < m_eng->ChainParams.CoinValue/100) {
@@ -1023,7 +1039,8 @@ decimal64 Wallet::CalcFee(const decimal64& amount) {
 	Address addr(*m_eng, AddressType::P2PKH, GetReservedPublicKey().second); //!!!?
 	vector<pair<Address, int64_t>> vSend(1, make_pair(addr, decimal_to_long_long(amount * m_eng->ChainParams.CoinValue)));
 	KeyInfo randomKey;
-	randomKey.m_pimpl->GenRandom();
+	Rng rng;
+	randomKey->GenRandom(rng);
 	return CreateTransaction(randomKey, vSend).second;
 }
 

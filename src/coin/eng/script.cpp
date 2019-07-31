@@ -435,7 +435,7 @@ Address TxOut::CheckStandardType(RCSpan scriptPubKey) {
 				: Address(eng, AddressType::NonStandard, Span());
 		default:
 			Address r(eng, AddressType::WitnessUnknown, pp.first);
-			r.m_pimpl->WitnessVer = pp.second;
+			r->WitnessVer = pp.second;
 			return r;
 		}
 	}

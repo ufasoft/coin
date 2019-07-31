@@ -26,6 +26,7 @@ CoinConf::CoinConf() {
 	EXT_CONF_OPTION(RpcPort);
 	EXT_CONF_OPTION(RpcThreads, 4);
 	EXT_CONF_OPTION(Server);
+	EXT_CONF_OPTION(KeyPool, DEFAULT_KEYPOOL_SIZE);
 	EXT_CONF_OPTION(Testnet);
 }
 

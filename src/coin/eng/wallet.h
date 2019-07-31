@@ -146,8 +146,8 @@ public:
 	void Start();
 	void Stop();
 
-	vector<Address> get_MyAddresses();
-	DEFPROP_GET(vector<Address>, MyAddresses);
+	unordered_set<Address> get_MyAddresses();
+	DEFPROP_GET(unordered_set<Address>, MyAddresses);
 
 	vector<Address> get_Recipients();
 	DEFPROP_GET(vector<Address>, Recipients);

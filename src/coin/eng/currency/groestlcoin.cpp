@@ -3,7 +3,7 @@
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
 
-// GroestlCoin Crypto-currency
+// Groestlcoin Crypto-currency
 // http://groestlcoin.org
 
 
@@ -22,11 +22,11 @@ protected:
 };
 
 
-class COIN_CLASS GroestlCoinEng : public CoinEng {
+class COIN_CLASS GroestlcoinEng : public CoinEng {
 	typedef CoinEng base;
 public:
-	GroestlCoinEng(CoinDb& cdb)
-		:	base(cdb)
+	GroestlcoinEng(CoinDb& cdb)
+		: base(cdb)
 	{
 		MaxBlockVersion = 112;
 	}
@@ -59,6 +59,10 @@ protected:
 
 	HashValue HashMessage(RCSpan cbuf) override {
 		return GroestlHash(cbuf);		// OP_HASH256 implementation
+	}
+
+	HashValue HashForWallet(RCSpan s) override {
+		return GroestlHash(s);
 	}
 
 	HashValue HashForAddress(RCSpan cbuf) override {
@@ -124,9 +128,6 @@ protected:
 
 
 
-static CurrencyFactory<GroestlCoinEng> s_groestlcoin("GroestlCoin");
+static CurrencyFactory<GroestlcoinEng> s_groestlcoin("Groestlcoin");
 
 } // Coin::
-
-
-

@@ -27,21 +27,20 @@ using namespace std;
 
 #if UCFG_USE_OPENSSL
 
+#	pragma comment(lib, "openssl")
+
 class CipherCtx {
+	EVP_CIPHER_CTX *m_ctx;
 public:
-	CipherCtx() {
-		::EVP_CIPHER_CTX_init(&m_ctx);
-	}
+	CipherCtx()
+		: m_ctx(::EVP_CIPHER_CTX_new())
+	{}
 
 	~CipherCtx() {
-	    SslCheck(::EVP_CIPHER_CTX_cleanup(&m_ctx));
+	    ::EVP_CIPHER_CTX_free(m_ctx);
 	}
 
-	operator EVP_CIPHER_CTX*() {
-		return &m_ctx;
-	}
-private:
-	EVP_CIPHER_CTX m_ctx;
+	operator EVP_CIPHER_CTX*() { return m_ctx; }
 };
 
 
@@ -52,14 +51,14 @@ private:
 
 Blob BuggyAes::Encrypt(RCSpan cbuf) {
 #if UCFG_USE_OPENSSL
-	int rlen = cbuf.Size+AES_BLOCK_SIZE, flen = 0;
+	int rlen = cbuf.size() + AES_BLOCK_SIZE, flen = 0;
 	Blob r(0, rlen);
 
 	CipherCtx ctx;
     SslCheck(::EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), 0, m_key.constData(), IV.constData()));		//!!! should be EVP_EncryptInit_ex() in normal AES
-    SslCheck(::EVP_EncryptUpdate(ctx, r.data(), &rlen, cbuf.P, cbuf.Size));
+    SslCheck(::EVP_EncryptUpdate(ctx, r.data(), &rlen, cbuf.data(), cbuf.size()));
     SslCheck(::EVP_EncryptFinal_ex(ctx, r.data()+rlen, &flen));
-	r.Size = rlen+flen;
+	r.resize(rlen + flen);
 	return r;
 #else
 	InitParams();
@@ -88,18 +87,18 @@ Blob BuggyAes::Encrypt(RCSpan cbuf) {
 
 Blob BuggyAes::Decrypt(RCSpan cbuf) {
 #if UCFG_USE_OPENSSL
-	int rlen = cbuf.Size, flen = 0;
+	int rlen = cbuf.size(), flen = 0;
 	Blob r(0, rlen);
 
 	CipherCtx ctx;
     SslCheck(::EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), 0, m_key.constData(), IV.constData()));		//!!! should be EVP_DecryptInit_ex() in normal AES
-    SslCheck(::EVP_DecryptUpdate(ctx, r.data(), &rlen, cbuf.P, cbuf.Size));
+    SslCheck(::EVP_DecryptUpdate(ctx, r.data(), &rlen, cbuf.data(), cbuf.size()));
     SslCheck(::EVP_DecryptFinal_ex(ctx, r.data()+rlen, &flen));
-	r.Size = rlen+flen;
+	r.resize(rlen + flen);
 	return r;
 #else
 	InitParams();
-	const int cbBlock = BlockSize/8;
+	const int cbBlock = BlockSize / 8;
 	if (cbuf.size() % cbBlock)
 		Throw(errc::invalid_argument);
 	MemoryStream ms;
@@ -109,9 +108,9 @@ Blob BuggyAes::Decrypt(RCSpan cbuf) {
 	for (size_t pos = 0; pos < cbuf.size(); pos += block.size()) {
 		VectorXor(block.data(), cbuf.data() + pos, cbBlock);
 		EncryptBlock(ekey, block.data());
-		if (pos + cbBlock == cbuf.size()) {
+		if (Padding != PaddingMode::None && pos + cbBlock == cbuf.size()) {
 			uint8_t nPad = block.constData()[cbBlock-1];
-			for (int i=0; i<nPad; ++i)
+			for (int i = 0; i < nPad; ++i)
 				if (block.constData()[cbBlock-1-i] != nPad)
 					Throw(ExtErr::Crypto);									//!!!TODO Must be EXT_Crypto_DecryptFailed
 			ms.WriteBuffer(block.constData(), cbBlock-nPad);

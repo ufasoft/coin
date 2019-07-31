@@ -5,7 +5,7 @@
 
 #pragma once
 
-// Non-standard AES backward implementation for compatibility with old Coin version
+// Non-standard AES implementation for backward-compatibility with old Coin version
 
 #include <el/crypto/cipher.h>
 

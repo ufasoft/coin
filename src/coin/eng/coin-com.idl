@@ -53,6 +53,11 @@ library CointEng {
 		, Bech32	= 2
 	};
 
+	[uuid(55534654-3F35-46d9-000E-54BAFC250403)]
+	enum Err {
+		InvalidPassword = 0x880c0056
+	};
+
 	[uuid(55534654-3F35-46d9-0001-54BAFC250402), dual, oleautomation]
 	interface IWallet : IDispatch {
 	    [id(1), propget] HRESULT CurrencyName([out,retval] BSTR *r);

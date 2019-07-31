@@ -18,8 +18,10 @@ namespace Coin {
 
 class CoinEng;
 
-const unsigned int WALLET_CRYPTO_KEY_SIZE = 32;
-const unsigned int WALLET_CRYPTO_SALT_SIZE = 8;
+const unsigned
+	WALLET_CRYPTO_KEY_SIZE = 32,
+	WALLET_CRYPTO_SALT_SIZE = 8,
+	WALLET_CRYPTO_IV_SIZE = 16;
 
 class CMasterKey : public CPersistent {
 public:
@@ -62,15 +64,15 @@ public:
 class KeyInfoObj : public KeyInfoBase {
 	typedef KeyInfoBase base;
 public:
-	int64_t KeyRowid;
+	int64_t KeyRowId;
 
 	KeyInfoObj()
-		: KeyRowid(-1) {
+		: KeyRowId(-1) {
 	}
 
 	KeyInfoObj(const base& ki)
 		: base(ki)
-		, KeyRowid(-1)
+		, KeyRowId(-1)
 	{}
 };
 
@@ -85,27 +87,15 @@ public:
 	KeyInfo(nullptr_t) {
 	}
 
-	int64_t get_KeyRowId() const { return m_pimpl->KeyRowid; }
-	void put_KeyRowId(int64_t v) { m_pimpl->KeyRowid = v; }
-	DEFPROP(int64_t, KeyRowId);
-
-	DateTime get_Timestamp() const { return m_pimpl->Timestamp; }
-	void put_Timestamp(DateTime v) { m_pimpl->Timestamp = v; }
-	DEFPROP(DateTime, Timestamp);
-
 	CanonicalPubKey get_PubKey() const { return m_pimpl->PubKey; }
 	void put_PubKey(const CanonicalPubKey& v) { m_pimpl->PubKey = v; }
 	DEFPROP(CanonicalPubKey, PubKey);
 
-	Blob get_PrivKey() const { return m_pimpl->PrivKey; }
-	DEFPROP_GET(Blob, PrivKey);
+	const PrivateKey& get_PrivKey() const { return m_pimpl->PrivKey; }
+	DEFPROP_GET(const PrivateKey&, PrivKey);
 		
 	Blob get_PlainPrivKey() const { return m_pimpl->PlainPrivKey(); }
 	DEFPROP_GET(Blob, PlainPrivKey);
-
-	String get_Comment() const { return m_pimpl->Comment; }
-	void put_Comment(RCString v) { m_pimpl->Comment = v; }
-	DEFPROP(String, Comment);
 
 	AddressType get_AddressType() const { return m_pimpl->AddressType; }
 	void put_AddressType(AddressType v) { m_pimpl->AddressType = v; }
@@ -117,13 +107,14 @@ public:
 Blob EncryptedPrivKey(BuggyAes& aes, const KeyInfo& key);
 
 class CCrypter {
-private:
-    unsigned char chKey[WALLET_CRYPTO_KEY_SIZE];
-    unsigned char chIV[WALLET_CRYPTO_KEY_SIZE];
-    bool fKeySet;
-
 public:
-    bool SetKeyFromPassphrase(const std::string &strKeyData, const std::vector<unsigned char>& chSalt, const unsigned int nRounds, const unsigned int nDerivationMethod);
+	unsigned char chKey[WALLET_CRYPTO_KEY_SIZE];
+	unsigned char chIV[WALLET_CRYPTO_IV_SIZE];
+private:
+    bool fKeySet;
+public:
+
+	bool SetKeyFromPassphrase(const std::string &strKeyData, RCSpan salt, unsigned nRounds, unsigned nDerivationMethod);
     bool Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned char> &vchCiphertext);
     bool Decrypt(RCSpan vchCiphertext, CKeyingMaterial& vchPlaintext);
     bool SetKey(const CKeyingMaterial& chNewKey, const std::vector<unsigned char>& chNewIV);

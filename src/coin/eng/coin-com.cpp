@@ -39,8 +39,8 @@ public:
 	Address m_addr;
 
 	AddressCom(WalletCom& wallet, const Address& addr)
-		:	m_wallet(wallet)
-		,	m_addr(addr)
+		: m_wallet(wallet)
+		, m_addr(addr)
 	{}
 
 	~AddressCom() {
@@ -103,7 +103,7 @@ public:
 	WalletTx m_wtx;
 
 	TransactionCom(WalletCom& wallet)
-		:	m_wallet(wallet)
+		: m_wallet(wallet)
 	{}
 
 	~TransactionCom();
@@ -198,8 +198,8 @@ public:
 	atomic<int> aStateChanged;
 
 	WalletCom(Wallet& wallet)
-		:	m_wallet(wallet)
-		,	aStateChanged(1)
+		: m_wallet(wallet)
+		, aStateChanged(1)
 	{
 		m_wallet.m_iiWalletEvents.reset(this);
 	}
@@ -313,10 +313,13 @@ public:
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
 
 		COleSafeArray sa;
-		vector<Address> ar = m_wallet.MyAddresses;
-		sa.CreateOneDim(VT_DISPATCH, ar.size());
-		for (long i = 0; i < ar.size(); ++i)
-			sa.PutElement(&i, GetAddressByString(ar[i]).Detach());
+		unordered_set<Address> addresses = m_wallet.MyAddresses;
+		sa.CreateOneDim(VT_DISPATCH, addresses.size());
+		long i = 0;
+		for (auto& a : addresses) {
+			sa.PutElement(&i, GetAddressByString(a).Detach());
+			++i;
+		}
 		*r = sa.Detach().parray;
 	} METHOD_END
 
@@ -534,16 +537,16 @@ public:
 		uint8_t ver = blob.constData()[0];
 		if (ver == 0x80) {
 			KeyInfo ki;
-			ki.m_pimpl->SetPrivData(Span(blob.constData() + 1, 32), blob.size() == 34);
-			ki.Comment = "Imported";
+			ki.m_pimpl->SetPrivData(PrivateKey(Span(blob.constData() + 1, 32), blob.size() == 34));
+			ki->Comment = "Imported";
 			EXT_LOCK(eng.m_cdb.MtxDb) {
 				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
 					eng.m_cdb.AddNewKey(ki);
 			}
-		} else if (ver==1 && blob.constData()[1] == 0x42) {
+		} else if (ver == 1 && blob.constData()[1] == 0x42) {
 			KeyInfo ki;
 			ki.m_pimpl->FromBIP38(ssKey, password);
-			ki.Comment = "Imported";
+			ki->Comment = "Imported";
 			EXT_LOCK(eng.m_cdb.MtxDb) {
 				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
 					eng.m_cdb.AddNewKey(ki);
@@ -638,11 +641,11 @@ public:
 };
 
 WalletAndEng::WalletAndEng(CoinDb& cdb, RCString name)
-	:	base(cdb, name)
-	,	m_iWallet(static_cast<IWallet*>(new WalletCom(_self)))
+	: base(cdb, name)
+	, m_iWallet(static_cast<IWallet*>(new WalletCom(_self)))
 {
 	EXT_LOCK (cdb.MtxDb) {
-		SqliteCommand cmd("SELECT * FROM nets WHERE name=?", cdb.m_dbWallet);
+		SqliteCommand cmd("SELECT * FROM nets WHERE name=? COLLATE NOCASE", cdb.m_dbWallet);
 		cmd.Bind(1, name);
 		if (!cmd.ExecuteReader().Read()) {
 			SqliteCommand("INSERT INTO nets (name) VALUES(?)", cdb.m_dbWallet)
@@ -656,7 +659,7 @@ WalletAndEng::~WalletAndEng() {
 }
 
 class CoinEngCom : public IDispatchImpl<CoinEngCom, ICoinEng>
-	,	public ISupportErrorInfoImpl<ICoinEng>
+	, public ISupportErrorInfoImpl<ICoinEng>
 {
 public:
 	DECLARE_STANDARD_UNKNOWN()

@@ -1,4 +1,4 @@
-﻿/*######   Copyright (c) 2011-2018 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+﻿/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 #       See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -186,7 +186,7 @@ namespace Coin {
             return "";
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e) {            
+        private void Window_Loaded(object sender, RoutedEventArgs e) {
             MenuDBMode.IsEnabled = false;       //!!! Until testing of Lite mode
             MenuModeFull.Tag = EEngMode.Bootstrap;
             MenuModeLite.Tag = EEngMode.Lite;
@@ -295,6 +295,9 @@ namespace Coin {
             m_Loaded = true;
             UpdateView();
             CheckForCommands();
+
+            if (LvWallet.SelectedItem == null && LvWallet.Items.Count == 1)
+                LvWallet.SelectedIndex = 0;
 //          RegisterUriHandler();
         }
 
@@ -506,10 +509,6 @@ namespace Coin {
         }
 
         void OnFileImport(object sender, RoutedEventArgs e) {
-            //          Eng.Password = "1"; //!!!D
-//                      Eng.ImportWallet("C:\\work\\coin\\wallet.dat", "123"); //!!D
-//                      return; //!!D
-
             if (!EnsurePassphraseUnlock())
                 return;
             var wf = SelectedWalletNotNull();
@@ -527,14 +526,14 @@ namespace Coin {
                                 break;
                             case 2:
                             case 3:
-                                using (TextReader rd = new StreamReader(d.FileName)) {
-                                    for (string key; (key=rd.ReadLine())!=null;) {
-                                        wf.Wallet.ImportPrivateKey(key.Trim(), password);
-                                    }
-                                }
+                                foreach (var key in File.ReadAllLines(d.FileName))
+                                    wf.Wallet.ImportPrivateKey(key.Trim(), password);
                                 break;
                         }
-                    } catch (Exception) {       //!!!TODO check exception type
+                        break;
+                    } catch (Exception ex) {
+                        if (ex.HResult != (int)Err.InvalidPassword)
+                            throw;
                         var dlg = new FormPassphrase();
                         dlg.labelRetype.Visibility = Visibility.Hidden;
                         dlg.textRetype.Visibility = Visibility.Hidden;
@@ -560,7 +559,7 @@ namespace Coin {
                 return;
             var d = new SaveFileDialog();
             d.InitialDirectory = Eng.AppDataDirectory;
-            d.Filter = "Bitcoin Wallet format|wallet.dat|Ufasoft Coin XML|*.xml";
+            d.Filter = "Bitcoin Wallet format|wallet.dat";
             d.FileName = "wallet-backup";
             if (Dialog.ShowDialog(d, this)) {
                 if (File.Exists(d.FileName))

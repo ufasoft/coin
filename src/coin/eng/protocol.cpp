@@ -915,7 +915,7 @@ void CoinEng::RemoveVerNonce(Link& link) {
 }
 
 JumpAction CoinEng::TryJumpToBlockchain(int sym, Link *link) {
-	String symbol = MulticharToString(sym);
+	String symbol = Convert::MulticharToString(sym);
 	if (symbol == ChainParams.Symbol)
 		return JumpAction::Continue;	
 	TRC(2, symbol);

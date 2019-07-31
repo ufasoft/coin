@@ -142,10 +142,10 @@ HashValue HashValue::FromShareDifficulty(double difficulty, HashAlgo algo) {
 		break;
 	case HashAlgo::Metis:
 	case HashAlgo::Groestl:
-		memcpy(r.data()+22, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
+		memcpy(r.data() + 22, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 		break;
 	default:
-		memcpy(r.data()+21, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
+		memcpy(r.data() + 21, &(leTarget = htole(uint64_t(0x00FFFF0000000000ULL / difficulty))), 8);
 	}
 	return r;
 }

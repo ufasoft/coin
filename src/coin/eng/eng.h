@@ -323,8 +323,8 @@ public:
 	~CoinDb();
 	KeyInfo AddNewKey(KeyInfo ki);
 	KeyInfo FindReservedKey(AddressType type = AddressType::P2SH);
-	void TopUpPool(int lim = KEYPOOL_SIZE);
-	KeyInfo GenerateNewAddress(AddressType type, RCString comment, int lim = KEYPOOL_SIZE);
+	void TopUpPool();
+	KeyInfo GenerateNewAddress(AddressType type, RCString comment);
 	void RemovePubKeyFromReserved(const CanonicalPubKey& pubKey);
 	void RemovePubHash160FromReserved(const HashValue160& hash160);
 
@@ -765,6 +765,7 @@ public:
 
 	String BlockStringId(const HashValue& hashBlock);
 	virtual HashValue HashMessage(RCSpan cbuf);
+	virtual HashValue HashForWallet(RCSpan s);
 	virtual HashValue HashForSignature(RCSpan cbuf);
 	virtual HashValue HashFromTx(const Tx& tx, bool widnessAware = false);
 

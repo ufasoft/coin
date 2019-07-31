@@ -36,10 +36,19 @@ vararray<uint8_t, 25> KeyInfoBase::ToPubScript() const {
 
 Address KeyInfoBase::ToAddress() const {
 	HashValue160 hash160 = PubKey.Hash160;
-	if (AddressType == AddressType::P2SH) {
+	Coin::AddressType typ = AddressType;
+	switch (typ) {
+	case AddressType::P2SH:
 		hash160 = Hash160(ToPubScript());
+		break;
+	case AddressType::P2WPKH_IN_P2SH: {
+		uint8_t bufP2WPKH_P2SH[22] = { 00, 20 };
+		memcpy(bufP2WPKH_P2SH + 2, hash160.data(), 20);
+		hash160 = Hash160(bufP2WPKH_P2SH);
+		typ = AddressType::P2SH;
+	} break;
 	}
-	return Address(*HasherEng::GetCurrent(), AddressType, hash160, 0, Comment);
+	return Address(*HasherEng::GetCurrent(), typ, hash160, 0, Comment);
 }
 
 Blob KeyInfoBase::PlainPrivKey() const {
@@ -47,9 +56,8 @@ Blob KeyInfoBase::PlainPrivKey() const {
 	return Blob(&typ, 1) + get_PrivKey();
 }
 
-void KeyInfoBase::SetPrivData(RCSpan cbuf, bool bCompressed) {
-	ASSERT(cbuf.size() <= 32);
-	m_privKey = cbuf.size() == 32 ? cbuf : Span(Blob(0, 32 - cbuf.size()) + cbuf);
+void KeyInfoBase::SetPrivData(const PrivateKey& privKey, bool bCompressed) {
+	m_privKey = privKey;
 
 #if UCFG_COIN_ECC=='S'
 	Blob pubKey = Span(Sec256Dsa::PrivKeyToPubKey(m_privKey, bCompressed));
@@ -62,22 +70,35 @@ void KeyInfoBase::SetPrivData(RCSpan cbuf, bool bCompressed) {
 	PubKey = CanonicalPubKey(pubKey);
 }
 
-static const uint8_t s_maxModOrder[32] ={ 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFE, 0xBA,0xAE,0xDC,0xE6,0xAF,0x48,0xA0,0x3B, 0xBF,0xD2,0x5E,0x8C,0xD0,0x36,0x41,0x40 };
+static const uint8_t s_maxModOrder[32] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x40};
 
-void KeyInfoBase::GenRandom(bool bCompressed) {
+Rng::Rng()
+	: m_ud(0, 255)
+{
+	random_device rd;
+	array<int, mt19937::state_size> seedData;
+	generate(begin(seedData), end(seedData), ref(rd));
+	m_rng.seed(seed_seq(begin(seedData), end(seedData)));
+}
+
+void KeyInfoBase::GenRandom(Rng& rng, bool bCompressed) {
 	Comment = nullptr;
+	
 #if UCFG_COIN_ECC=='S'
-	Ext::Crypto::Random rand;
-	uint8_t privKey[32];
+	PrivateKey privKey;
 	do {
-		rand.NextBytes(span<uint8_t>(privKey, sizeof privKey));
-	} while (memcmp(privKey, s_maxModOrder, 32) > 0);
-	SetPrivData(Span(privKey, sizeof privKey), bCompressed);
+		for (auto& d : privKey)
+			d = rng();
+	} while (!Sec256Dsa::VerifyKey(privKey));
+
+	privKey.Compressed = bCompressed;
+	SetPrivData(privKey);
 #else
 	ECDsa dsa(256);
 	Key = dsa.Key;
 	SetPrivData(ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum), bCompressed);
 #endif
+	Timestamp = Clock::now();
 }
 
 Blob KeyInfoBase::ToPrivateKeyDER() const {
@@ -90,13 +111,54 @@ Blob KeyInfoBase::ToPrivateKeyDER() const {
 #endif
 }
 
+PrivateKey::PrivateKey(RCSpan cbuf, bool bCompressed) {
+	if (cbuf.size() > 33)
+		Throw(E_INVALIDARG);
+	if (cbuf.size() == 33) {
+		Compressed = true;
+		memcpy(data(), cbuf.data(), 32);
+} else {
+		Compressed = bCompressed;
+		memset(data(), 0, 32);
+		memcpy(data() + 32 - cbuf.size(), cbuf.data(), cbuf.size());
+	}
+}
+
+PrivateKey::PrivateKey(RCString s) {
+	try {
+		Blob blob = ConvertFromBase58(s.Trim());
+		if (blob.size() < 10)
+			Throw(CoinErr::InvalidAddress);
+		uint8_t ver = blob.constData()[0];
+		//!!! common ver for all Nets		if (ver != Eng().ChainParams.AddressVersion+128)
+		if (!(ver & 128))
+			Throw(CoinErr::InvalidAddress);
+		Compressed = blob.size() == 34;
+		if (Compressed)
+			memcpy(data(), blob.data() + 1, 32);
+		else {
+			memset(data(), 0, 32);
+			memcpy(data() + 32 - (blob.size() - 1), blob.data() + 1, blob.size() - 1);
+		}
+	} catch (RCExc) {
+		Throw(CoinErr::InvalidAddress);
+	}
+}
+
+String PrivateKey::ToString() const {
+	uint8_t ver = 128; //!!!  for all nets, because Private Keys are common // Eng().ChainParams.AddressVersion+128;
+	uint8_t flag = 1;
+	Blob blob = Span(&ver, 1) + Span(data(), 32) + (Compressed ? Span(&flag, 1) : Span());
+	return ConvertToBase58(blob);
+}
+
 void KeyInfoBase::FromDER(RCSpan privKey, RCSpan pubKey) {
 #if UCFG_COIN_ECC=='S'
 	Blob blob = Sec256Dsa::PrivKeyFromDER(privKey);
 #else
 	Blob blob = CngKey::Import(privKey, CngKeyBlobFormat::OSslEccPrivateBlob).Export(CngKeyBlobFormat::OSslEccPrivateBignum);
 #endif
-	SetPrivData(blob, pubKey.size() == 33);
+	SetPrivData(PrivateKey(blob, pubKey.size() == 33));
 	if (!Equal(PubKey.Data, pubKey))
 		Throw(E_FAIL);
 }
@@ -105,7 +167,7 @@ static Blob CreateAesBip38(Aes& aes, RCString password, RCSpan salt) {
 	Blob derived = Scrypt(Encoding::UTF8.GetBytes(password), salt, 16384, 8, 8, 64);
 	aes.Mode = CipherMode::ECB;
 	aes.Padding = PaddingMode::None;
-	aes.Key = ConstBuf(derived.constData()+32, 32);
+	aes.Key = ConstBuf(derived.constData() + 32, 32);
 	return derived;
 }
 
@@ -116,7 +178,7 @@ String KeyInfoBase::ToString(RCString password) const {			// non-EC-multiplied c
 	size_t size = 39;
 	if (password == nullptr) {
 		d[0] = 0x80;
-		memcpy(d+1, m_privKey.constData(), 32);
+		memcpy(d + 1, m_privKey.data(), 32);
 		size = 33;
 		if (PubKey.IsCompressed())
 			d[size++] = 1;
@@ -126,8 +188,8 @@ String KeyInfoBase::ToString(RCString password) const {			// non-EC-multiplied c
 
 		memcpy(d + 3, SHA256_SHA256(Encoding::UTF8.GetBytes(ToAddress().ToString())).data(), 4);
 		Aes aes;
-		Blob derived = CreateAesBip38(aes, password, ConstBuf(d+3, 4));
-		Blob x = m_privKey;
+		Blob derived = CreateAesBip38(aes, password, ConstBuf(d + 3, 4));
+		Blob x(m_privKey.data(), m_privKey.size());
 		VectorXor(x.data(), derived.constData(), 32);
 		memcpy(d+7, aes.Encrypt(x).constData(), 32);
 	}
@@ -144,9 +206,10 @@ void KeyInfoBase::FromBIP38(RCString bip38, RCString password) {
 		Throw(CoinErr::InvalidPrivateKey);
 	Aes aes;
 	Blob derived = CreateAesBip38(aes, password, ConstBuf(d+3, 4));
-	Blob x = aes.Decrypt(ConstBuf(d+7, 32));
+	Blob x = aes.Decrypt(ConstBuf(d + 7, 32));
 	VectorXor(x.data(), derived.constData(), 32);
-	SetPrivData(x, d[2] & 0x20);
+	SetPrivData(PrivateKey(x, d[2] & 0x20));
+
 	if (memcmp(d + 3, SHA256_SHA256(Encoding::UTF8.GetBytes(ToAddress().ToString())).data(), 4))
 		Throw(ExtErr::InvalidPassword);
 }
@@ -185,19 +248,10 @@ Hash160 = Coin::Hash160(PubKey = pubKey);
 }*/
 
 
-void KeyInfoBase::SetPrivData(const PrivateKey& privKey) {
-	pair<Blob, bool> pp = privKey.GetPrivdataCompressed();
-	SetPrivData(pp.first, pp.second);
-}
-
 void KeyInfoBase::SetKeyFromPubKey() {
 #if UCFG_COIN_ECC!='S'
 	Key = CngKey::Import(PubKey.Data, CngKeyBlobFormat::OSslEccPublicBlob);
 #endif
-}
-
-pair<Blob, bool> PrivateKey::GetPrivdataCompressed() const {
-	return pair<Blob, bool>(ConstBuf(m_data.data(), 32), m_data.size() == 33);
 }
 
 Blob CanonicalPubKey::ToCompressed() const {
@@ -262,7 +316,10 @@ CanonicalPubKey CanonicalPubKey::FromCompressed(RCSpan cbuf) {
 	return r;
 }
 
-
+HashValue160 CanonicalPubKey::get_ScriptHash() const {
+	Blob redeemScript = Address(*(HasherEng*)0, AddressType::P2PKH, Hash160).ToScriptPubKey();
+	return Coin::Hash160(redeemScript);
+}
 
 } // Coin::
 
