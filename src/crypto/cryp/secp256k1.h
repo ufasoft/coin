@@ -85,6 +85,7 @@ public:
 	static Blob PrivKeyFromDER(RCSpan der);
 	static bool VerifyPubKey(RCSpan cbuf);
 	static Blob DecompressPubKey(RCSpan cbuf);
+	static bool VerifyKey(const std::array<uint8_t, 32>& key);
 private:
 	secp256k1_ge m_pubkey;
 };
