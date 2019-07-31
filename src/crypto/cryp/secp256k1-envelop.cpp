@@ -176,6 +176,10 @@ Blob Sec256Dsa::DecompressPubKey(RCSpan cbuf) {
 	return Blob(buf, pubkeylen);
 }
 
+bool Sec256Dsa::VerifyKey(const array<uint8_t, 32>& key) {
+	return ::secp256k1_ec_seckey_verify(g_sec256Ctx, key.data());
+}
+
 void Sec256DsaEx::ParsePubKey(RCSpan cbuf) {
 	if (!secp256k1_ec_pubkey_parse(g_sec256Ctx, &m_pubkey, cbuf.data(), cbuf.size()))
 		throw CryptoException(make_error_code(ExtErr::Crypto), "Invalid PubKey");
@@ -188,4 +192,3 @@ bool Sec256DsaEx::VerifyHashSig(RCSpan hash, const Sec256SignatureEx& sig) {
 
 
 }} // Ext::Crypto::
-

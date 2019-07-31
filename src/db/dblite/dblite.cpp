@@ -114,7 +114,7 @@ void KVStorage::Vacuum() {
 		throw;
 	}
 	path tmpOriginal = FilePath;
-	tmpOriginal.replace_extension(String(FilePath.extension().native()) + ".bak");
+	tmpOriginal.replace_extension((String(FilePath.extension().native()) + ".bak").c_str());
 	filesystem::rename(FilePath, tmpOriginal);
 	filesystem::rename(tmpPath, FilePath);
 	filesystem::remove(tmpOriginal);
@@ -123,5 +123,3 @@ void KVStorage::Vacuum() {
 
 
 }}} // Ext::DB::KV::
-
-
