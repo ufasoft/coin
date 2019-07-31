@@ -229,10 +229,6 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				Throw(ExtErr::InvalidPassword);
 		}
 
-#ifdef _DEBUG//!!!D
-		int nReserved = 0;
-#endif;
-
 		CCrypter crypter;
 	    CKeyingMaterial vMasterKey;
 		for (auto it = masterKeys.begin(); it != masterKeys.end(); ++it) {
@@ -253,7 +249,6 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 					if (auto oPool = Lookup(pubKeyToKeyPoolInfo, pubKey)) {
 						ki->Timestamp = oPool.value().Timestamp;
 						ki->Reserved = true;
-						++nReserved;
 					}
 
 					Blob pubKeyData(Span(ki.PubKey.Data));
@@ -441,5 +436,3 @@ void ExportKeysThread::Execute() {
 }
 
 } // Coin::
-
-
