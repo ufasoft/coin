@@ -126,6 +126,8 @@ library CointEng {
 		[id(13), propget] HRESULT ProxyString([out, retval] BSTR *r);
 		[id(13), propput] HRESULT ProxyString([in] BSTR s);
 		[id(14), propget] HRESULT SupportsTOR([out,retval] VARIANT_BOOL *r);
+		[id(15), propget] HRESULT Testnet([out,retval] VARIANT_BOOL *r);
+		[id(15), propput] HRESULT Testnet([in] VARIANT_BOOL v);
 	};
 
 	[uuid(55534654-3F35-46d9-0002-54BAFC250401)]

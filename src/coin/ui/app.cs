@@ -26,7 +26,10 @@ namespace Coin {
 		}
 
 		public static Uri SendUri;
-		public static bool CancelPendingTxes;
+
+        public static bool
+            CancelPendingTxes,
+            Testnet;
 
 		void ProcessCommandLine(string[] args) {
 			SendUri = null;
@@ -36,7 +39,10 @@ namespace Coin {
 					case "-cancelpending":
 						CancelPendingTxes = true;
 						break;
-					default:
+                    case "-testnet":
+                        Testnet = true;
+                        break;
+                    default:
 						if (Uri.IsWellFormedUriString(arg, UriKind.Absolute)) {
 							Uri uri = new Uri(arg);
 							if (uri.Scheme != "bitcoin")

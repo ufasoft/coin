@@ -784,6 +784,16 @@ public:
 		if (m_cdb.ProxyString.ToUpper() == "TOR")
 			m_cdb.ListeningPort = uint16_t(-1);
 	} METHOD_END
+
+	HRESULT __stdcall get_Testnet(VARIANT_BOOL* r)
+	METHOD_BEGIN {
+		*r = g_conf.Testnet;
+	} METHOD_END
+
+	HRESULT __stdcall put_Testnet(VARIANT_BOOL r)
+	METHOD_BEGIN {
+		g_conf.Testnet = r;
+	} METHOD_END
 };
 
 TransactionCom::~TransactionCom() {
