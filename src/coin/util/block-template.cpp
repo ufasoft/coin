@@ -13,7 +13,7 @@ namespace Coin {
     ProtocolWriter& operator<<(ProtocolWriter& wr, const MinerBlock& block) {
 	block.WriteHeader(wr);
 
-	CoinSerialized::WriteVarUInt64(wr, block.Txes.size());
+	CoinSerialized::WriteCompactSize(wr, block.Txes.size());
 	EXT_FOR (const MinerTx& mtx, block.Txes) {
 		wr.BaseStream.Write(mtx.Data);
 	}
@@ -31,7 +31,7 @@ void MinerBlock::ReadJson(const VarValue& json) {
 	HashTarget = HashValue::FromDifficultyBits(DifficultyTargetBits);
 
 	VarValue txes = json["transactions"];
-	Txes.resize(txes.size()+1);
+	Txes.resize(txes.size() + 1);
 
 	SetTimestamps(DateTime::from_time_t(json["curtime"].ToInt64()));
 #ifdef X_DEBUG//!!!D
@@ -167,7 +167,7 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 	MemoryStream ms(128);
 	BinaryWriter wr(ms);
 	wr << uint32_t(1) << uint8_t(1) << HashValue::Null() << uint32_t(-1);
-	CoinSerialized::WriteVarUInt64(wr, scriptIn.size());
+	CoinSerialized::WriteCompactSize(wr, scriptIn.size());
 	coinb1Size += int(ms.Position);
 	ms.Write(scriptIn);
 	wr << uint32_t(-1) << uint8_t(1) << CoinbaseValue								// seq, NOut
@@ -185,4 +185,3 @@ void MinerBlock::AssemblyCoinbaseTx(RCString address) {
 
 
 } // Coin::
-

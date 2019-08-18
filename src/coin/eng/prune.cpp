@@ -16,12 +16,9 @@ void PruneDbThread::Execute() {
 		if (m_bStop)
 			return;
 		CoinEngTransactionScope scopeBlockSavepoint(Eng);
-		Block block = Eng.Db->FindBlock(h);
-		const CTxes& txes = block.Txes;
-		for (int i = 1; i < txes.size(); ++i) {
-			for (auto& txIn : txes[i].TxIns())
+		for (auto& tx : Eng.Db->FindBlock(h).Txes)
+			for (auto& txIn : tx.TxIns())
 				Eng.Db->PruneTxo(txIn.PrevOutPoint, h);
-		}
 		Eng.Db->SetLastPrunedHeight(h);
 	}
 	TRC(1, "Pruned spent TXOs upto Block " << To)

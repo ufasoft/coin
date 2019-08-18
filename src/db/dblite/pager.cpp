@@ -704,10 +704,10 @@ Page KVStorage::Allocate(bool bLock) {
 		AdjustViewCount();
 	}
 	if (UseMMapPager && FileLength < PageSpaceSize()) {
-		//FileIncrement = min(FileIncrement*2, uint64_t(1024*1024*1024));
-		FileIncrement *= 2;
-
-		m_pager->AddFullMapping((PageSpaceSize() + FileIncrement - 1) & ~(FileIncrement - 1));
+		const uint64_t MAX_INCREMENT = 1024 * 1024 * 1024;
+		FileIncrement = (min)(MAX_INCREMENT, FileIncrement * 2);
+		uint64_t newFileSize = (PageSpaceSize() + FileIncrement - 1) / FileIncrement * FileIncrement;
+		m_pager->AddFullMapping(newFileSize);
 		DbFile.Flush();			// save Metadata
 
 #ifdef X_DEBUG//!!!D

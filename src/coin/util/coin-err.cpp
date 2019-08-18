@@ -76,7 +76,9 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::GetBlocksLocatorSize							, "getblocks message has too many locators"		}
 	, { CoinErr::TxMissingInputs								, "Missing inputs"								}
 	, { CoinErr::TxPrematureSpend								, "Premature Spend"								}
+	, { CoinErr::TxOrdering										, "Transaction order is invalid"				}
 	, { CoinErr::CannotReorganizeBeyondPrunedBlocks				, "Cannot reorganize beyond pruned blocks"		}
+	, { CoinErr::NonCanonicalCompactSize						, "Non-canonical CompactSize"					}	
 
 	, { CoinErr::SCRIPT_ERR_UNKNOWN_ERROR						, "Unknown Script error"						}
 	, { CoinErr::SCRIPT_ERR_EVAL_FALSE							, "Script evaluated without error but finished with a false/empty top stack element"	}
@@ -120,6 +122,9 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::SCRIPT_ERR_WITNESS_PUBKEYTYPE					, "Using non-compressed keys in segwit"				}
 	, { CoinErr::SCRIPT_ERR_OP_CODESEPARATOR					, "Using OP_CODESEPARATOR in non-witness script"	}
 	, { CoinErr::SCRIPT_ERR_SIG_FINDANDDELETE					, "Signature is found in scriptCode"				}
+	, { CoinErr::SCRIPT_DISABLED_OPCODE							, "Disabled OpCode"									}
+	, { CoinErr::SCRIPT_RANGE									, "Invalid range"									}
+	, { CoinErr::SCRIPT_INVALID_ARG								, "Invalid argument"								}
 
 	, { CoinErr::RPC_MISC_ERROR									, "Exception thrown in command handling"		}
 	, { CoinErr::RPC_FORBIDDEN_BY_SAFE_MODE						, "Server is in safe mode, and command is not allowed in safe mode"	}

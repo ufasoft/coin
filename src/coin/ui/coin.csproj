@@ -11,7 +11,7 @@
     <AssemblyName>Coin</AssemblyName>
     <Product>Coin</Product>
     <Description>Multi-cryptocurrency client.&#10; Bitcoin, Litecoin, etc.</Description>
-    <Version>1.1.9</Version>
+    <Version>1.1.10</Version>
     <Copyright>Copyright © Ufasoft 2011-2019</Copyright>
     <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
     <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>
@@ -41,5 +41,6 @@
     <Resource Include="..\images\bitcoin-testnet3.ico"  ><Link>images\bitcoin-testnet3.ico  </Link></Resource>
     <Resource Include="..\images\groestlcoin.ico"       ><Link>images\groestlcoin.ico       </Link></Resource>
     <Resource Include="..\images\litecoin.ico"          ><Link>images\litecoin.ico          </Link></Resource>
+    <Resource Include="..\images\bch.ico"               ><Link>images\Bitcoin Cash.ico          </Link></Resource>
   </ItemGroup>
 </Project>

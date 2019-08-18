@@ -239,6 +239,9 @@
     <ClCompile Include="..\..\el\crypto\siphash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cryp-64.def">

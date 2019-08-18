@@ -1,3 +1,8 @@
+/*######   Copyright (c) 2015-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+#                                                                                                                                     #
+# 		See LICENSE for licensing information                                                                                         #
+#####################################################################################################################################*/
+
 #pragma once
 
 #include <el/crypto/sign.h>
@@ -39,6 +44,7 @@
 namespace Ext { namespace Crypto {
 
 class Sec256Signature {
+	secp256k1_scalar m_r, m_s;
 public:
 	Sec256Signature();
 	Sec256Signature(RCSpan cbuf);
@@ -48,12 +54,11 @@ public:
 	array<uint8_t, 64> ToCompact() const;
 	Blob Serialize() const;
 private:
-	secp256k1_scalar m_r, m_s;
-
 	friend class Sec256Dsa;
 };
 
 class Sec256SignatureEx {	// High-level signature
+	secp256k1_ecdsa_signature m_sig;
 public:
 	Sec256SignatureEx(RCSpan cbuf) {
 		Parse(cbuf);
@@ -61,12 +66,11 @@ public:
 
 	void Parse(RCSpan cbuf);
 private:
-	secp256k1_ecdsa_signature m_sig;
-
 	friend class Sec256DsaEx;
 };
 
 class Sec256Dsa : public DsaBase {
+	secp256k1_ge m_pubkey;
 public:
 	Blob m_privKey;
 
@@ -86,11 +90,11 @@ public:
 	static bool VerifyPubKey(RCSpan cbuf);
 	static Blob DecompressPubKey(RCSpan cbuf);
 	static bool VerifyKey(const std::array<uint8_t, 32>& key);
-private:
-	secp256k1_ge m_pubkey;
 };
 
 class Sec256DsaEx : public DsaBase {
+protected:
+	secp256k1_pubkey m_pubkey;
 public:
 	void ParsePubKey(RCSpan cbuf);
 	bool VerifyHashSig(RCSpan hash, const Sec256SignatureEx& sig);
@@ -99,8 +103,11 @@ public:
 	bool VerifyHash(RCSpan hash, RCSpan bufSig) override {
 		return VerifyHashSig(hash, Sec256SignatureEx(bufSig));		//!!!C Use Sec256SignatureEx for compatibility with old incorrect signature format
 	}
-private:
-	secp256k1_pubkey m_pubkey;
+};
+
+class SchnorrDsa : public Sec256DsaEx {
+public:
+	bool VerifyHash(RCSpan hash, RCSpan bufSig) override;
 };
 
 }} // Ext::Crypto::

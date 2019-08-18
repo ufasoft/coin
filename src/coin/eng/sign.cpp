@@ -27,7 +27,7 @@ void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHa
 	TxIn& txIn = m_tx.m_pimpl->m_txIns.at(nIn);
 	Hasher.NIn = nIn;
 	Hasher.HashType = hashType;
-	HashValue hash = Hasher.Hash(scriptPrereq + pkScript);
+	HashValue hash = Hasher.HashForSig(scriptPrereq + pkScript);
 	KeyInfo ki(nullptr);
 	MemoryStream msSig;
 	ScriptWriter wrSig(msSig);
@@ -48,7 +48,7 @@ void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHa
 		auto redeemScript = ki->ToPubScript();
 		uint8_t byHashType = uint8_t(hashType);
 		Key = randomKey ? randomKey : ki;
-		hash = Hasher.Hash(scriptPrereq + redeemScript);
+		hash = Hasher.HashForSig(scriptPrereq + redeemScript);
 		Blob sig = SignHash(hash) + Span(&byHashType, 1);
 		wrSig << sig << Span(ki.PubKey.Data) << Span(redeemScript);
 	} break;

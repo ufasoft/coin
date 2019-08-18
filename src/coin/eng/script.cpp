@@ -15,11 +15,17 @@ using namespace Ext::Crypto;
 #include "coin-model.h"
 #include "coin-protocol.h"
 
+#if UCFG_COIN_ECC=='S'
+#	include <crypto/cryp/secp256k1.h>
+#else
+#	include <el/crypto/ext-openssl.h>
+#endif
+
 namespace Coin {
 
 int MAX_OP_COUNT = 201;
 
-BigInteger ToBigInteger(const Vm::Value& v) {
+BigInteger VmStack::ToBigInteger(const VmStack::Value& v) {
 	Blob blob = Span(v);
 	uint8_t& msb = blob.data()[blob.size() - 1];
 	bool bNeg = msb & 0x80;
@@ -28,7 +34,7 @@ BigInteger ToBigInteger(const Vm::Value& v) {
 	return bNeg ? -r : r;
 }
 
-Vm::Value FromBigInteger(const BigInteger& bi) {
+Vm::Value VmStack::FromBigInteger(const BigInteger& bi) {
 	if (Sign(bi) == 0)
 		return Vm::Value();
 	bool bNeg = Sign(bi) < 0;
@@ -37,12 +43,13 @@ Vm::Value FromBigInteger(const BigInteger& bi) {
 	return Vm::Value(blob);
 }
 
-static bool IsValidSignatureEncoding(const uint8_t sig[], size_t size) {
-	if (size < 9 || size > 73 || sig[0] != 0x30)
+bool CoinEng::IsValidSignatureEncoding(RCSpan sig) {
+	size_t size = sig.size();
+	if (size < 9 || size > 72 || sig[0] != 0x30)
 		return false;
 
 	// Make sure the length covers the entire signature.
-	if (sig[1] != size - 3)
+	if (sig[1] != size - 2)
 		return false;
 
 	// Extract the length of the R element.
@@ -57,7 +64,7 @@ static bool IsValidSignatureEncoding(const uint8_t sig[], size_t size) {
 
 	// Verify that the length of the signature matches the sum of the length
 	// of the elements.
-	if ((size_t)(lenR + lenS + 7) != size)
+	if ((size_t)(lenR + lenS + 6) != size)
 		return false;
 
 	// Check whether the R element is an integer.
@@ -212,6 +219,8 @@ bool GetInstr(const CMemReadStream& stm, LiteInstr& instr) {
 }
 
 Instr Vm::GetOp() {
+	CoinEng& eng = Eng();
+
 	Instr instr;
 	switch (instr.Opcode = instr.OriginalOpcode = (Opcode)m_rd->ReadByte()) {
 	case Opcode::OP_PUSHDATA1: instr.Value = m_rd->ReadBytes(m_rd->ReadByte()); break;
@@ -259,7 +268,7 @@ Instr Vm::GetOp() {
 			instr.Value.resize((uint8_t)instr.Opcode, false);
 			m_rd->Read(instr.Value.data(), (uint8_t)instr.Opcode);
 			instr.Opcode = Opcode::OP_PUSHDATA1;
-		} else if (instr.Opcode > Opcode::OP_NOP10) {
+		} else if (instr.Opcode > eng.MaxOpcode) {
 			TRC(1, "OP_UNKNOWN: " << hex << int(instr.Opcode));
 		}
 	}
@@ -267,20 +276,22 @@ Instr Vm::GetOp() {
 }
 
 int CalcSigOpCount1(RCSpan script, bool bAccurate) {
+	CoinEng& eng = Eng();
+
 	int r = 0;
 	CMemReadStream stm(script);
 	LiteInstr instr, instrPrev;
 	for (int i = 0; GetInstr(stm, instr); instrPrev = instr, ++i) {
 		switch (instr.Opcode) {
-		case Opcode::OP_CHECKSIG:
-		case Opcode::OP_CHECKSIGVERIFY: ++r; break;
 		case Opcode::OP_CHECKMULTISIG:
 		case Opcode::OP_CHECKMULTISIGVERIFY:
 			if (bAccurate && i > 0 && instrPrev.IsSmallPositiveOpcode())
 				r += int(instrPrev.OriginalOpcode) - int(Opcode::OP_1) + 1;
 			else
-				r += 20;
+				r += MAX_PUBKEYS_PER_MULTISIG;
 			break;
+		default:
+			r += (int)eng.IsCheckSigOp(instr.Opcode);
 		}
 	}
 	return r;
@@ -321,15 +332,15 @@ int CalcSigOpCount(RCSpan script, RCSpan scriptSig) {
 
 static const uint8_t s_b1 = 1;
 
-const Vm::Value Vm::TrueValue(Span(&s_b1, 1)), Vm::FalseValue;
+const VmStack::Value VmStack::TrueValue(Span(&s_b1, 1)), VmStack::FalseValue;
 
-Vm::Value& Vm::GetStack(unsigned idx) {
+VmStack::Value& VmStack::GetStack(unsigned idx) {
 	if (idx >= Stack.size())
 		Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
 	return Stack.end()[-1 - (ptrdiff_t)idx];	// cast is necessary to avoid signed/unsigned conversion error
 }
 
-Vm::Value Vm::Pop() {
+VmStack::Value VmStack::Pop() {
 	if (Stack.empty())
 		Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
 	Value r = Stack.back();
@@ -337,7 +348,7 @@ Vm::Value Vm::Pop() {
 	return r;
 }
 
-void Vm::SkipStack(int n) {
+void VmStack::SkipStack(int n) {
 	while (n--) {
 		if (Stack.empty())
 			Throw(CoinErr::SCRIPT_ERR_INVALID_STACK_OPERATION);
@@ -345,7 +356,7 @@ void Vm::SkipStack(int n) {
 	}
 }
 
-void Vm::Push(const Value& v) {
+void VmStack::Push(const Value& v) {
 	Stack.push_back(v);
 }
 
@@ -508,7 +519,7 @@ void SignatureHasher::CalcWitnessCache() {
 
 static const HashValue s_hashvalueOne("0000000000000000000000000000000000000000000000000000000000000001");
 
-HashValue SignatureHasher::Hash(RCSpan script) {
+HashValue SignatureHasher::HashForSig(RCSpan script) {
 	CoinEng& eng = Eng();
 
 	MemoryStream stm;
@@ -522,12 +533,10 @@ HashValue SignatureHasher::Hash(RCSpan script) {
 			<< (wr.HashTypeAnyoneCanPay ? HashValue() : m_hashPrevOuts)
 			<< (wr.HashTypeAnyoneCanPay || wr.HashTypeNone || wr.HashTypeSingle ? HashValue() : m_hashSequence);
 
-		m_txoTo.TxIns()[NIn].PrevOutPoint.Write(wr);
+		auto& txIn = m_txoTo.TxIns()[NIn];
+		txIn.PrevOutPoint.Write(wr);
 		CoinSerialized::WriteSpan(wr, script);
-		wr << m_amount;
-
-		auto& txIns = m_txoTo.TxIns();
-		wr << txIns[NIn].Sequence;
+		wr << m_amount << txIn.Sequence;
 
 		if (!wr.HashTypeNone && !wr.HashTypeSingle)
 			wr << m_hashOuts;
@@ -647,19 +656,36 @@ void SignatureHasher::VerifySignature(RCSpan scriptPk) {
 	const TxIn& txIn = m_txoTo.TxIns().at(NIn);
     const OutPoint& outPoint = txIn.PrevOutPoint;
 	if (!VerifyScript(txIn.Script(), scriptPk)) {
-#ifdef X_DEBUG//!!!D
-
-		TRC(1, "txTo " << Hash(txTo));
-//		bool bC = outPoint.TxHash == hashTxFrom;
-		bool bb = VerifyScript(txIn.Script(), scriptPk, txTo, nHashType);
+#ifdef _DEBUG//!!!D
+//		cout << m_txoTo.m_hash << endl;
+//		cout << outPoint.TxHash << endl;
+		//		bool bC = outPoint.TxHash == hashTxFrom;
+		bool bb = VerifyScript(txIn.Script(), scriptPk);
 //		bb = bb;
 #endif
 		Throw(CoinErr::VerifySignatureFailed);
 	}
 }
 
+bool CoinEng::VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig) {
+#if UCFG_COIN_ECC=='S'
+	Sec256DsaEx dsa;
+	dsa.ParsePubKey(pubKey);
+#else
+	ECDsa dsa(CngKey::Import(pubKey, CngKeyBlobFormat::OSslEccPublicBlob));
+#endif
+	return dsa.VerifyHash(hash.ToSpan(), sig);
+}
+
 bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInMultiSig) {
-	if (t_features.VerifyDerEnc && !IsValidSignatureEncoding(sig.data(), sig.size()))
+	CoinEng& eng = Eng();
+
+	if (sig.empty())
+		return false;
+	SigHashType sigHashType = SigHashType(sig[sig.size() - 1]);
+	sig = sig.first(sig.size() - 1);
+
+	if (t_features.VerifyDerEnc && !eng.IsValidSignatureEncoding(sig))
 		return false;
 
 	try {
@@ -667,13 +693,11 @@ bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInM
 #define EC_R_INVALID_ENCODING 102 // OpenSSL
 		DBG_LOCAL_IGNORE(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_OPENSSL, EC_R_INVALID_ENCODING));
 
-		if (sig.empty())
-			return false;
-		SigHashType sigHashType = SigHashType(sig[sig.size() - 1]);
+		eng.CheckHashType(_self, (uint32_t)sigHashType);
 		if (HashType != SigHashType::ZERO && HashType != sigHashType)
 			return false;
 		HashType = sigHashType;
-		return KeyInfoBase::VerifyHash(pubKey, Hash(script), sig.first(sig.size() - 1));
+		return eng.VerifyHash(pubKey, HashForSig(script), sig);
 	} catch (CryptoException& DBG_PARAM(ex)) {
 		if (!bInMultiSig) {
 			TRC(2, ex.what() << "    PubKey: " << pubKey);
@@ -682,8 +706,7 @@ bool SignatureHasher::CheckSig(Span sig, RCSpan pubKey, RCSpan script, bool bInM
 	}
 }
 
-
-bool ToBool(const Vm::Value& v) {
+bool ToBool(const VmStack::Value& v) {
 	Span s(v);
 	for (size_t i = 0; i < s.size(); ++i)
 		if (s[i])
@@ -691,13 +714,142 @@ bool ToBool(const Vm::Value& v) {
 	return false;
 }
 
-static void MakeSameSize(Vm::Value& v1, Vm::Value& v2) {
+//!!! not used after disabling OP_AND
+/*
+static void MakeSameSize(VmStack::Value& v1, VmStack::Value& v2) {
 	size_t size = std::max(v1.size(), v2.size());
 	v1.resize(size);
 	v2.resize(size);
 }
+*/
+
+bool CoinEng::IsCheckSigOp(Opcode opcode) {
+	return opcode == Opcode::OP_CHECKSIG || opcode == Opcode::OP_CHECKSIGVERIFY;
+}
+
+void CoinEng::OpCat(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpSubStr(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	StackValue v = stack[2];
+	int beg = explicit_cast<int>(ToBigInteger(stack[1])), end = beg + explicit_cast<int>(ToBigInteger(stack[0]));
+	if (beg < 0 || end < beg)
+		Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+	beg = std::min(beg, (int)v.size());
+	end = std::min(end, (int)v.size());
+	stack[2] = StackValue(Span(v).subspan(beg, end - beg));
+	stack.SkipStack(2);
+*/
+}
+
+void CoinEng::OpLeft(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	int size = explicit_cast<int>(ToBigInteger(stack.Pop()));
+	StackValue& v = stack[0];
+	if (size < 0)
+		Throw(CoinErr::SCRIPT_INVALID_ARG);
+	size = std::min(size, (int)v.size());
+	v = StackValue(Span(v).first(size));
+*/
+}
+
+void CoinEng::OpRight(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	int size = explicit_cast<int>(ToBigInteger(stack.Pop()));
+	StackValue& v = stack[0];
+	if (size < 0)
+		Throw(CoinErr::SCRIPT_INVALID_ARG);
+	size = std::min(size, (int)v.size());
+	v = StackValue(Span(v).last(size));
+*/
+}
+
+void CoinEng::OpSize(VmStack& stack) {
+	stack.Push(VmStack::FromBigInteger(BigInteger((int64_t)stack[0].size())));
+}
+
+void CoinEng::OpInvert(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	for (uint8_t* p = stack[0].data(), *q = p + stack[0].size(); p < q; ++p)
+		*p = ~*p;
+*/
+}
+
+void CoinEng::OpAnd(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpOr(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpXor(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::Op2Mul(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	stack[0] = FromBigInteger(ToBigInteger(stack[0]) << 1);
+*/
+}
+
+void CoinEng::Op2Div(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	stack[0] = FromBigInteger(ToBigInteger(stack[0]) >> 1);
+*/
+}
+
+void CoinEng::OpMul(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	stack[1] = FromBigInteger(ToBigInteger(stack[1]) * ToBigInteger(stack[0]));
+	stack.SkipStack(1);
+*/
+}
+
+void CoinEng::OpDiv(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpMod(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpLShift(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	stack[1] = FromBigInteger(ToBigInteger(stack[1]) << explicit_cast<int>(ToBigInteger(stack[0])));
+	stack.SkipStack(1);
+*/
+}
+
+void CoinEng::OpRShift(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+/*
+	stack[1] = FromBigInteger(ToBigInteger(stack[1]) >> explicit_cast<int>(ToBigInteger(stack[0])));
+	stack.SkipStack(1);
+*/
+}
+
+void CoinEng::OpCheckDataSig(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
+
+void CoinEng::OpCheckDataSigVerify(VmStack& stack) {
+	Throw(CoinErr::SCRIPT_DISABLED_OPCODE);
+}
 
 bool Vm::EvalImp() {
+	CoinEng& eng = Eng();
+
 	bool r = true;
 	vector<bool> vExec;
 	vector<Value> altStack;
@@ -778,39 +930,25 @@ bool Vm::EvalImp() {
 					Stack.erase(Stack.end() - 1 - n);
 					Push(v);
 				} break;
-				case Opcode::OP_CAT: {
-					Value& v = GetStack(1);
-					v = Span(v) + GetStack(0);
-					if (v.size() > MAX_SCRIPT_ELEMENT_SIZE)
-						return false;
-					SkipStack(1);
-				} break;
-				case Opcode::OP_SUBSTR: {
-					Value v = GetStack(2);
-					int beg = explicit_cast<int>(ToBigInteger(GetStack(1))), end = beg + explicit_cast<int>(ToBigInteger(GetStack(0)));
-					if (beg < 0 || end < beg)
-						return false;
-					beg = std::min(beg, (int)v.size());
-					end = std::min(end, (int)v.size());
-					GetStack(2) = StackValue(Span(v).subspan(beg, end - beg));
-					SkipStack(2);
-				} break;
-				case Opcode::OP_LEFT: {
-					int size = explicit_cast<int>(ToBigInteger(Pop()));
-					Value& v = GetStack(0);
-					if (size < 0)
-						return false;
-					size = std::min(size, (int)v.size());
-					v = StackValue(Span(v).first(size));
-				} break;
-				case Opcode::OP_RIGHT: {
-					int size = explicit_cast<int>(ToBigInteger(Pop()));
-					Value& v = GetStack(0);
-					if (size < 0)
-						return false;
-					size = std::min(size, (int)v.size());
-					v = StackValue(Span(v).last(size));
-				} break;
+				case Opcode::OP_CAT:	eng.OpCat(_self);		break;
+				case Opcode::OP_SUBSTR: eng.OpSubStr(_self);	break;
+				case Opcode::OP_LEFT:	eng.OpLeft(_self);		break;
+				case Opcode::OP_RIGHT:	eng.OpRight(_self);		break;
+				case Opcode::OP_INVERT: eng.OpInvert(_self);	break;
+				case Opcode::OP_AND:	eng.OpAnd(_self);		break;
+				case Opcode::OP_OR:		eng.OpOr(_self);		break;
+				case Opcode::OP_XOR:	eng.OpXor(_self);		break;
+				case Opcode::OP_LSHIFT:	eng.OpLShift(_self);	break;
+				case Opcode::OP_RSHIFT:	eng.OpRShift(_self);	break;
+				case Opcode::OP_2MUL:	eng.Op2Mul(_self);		break;
+				case Opcode::OP_2DIV:	eng.Op2Div(_self);		break;
+				case Opcode::OP_MUL:	eng.OpMul(_self);		break;
+				case Opcode::OP_DIV:	eng.OpDiv(_self);		break;
+				case Opcode::OP_MOD:	eng.OpMod(_self);		break;
+				case Opcode::OP_SIZE:	eng.OpSize(_self);		break;
+				case Opcode::OP_CHECKDATASIG:		eng.OpCheckDataSig(_self);			break;
+				case Opcode::OP_CHECKDATASIGVERIFY: eng.OpCheckDataSigVerify(_self);	break;					
+
 				case Opcode::OP_RIPEMD160: GetStack(0) = RIPEMD160().ComputeHash(GetStack(0)); break;
 				case Opcode::OP_SHA256: GetStack(0) = SHA256().ComputeHash(GetStack(0)); break;
 				case Opcode::OP_SHA1: GetStack(0) = SHA1().ComputeHash(GetStack(0)); break;
@@ -917,37 +1055,6 @@ bool Vm::EvalImp() {
 					else if (!b)
 						return false;
 				} break;
-				case Opcode::OP_INVERT:
-					for (uint8_t *p = GetStack(0).data(), *q = p + GetStack(0).size(); p < q; ++p)
-						*p = ~*p;
-					break;
-				case Opcode::OP_AND: {
-					Value &vr = GetStack(1), &v = GetStack(0);
-					MakeSameSize(vr, v);
-					uint8_t* pr = vr.data();
-					const uint8_t* p = v.data();
-					for (int i = 0, n = vr.size(); i < n; ++i)
-						pr[i] &= p[i];
-					SkipStack(1);
-				} break;
-				case Opcode::OP_OR: {
-					Value &vr = GetStack(1), &v = GetStack(0);
-					MakeSameSize(vr, v);
-					uint8_t* pr = vr.data();
-					const uint8_t* p = v.data();
-					for (int i = 0, n = vr.size(); i < n; ++i)
-						pr[i] |= p[i];
-					SkipStack(1);
-				} break;
-				case Opcode::OP_XOR: {
-					Value &vr = GetStack(1), &v = GetStack(0);
-					MakeSameSize(vr, v);
-					uint8_t* pr = vr.data();
-					const uint8_t* p = v.data();
-					for (int i = 0, n = vr.size(); i < n; ++i)
-						pr[i] ^= p[i];
-					SkipStack(1);
-				} break;
 				case Opcode::OP_ADD: {
 					BigInteger a = ToBigInteger(GetStack(0)), b = ToBigInteger(GetStack(1));
 					GetStack(1) = FromBigInteger(a + b);
@@ -955,26 +1062,6 @@ bool Vm::EvalImp() {
 				} break;
 				case Opcode::OP_SUB:
 					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) - ToBigInteger(GetStack(0)));
-					SkipStack(1);
-					break;
-				case Opcode::OP_MUL:
-					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) * ToBigInteger(GetStack(0)));
-					SkipStack(1);
-					break;
-				case Opcode::OP_DIV:
-					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) / ToBigInteger(GetStack(0)));
-					SkipStack(1);
-					break;
-				case Opcode::OP_MOD:
-					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) % ToBigInteger(GetStack(0)));
-					SkipStack(1);
-					break;
-				case Opcode::OP_LSHIFT:
-					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) << explicit_cast<int>(ToBigInteger(GetStack(0))));
-					SkipStack(1);
-					break;
-				case Opcode::OP_RSHIFT:
-					GetStack(1) = FromBigInteger(ToBigInteger(GetStack(1)) >> explicit_cast<int>(ToBigInteger(GetStack(0))));
 					SkipStack(1);
 					break;
 				case Opcode::OP_BOOLAND:
@@ -1029,13 +1116,10 @@ bool Vm::EvalImp() {
 					break;
 				case Opcode::OP_1ADD: GetStack(0) = FromBigInteger(ToBigInteger(GetStack(0)) + 1); break;
 				case Opcode::OP_1SUB: GetStack(0) = FromBigInteger(ToBigInteger(GetStack(0)) - 1); break;
-				case Opcode::OP_2MUL: GetStack(0) = FromBigInteger(ToBigInteger(GetStack(0)) << 1); break;
-				case Opcode::OP_2DIV: GetStack(0) = FromBigInteger(ToBigInteger(GetStack(0)) >> 1); break;
 				case Opcode::OP_NEGATE: GetStack(0) = FromBigInteger(-ToBigInteger(GetStack(0))); break;
 				case Opcode::OP_ABS: GetStack(0) = FromBigInteger(abs(ToBigInteger(GetStack(0)))); break;
 				case Opcode::OP_NOT: GetStack(0) = FromBigInteger(!ToBigInteger(GetStack(0))); break;
 				case Opcode::OP_0NOTEQUAL: GetStack(0) = FromBigInteger(!!ToBigInteger(GetStack(0))); break;
-				case Opcode::OP_SIZE: Push(FromBigInteger(BigInteger((int64_t)GetStack(0).size()))); break;
 				case Opcode::OP_DEPTH: Push(FromBigInteger(BigInteger((int64_t)Stack.size()))); break;
 				case Opcode::OP_CODESEPARATOR: m_posCodeHash = (int)m_stm->Position; break;
 				case Opcode::OP_RETURN: return false;

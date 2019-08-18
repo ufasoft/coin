@@ -345,9 +345,9 @@ public:
 		: Ver(1) {
 	}
 
-	static void WriteVarUInt64(BinaryWriter& wr, uint64_t v);
-	static uint64_t ReadVarUInt64(const BinaryReader& rd);
-	static uint32_t ReadVarSize(const BinaryReader& rd);
+	static void WriteCompactSize(BinaryWriter& wr, uint64_t v);
+	static uint64_t ReadCompactSize64(const BinaryReader& rd);
+	static uint32_t ReadCompactSize(const BinaryReader& rd);
 	static String ReadString(const BinaryReader& rd);
 	static void WriteString(BinaryWriter& wr, RCString s);
 	static void WriteSpan(BinaryWriter& wr, RCSpan mb);
@@ -367,7 +367,7 @@ public:
 
 	template <class T>
     static void Write(ProtocolWriter& wr, const vector<T>& ar) {
-		WriteVarUInt64(wr, ar.size());
+		WriteCompactSize(wr, ar.size());
         for (size_t i = 0; i < ar.size(); ++i)
             WriteEl(wr, ar[i]);
 	}
@@ -384,12 +384,12 @@ public:
     template <class T>
     static void ReadEl(const ProtocolReader& rd, T& v) { v.Read(rd); }
 
-	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = SIZE_MAX) {
-        uint32_t size = ReadVarSize(rd);
+	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = INT32_MAX) {
+        uint32_t size = ReadCompactSize(rd);
         if (size > maxSize)
             Throw(ExtErr::Protocol_Violation);
 		ar.resize(size);
-		for (size_t i = 0; i < ar.size(); ++i)
+		for (size_t i = 0; i < size; ++i)
 			ReadEl(rd, ar[i]);
 	}
 };
@@ -408,12 +408,12 @@ public:
 	mutable optional<HashValue> m_merkleRoot;
 	DateTime Timestamp;
 	uint32_t DifficultyTargetBits;
-	int32_t Ver;
+	int32_t Ver;						// Important to be signed
 	uint32_t Height;
 	uint32_t Nonce;
 
 	BlockBase()
-		: Ver(3)
+		: Ver(4)
 		, Height(uint32_t(-1)) {
 	}
 
@@ -451,11 +451,13 @@ const char DEFAULT_PASSWORD_ENCRYPT_METHOD = 'B';
 class HasherEng : public InterlockedObject {
 public:
 	String Hrp;
+	char HrpSeparator;
 	uint8_t AddressVersion, ScriptAddressVersion;
 
 	HasherEng()
 		: AddressVersion(0)
 		, ScriptAddressVersion(5)
+		, HrpSeparator('1')
     {
 		Hrp = "bc";
     }
@@ -661,7 +663,6 @@ public:
 	void SetKeyFromPubKey();
 	String ToString(RCString password) const; // To WIF / BIP0038 formats
 	Blob SignHash(RCSpan cbuf);
-	static bool VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig);
 
 	Blob ToPrivateKeyDER() const;
 	void FromDER(RCSpan privKey, RCSpan pubKey);

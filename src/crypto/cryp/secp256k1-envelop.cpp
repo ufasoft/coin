@@ -26,6 +26,9 @@
 #include <secp256k1/lax_der_parsing.c>
 #include <secp256k1/lax_der_privatekey_parsing.c>
 
+
+#include <secp256k1/modules/schnorr/main_impl.h>
+
 namespace Ext { namespace Crypto {
 
 struct Sec256Ctx {
@@ -189,6 +192,8 @@ bool Sec256DsaEx::VerifyHashSig(RCSpan hash, const Sec256SignatureEx& sig) {
 	return secp256k1_ecdsa_verify(g_sec256Ctx, &sig.m_sig, hash.data(), &m_pubkey);
 }
 
-
+bool SchnorrDsa::VerifyHash(RCSpan hash, RCSpan bufSig) {
+	return secp256k1_schnorr_verify(g_sec256Ctx, bufSig.data(), hash.data(), &m_pubkey);
+}
 
 }} // Ext::Crypto::

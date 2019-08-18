@@ -78,7 +78,9 @@ enum class CoinErr {
 	, NonStandardTx
 	, TxMissingInputs
 	, TxPrematureSpend
+	, TxOrdering
 	, CannotReorganizeBeyondPrunedBlocks
+	, NonCanonicalCompactSize
 
 	, SCRIPT_ERR_UNKNOWN_ERROR = 501
     , SCRIPT_ERR_EVAL_FALSE
@@ -122,6 +124,9 @@ enum class CoinErr {
     , SCRIPT_ERR_WITNESS_PUBKEYTYPE
     , SCRIPT_ERR_OP_CODESEPARATOR
     , SCRIPT_ERR_SIG_FINDANDDELETE
+	, SCRIPT_DISABLED_OPCODE
+	, SCRIPT_RANGE
+	, SCRIPT_INVALID_ARG
 
 	, RPC_MISC_ERROR			= 1001
 	, RPC_FORBIDDEN_BY_SAFE_MODE

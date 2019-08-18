@@ -58,7 +58,6 @@ public:
 		:	base(storage)
 	{}
 protected:
-
 	void AddFullMapping(uint64_t fileLength) override {
 		TRC(2, "File resizing to " << fileLength / (1024 * 1024) << " MiB")
     	EXT_LOCK (Storage.MtxViews) {

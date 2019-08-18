@@ -132,7 +132,6 @@ public:
     ~CCrypter() {
         CleanKey();
     }
-
 };
 
 bool EncryptSecret(CKeyingMaterial& vMasterKey, const Blob& vchPlaintext, const HashValue& nIV, std::vector<unsigned char> &vchCiphertext);

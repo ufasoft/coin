@@ -13,6 +13,7 @@ const unsigned
 
 const int WITNESS_SCALE_FACTOR = 4;
 const unsigned MAX_BLOCK_SIZE = MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR; //!!!R
+const unsigned MAX_BLOCK_SIZE_FOR_ALL_CHAINS = 32000000;
 const int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE / 2;
 const int MAX_STANDARD_TX_SIZE = 100000;
 const int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
@@ -21,6 +22,7 @@ const size_t MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE / 100;
 const size_t MAX_SCRIPT_ELEMENT_SIZE = 520;
 const unsigned MAX_SCRIPT_SIZE = 10000;
 
+const unsigned MAX_PUBKEYS_PER_MULTISIG = 20;
 
 // Standard behavior for acception into Tx pool
 

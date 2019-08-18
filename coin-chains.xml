@@ -18,6 +18,40 @@
 		<Checkpoint Block='583878' Hash='0000000000000000000b2750d59329dff978b15b0ad82c19c3915ac93374aac2' />
 	</Chain>
 
+	<Chain ChainID='0' Name='Bitcoin-testnet3' Symbol='TBTC3' AddressVersion='111'  Hrp='tb' IsTestNet='1'
+			Genesis='000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943'
+			InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF' PayToScriptHashHeight='46800' CheckDupTxHeight='46850'
+			BIP34Height='21111' BIP65Height='581885' BIP66Height='330776' BIP68Height='770111'
+			ProtocolMagicHex='0709110B' DefaultPort='18333'
+			BootUrls='dns://testnet-seed.bitcoin.petertodd.org dns://testnet-seed.bluematt.me'>
+		<Checkpoint Block='546' Hash='000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70' />
+	</Chain>
+
+	<Chain Name='Bitcoin Cash' Symbol='BCH'  AddressVersion='0' ScriptAddressVersion='5' Hrp='bitcoincash'
+		 	Genesis='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f'
+		 	MaxMoney='21000000' MinTxFee='1000' InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF'
+		 	PayToScriptHashHeight='173500' BIP34Height='227931' BIP65Height='388381' BIP66Height='363725' BIP68Height='419327' SegwitHeight='2000000000'
+		 	ProtocolMagicHex='E8F3E1E3' DiskMagicHex='D9B4BEF9' DefaultPort='8333'
+			BootUrls='dns://seed.bitcoinabc.org dns://seed-abc.bitcoinforks.org dns://btccash-seeder.bitcoinunlimited.info dns://seed.bitprim.org dns://seed.deadalnix.me'>
+		<Checkpoint Block='11111'  Hash='0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d' />
+		<Checkpoint Block='105000' Hash='00000000000291ce28027faea320c8d2b054b2e0fe44a773f3eefb151d6bdc97' />
+		<Checkpoint Block='478558' Hash='0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43' />
+		<Checkpoint Block='504031' Hash='0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c' />
+		<Checkpoint Block='582680' Hash='000000000000000001b4b8e36aec7d4f9671a47872cb9a74dc16ca398c7dcc18' />
+	</Chain>
+
+	<Chain Name='Bitcoin Cash-testnet' Symbol='TBCH'  AddressVersion='0' ScriptAddressVersion='5' Hrp='bchtest' IsTestNet='1'
+		 	Genesis='000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943'
+		 	MaxMoney='21000000' MinTxFee='1000' InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF'
+			BIP34Height='21111' BIP65Height='581885' BIP66Height='330776' BIP68Height='770112' SegwitHeight='2000000000'
+		 	ProtocolMagicHex='F4F3E5F4' DiskMagicHex='0709110B' DefaultPort='18333'
+			BootUrls='dns://seed.bitcoinabc.org dns://seed-abc.bitcoinforks.org dns://btccash-seeder.bitcoinunlimited.info dns://seed.bitprim.org dns://seed.deadalnix.me'>
+		<Checkpoint Block='546'  Hash='000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70' />
+		<Checkpoint Block='1155875'  Hash='00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138' />
+		<Checkpoint Block='1188697'  Hash='0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb' />
+		<Checkpoint Block='1303885'  Hash='00000000000000479138892ef0e4fa478ccc938fb94df862ef5bde7e8dee23d3' />
+	</Chain>
+
 	<Chain Name='LiteCoin' Symbol='LTC' Algo='scrypt' FullPeriod='1' AddressVersion='48' ScriptAddressVersion='5' Hrp='ltc'
 			Genesis='12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2' InitBlockValue='50' BlockSpan='150'
 			MaxMoney='84000000' MinTxFee='100000'
@@ -36,12 +70,28 @@
 	</Chain>
 
 
-	<Chain ChainID='0' Name='Bitcoin-testnet3' Symbol='TBTC3' AddressVersion='111'  Hrp='tb' IsTestNet='1'
-			Genesis='000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943'
-			InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF' PayToScriptHashHeight='46800' CheckDupTxHeight='46850'
-			BIP34Height='21111' BIP65Height='581885' BIP66Height='330776' BIP68Height='770111'
-			ProtocolMagicHex='0709110B' DefaultPort='18333'
-			BootUrls='dns://testnet-seed.bitcoin.petertodd.org dns://testnet-seed.bluematt.me'>
-		<Checkpoint Block='546' Hash='000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70' />
+    <Chain Name='Groestlcoin' Symbol='GRS' Algo='groestl' AddressVersion='36' ScriptAddressVersion='5' Hrp='grs' MiningAllowed='1'
+			Genesis='00000ac5927c594d49cc0bdb81759d0da8297eb614683d3acb62f0703b639023'
+			MaxMoney='105000000'  MinTxFee='10000'
+			BIP34Height='800000' BIP65Height='2464000' BIP66Height='800000' SegwitHeight='2000000'
+			InitBlockValue='100' MaxTargetHex='1E0FFFFF' InitTargetHex='1E0FFFFF'  BlockSpan='60'
+			ProtocolMagicHex='D4B4BEF9' DefaultPort='1331'
+			BootUrls='dns://dnsseed1.groestlcoin.org dns://dnsseed2.groestlcoin.org dns://dnsseed3.groestlcoin.org dns://dnsseed4.groestlcoin.org' >
+		<Checkpoint Block='100002' 	Hash='0000000001968bbc3e7edd38448661449091a83e1ae6ce42dd8e19af3954c4ec' />
+		<Checkpoint Block='669286' 	Hash='000000001727e1d13ca7272dee43996efdfc6b3b57a6d2b0c48257ef52f40bcb' />
+		<Checkpoint Block='2000000'	Hash='00000000000434d5b8d1c3308df7b6e3fd773657dfb28f5dd2f70854ef94cc66' />
+		<Checkpoint Block='2600000'	Hash='0000000000002d526754a280ad7668b663cb9eea08b003edad3ddf6037fc574e' />
 	</Chain>
+
+	<Chain Name='Groestlcoin-testnet' Symbol='TGRS' Algo='groestl' AddressVersion='111' ScriptAddressVersion='196' Hrp='tgrs' MiningAllowed='1'  IsTestNet='1'
+			Genesis='000000ffbb50fc9898cdd36ec163e6ba23230164c0052a28876255b7dcf2cd36'
+			MaxMoney='105000000'  MinTxFee='10000'
+			BIP34Height='286' BIP65Height='982000' BIP66Height='286' SegwitHeight='70000'
+			InitBlockValue='100' MaxTargetHex='1E00FFFF' InitTargetHex='1E0FFFFF'  BlockSpan='60'
+			ProtocolMagicHex='0709110B' DefaultPort='17777'
+			BootUrls='dns://testnet1.groestlcoin.org dns://testnet2.groestlcoin.org dns://testp2pool.groestlcoin.org dns://testp2pool2.groestlcoin.org' >
+		<Checkpoint Block='50000'	Hash='00000081951486bb535f8cffec8ac0641bd24b814f89641f6cc2cad737f18950' />
+		<Checkpoint Block='887766'	Hash='000000cc069338b7cd182dbf3e98dedd80c9ce85f26b78daaec0a6c964ffa501' />
+	</Chain>
+
 </CoinChains>

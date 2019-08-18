@@ -56,6 +56,7 @@ void ChainParams::Init() {
 	IsTestNet = false;
 	HashAlgo = Coin::HashAlgo::Sha256;
 	ProtocolVersion = ProtocolVersion::PROTOCOL_VERSION;
+	DiskMagic = 0;
 	AuxPowStartBlock = INT_MAX;
 	CoinValue = 100000000;
 	InitBlockValue = CoinValue * 50;
@@ -70,6 +71,7 @@ void ChainParams::Init() {
 	MaxPossibleTarget = Target(0x1D7FFFFF);
 	InitTarget = MaxPossibleTarget;
 	CoinbaseMaturity = 100;
+	MaxBlockWeight = MAX_BLOCK_WEIGHT;
 	PowOfDifficultyToHalfSubsidy = 1;
 	PayToScriptHashHeight = numeric_limits<int>::max();
 	BIP34Height = BIP65Height = BIP66Height = BIP68Height = SegwitHeight = 0;
@@ -214,6 +216,7 @@ CCoinEngThreadKeeper::~CCoinEngThreadKeeper() {
 
 CoinEng::CoinEng(CoinDb& cdb)
 	: base(cdb)
+	, Tree(_self)
 	, TxPool(*this)
 	, m_cdb(cdb)
 	, MaxBlockVersion(3)
@@ -227,6 +230,7 @@ CoinEng::CoinEng(CoinDb& cdb)
 	, NextOffsetInBootstrap(0)
 	, aPreferredDownloadPeers(0)
 	, aSyncStartedPeers(0)
+	, MaxOpcode(Opcode::OP_NOP10)
 {
 	StallingTimeout = BLOCK_STALLING_TIMEOUT;
 }
@@ -423,11 +427,13 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 
 	a = xml.GetAttribute("MaxTargetHex");
 	MaxTarget = !a.empty() ? Target(Convert::ToUInt32(a, 16)) : Target(0x1D00FFFF);
+	HashValueMaxTarget = HashValue::FromDifficultyBits(MaxTarget.m_value);
 
 	if (!(a = xml.GetAttribute("InitTargetHex")).empty())
 		InitTarget = Target(Convert::ToUInt32(a, 16));
 
 	ProtocolMagic = Convert::ToUInt32(xml.GetAttribute("ProtocolMagicHex"), 16);
+	DiskMagic = (a = xml.GetAttribute("DiskMagicHex")).empty() ? ProtocolMagic : Convert::ToUInt32(a, 16);		
 
 	if (!(a = xml.GetAttribute("ProtocolVersion")).empty())
 		ProtocolVersion = Convert::ToUInt32(a);
@@ -555,12 +561,13 @@ LAB_RET:
 		if (p->Name == name)
 			peng = p->CreateEng(cdb);
 	(peng ? peng : (peng = new CoinEng(cdb)))->SetChainParams(params);
-	peng->AddressVersion = peng->ChainParams.AddressVersion;
-	peng->ScriptAddressVersion = peng->ChainParams.ScriptAddressVersion;
-	peng->Hrp = peng->ChainParams.Hrp;
-	peng->ProtocolMagic = peng->ChainParams.ProtocolMagic;
-	peng->Listen = peng->ChainParams.Listen;
-	peng->DefaultPort = peng->ChainParams.DefaultPort;
+	const Coin::ChainParams& p = peng->ChainParams;
+	peng->AddressVersion = p.AddressVersion;
+	peng->ScriptAddressVersion = p.ScriptAddressVersion;
+	peng->Hrp = p.Hrp;
+	peng->ProtocolMagic = p.ProtocolMagic;
+	peng->Listen = p.Listen;
+	peng->DefaultPort = p.DefaultPort;
 	return peng;
 }
 

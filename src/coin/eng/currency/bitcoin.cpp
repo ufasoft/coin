@@ -15,7 +15,7 @@ class COIN_CLASS BitcoinEng : public CoinEng {
 	typedef CoinEng base;
 public:
 	BitcoinEng(CoinDb& cdb)
-		:	base(cdb)
+		: base(cdb)
 	{}
 protected:
 	void CheckForDust(const Tx& tx) override {
@@ -29,8 +29,6 @@ protected:
 };
 
 
-static CurrencyFactory<BitcoinEng> s_bitcoin("Bitcoin");
-static CurrencyFactory<BitcoinEng> s_bitcoinTestnet("Bitcoin-testnet");
+static CurrencyFactory<BitcoinEng> s_bitcoin("Bitcoin"), s_bitcoinTestnet("Bitcoin-testnet");
 
 } // Coin::
-

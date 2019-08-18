@@ -221,7 +221,7 @@ Blob CalcSha256Midstate(RCSpan mb) {
 	return r;
 }
 
-void CoinSerialized::WriteVarUInt64(BinaryWriter& wr, uint64_t v) {
+void CoinSerialized::WriteCompactSize(BinaryWriter& wr, uint64_t v) {
 	if (v < 0xFD) {
 		wr.Write(&v, 1);
 		return;
@@ -240,17 +240,29 @@ void CoinSerialized::WriteVarUInt64(BinaryWriter& wr, uint64_t v) {
 	}
 }
 
-uint64_t CoinSerialized::ReadVarUInt64(const BinaryReader& rd) {
+uint64_t CoinSerialized::ReadCompactSize64(const BinaryReader& rd) {
+	uint64_t r;
 	switch (uint8_t pref = rd.ReadByte()) {
-	case 0xFD: return rd.ReadUInt16();
-	case 0xFE: return rd.ReadUInt32();
-	case 0xFF: return rd.ReadUInt64();
-	default: return pref;
+	case 0xFD:
+		if ((r = rd.ReadUInt16()) < 0xFDu)
+			Throw(CoinErr::NonCanonicalCompactSize);
+		break;
+	case 0xFE:
+		if ((r = rd.ReadUInt32()) < 0x10000u)
+			Throw(CoinErr::NonCanonicalCompactSize);
+		break;
+	case 0xFF:
+		if ((r = rd.ReadUInt64()) < 0x100000000ULL)
+			Throw(CoinErr::NonCanonicalCompactSize);
+		break;
+	default:
+		r = pref;
 	}
+	return r;
 }
 
-uint32_t CoinSerialized::ReadVarSize(const BinaryReader& rd) {
-	uint64_t size = ReadVarUInt64(rd);
+uint32_t CoinSerialized::ReadCompactSize(const BinaryReader& rd) {
+	uint64_t size = ReadCompactSize64(rd);
 	if (size > 50000000)	//!!!
 		Throw(ExtErr::Protocol_Violation);
 	return (uint32_t)size;
@@ -259,12 +271,12 @@ uint32_t CoinSerialized::ReadVarSize(const BinaryReader& rd) {
 void CoinSerialized::WriteString(BinaryWriter& wr, RCString s) {
 	const char *p = s;
 	size_t len = strlen(p);
-	WriteVarUInt64(wr, len);
+	WriteCompactSize(wr, len);
 	wr.Write(p, len);
 }
 
 Blob CoinSerialized::ReadBlob(const BinaryReader& rd) {
-	uint32_t size = ReadVarSize(rd);
+	uint32_t size = ReadCompactSize(rd);
 	return rd.ReadBytes(size);
 }
 
@@ -274,7 +286,7 @@ String CoinSerialized::ReadString(const BinaryReader& rd) {
 }
 
 void CoinSerialized::WriteSpan(BinaryWriter& wr, RCSpan mb) {
-	WriteVarUInt64(wr, mb.size());
+	WriteCompactSize(wr, mb.size());
 	wr.Write(mb.data(), mb.size());
 }
 

@@ -17,15 +17,14 @@ struct PagePos;
 struct EntryDesc {
     uint8_t *P;
     size_t Size;
-
-	Span Key() {
-		return Span(P + 1, P[0]);
-	}
-
 	uint64_t DataSize;
 	Span LocalData;
 	uint32_t PgNo;
 	bool Overflowed;
+
+	Span Key() {
+		return Span(P + 1, P[0]);
+	}
 };
 
 LiteEntry GetLiteEntry(const PagePos& pp, uint8_t keySize);

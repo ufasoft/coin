@@ -25,7 +25,7 @@ class ScriptWriter : public BinaryWriter {
 	typedef BinaryWriter base;
 public:
 	ScriptWriter(Stream& stm)
-		:	base(stm)
+		: base(stm)
 	{}
 };
 
@@ -120,9 +120,9 @@ public:
 };
 
 struct LiteInstr {
+	Span Value;
 	Coin::Opcode Opcode;
 	Coin::Opcode OriginalOpcode;
-	Span Value;
 
 	bool IsSmallPositiveOpcode() const { return OriginalOpcode >= Opcode::OP_1 && OriginalOpcode <= Opcode::OP_16; }
 };
@@ -136,10 +136,31 @@ struct Instr {
 	{}
 
 	explicit Instr(RCSpan mb)
-		:	Opcode(Opcode::OP_PUSHDATA1)
-		,	Value(mb)
+		: Opcode(Opcode::OP_PUSHDATA1)
+		, Value(mb)
 	{}
+};
 
+class Vm : public VmStack {
+	typedef VmStack base;
+public:
+	Span m_span;
+	unique_ptr<CMemReadStream> m_stm;
+	unique_ptr<ScriptReader> m_rd;
+	int m_pc;
+	int m_posCodeHash;
+	CBool WitnessSig;
+	//	Coin::Script Script;
+
+	Vm(SignatureHasher* signatureHasher = nullptr) : base(signatureHasher) {
+	}
+
+	void Init(RCSpan mbScript);
+	bool Eval(RCSpan mbScript);
+	Instr GetOp();
+	bool FastVerifyP2SH(const HashValue160& hash160) { return Hash160(GetStack(0)) == hash160; }
+private:
+	bool EvalImp();
 };
 
 
@@ -173,40 +194,6 @@ int CalcSigOpCount(RCSpan script, RCSpan scriptSig);
 int CalcSigOpCount1(RCSpan script, bool bAccurate = false);
 
 bool GetInstr(const CMemReadStream& stm, LiteInstr& instr);
-
-
-class Vm {
-public:
-	typedef StackValue Value;
-
-	static const Value TrueValue, FalseValue;
-
-	Span m_span;
-	unique_ptr<CMemReadStream> m_stm;
-	unique_ptr<ScriptReader> m_rd;
-	vector<Value> Stack;
-	SignatureHasher *m_signatureHasher;
-	CBool WitnessSig;
-	//	Coin::Script Script;
-
-	Vm(SignatureHasher *signatureHasher = nullptr) : m_signatureHasher(signatureHasher) {
-		Stack.reserve(6);
-	}
-
-	void Init(RCSpan mbScript);
-	bool Eval(RCSpan mbScript);
-	Instr GetOp();
-	bool FastVerifyP2SH(const HashValue160& hash160) { return Hash160(GetStack(0)) == hash160; }
-private:
-	int m_pc;
-	int m_posCodeHash;
-
-	Value& GetStack(unsigned idx);
-	Value Pop();
-	void SkipStack(int n);
-	void Push(const Value& v);
-	bool EvalImp();
-};
 
 bool ToBool(const Vm::Value& v);
 BigInteger ToBigInteger(const Vm::Value& v);

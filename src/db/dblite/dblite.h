@@ -231,7 +231,7 @@ typedef unordered_set<uint32_t> CUnorderedPageSet;
 typedef set<uint32_t> COrderedPageSet;
 
 class Pager : public InterlockedObject {
-  public:
+public:
 	KVStorage& Storage;
 
 	Pager(KVStorage& storage) : Storage(storage) {}

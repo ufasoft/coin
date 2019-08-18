@@ -76,8 +76,8 @@ void TxOut::Write(BinaryWriter& wr) const {
 }
 
 void TxOut::Read(const BinaryReader& rd) {
-	rd >> Value;
-	uint32_t size = CoinSerialized::ReadVarSize(rd);
+	Value = rd.ReadInt64();
+	uint32_t size = CoinSerialized::ReadCompactSize(rd);
 	if (size > MAX_BLOCK_WEIGHT)	//!!!?
 		Throw(ExtErr::Protocol_Violation);
 	m_scriptPubKey.resize(size, false);
@@ -441,17 +441,17 @@ void TxObj::Write(ProtocolWriter& wr) const {
 
 	auto& txIns = TxIns();
 	if (wr.HashTypeAnyoneCanPay) {
-		WriteVarUInt64(wr, 1);
+		WriteCompactSize(wr, 1);
 		txIns[wr.NIn].Write(wr, true);
 	} else {
 		size_t nTxIn = txIns.size();
-		WriteVarUInt64(wr, nTxIn);
+		WriteCompactSize(wr, nTxIn);
 		for (size_t i = 0; i < nTxIn; ++i)
 			txIns[i].Write(wr, i == wr.NIn);
 	}
 
 	auto nOuts = wr.HashTypeNone ? 0 : wr.HashTypeSingle ? wr.NIn + 1 : (int)TxOuts.size();
-	WriteVarUInt64(wr, nOuts);
+	WriteCompactSize(wr, nOuts);
 	for (size_t i = 0; i < nOuts; ++i)
 		if (wr.HashTypeSingle && i != wr.NIn)
 			CoinSerialized::WriteSpan(wr << int64_t(-1), Span());
@@ -460,7 +460,7 @@ void TxObj::Write(ProtocolWriter& wr) const {
 
 	if (hasWitness)
 		for (auto& txIn : txIns) {
-			WriteVarUInt64(wr, txIn.Witness.size());
+			WriteCompactSize(wr, txIn.Witness.size());
 			for (auto& chunk : txIn.Witness)
 				CoinSerialized::WriteSpan(wr, chunk);
     	}
@@ -484,7 +484,7 @@ void TxObj::Read(const ProtocolReader& rd) {
 		CoinSerialized::Read(rd, TxOuts);
 		if (flag & 1)
 			for (auto& txIn : m_txIns) {
-				txIn.Witness.resize(CoinSerialized::ReadVarSize(rd));
+				txIn.Witness.resize(CoinSerialized::ReadCompactSize(rd));
 				for (auto& chunk : txIn.Witness)
 					chunk = CoinSerialized::ReadBlob(rd);
 			}
@@ -876,6 +876,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 			SignatureHasher sigHasher(*m_pimpl);
 			if (bVerifySignature && m_pimpl->HasWitness())
 				sigHasher.CalcWitnessCache();
+			eng.PatchSigHasher(sigHasher);
 
 			auto& txIns = TxIns();
 			for (uint32_t i = 0; i < txIns.size(); ++i) {

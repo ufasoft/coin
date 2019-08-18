@@ -404,16 +404,16 @@ int LocatorHashes::FindHeightInMainChain(bool bFullBlocks) const {
 
 void BlockObj::WriteHeaderInMessage(ProtocolWriter& wr) const {
 	WriteHeader(wr);
-	CoinSerialized::WriteVarUInt64(wr, 0);
+	CoinSerialized::WriteCompactSize(wr, 0);
 }
 
 void BlockObj::ReadHeaderInMessage(const ProtocolReader& rd) {
 	ReadHeader(rd, false, 0);
-	CoinSerialized::ReadVarUInt64(rd);		// tx count unused
+	CoinSerialized::ReadCompactSize64(rd);		// tx count unused
 }
 
 void HeadersMessage::Write(ProtocolWriter& wr) const {
-	CoinSerialized::WriteVarUInt64(wr, Headers.size());
+	CoinSerialized::WriteCompactSize(wr, Headers.size());
 	EXT_FOR (const BlockHeader& header, Headers) {
 		header.m_pimpl->WriteHeaderInMessage(wr);
 	}
@@ -422,7 +422,7 @@ void HeadersMessage::Write(ProtocolWriter& wr) const {
 void HeadersMessage::Read(const ProtocolReader& rd) {
 	CoinEng& eng = Eng();
 
-	Headers.resize(CoinSerialized::ReadVarSize(rd));
+	Headers.resize(CoinSerialized::ReadCompactSize(rd));
 	for (int i = 0; i < Headers.size(); ++i) {
 		(Headers[i] = BlockHeader(eng.CreateBlockObj()))->ReadHeaderInMessage(rd);
 	}
@@ -594,7 +594,7 @@ void AlertMessage::Process(Link& link) {
 
 	HashValue hv = Hash(Payload);
 	EXT_FOR(const Blob& pubKey, eng.ChainParams.AlertPubKeys) {
-		if (KeyInfoBase::VerifyHash(pubKey, hv, Signature))
+		if (eng.VerifyHash(pubKey, hv, Signature))
 			goto LAB_VERIFIED;
 	}
 	Throw(CoinErr::AlertVerifySignatureFailed);
@@ -1050,12 +1050,12 @@ void FeeFilterMessage::Process(Link& link) {
 }
 
 ProtocolWriter& operator<<(ProtocolWriter& wr, const CompactSize& cs) {
-    CoinSerialized::WriteVarUInt64(wr, cs);
+    CoinSerialized::WriteCompactSize(wr, cs);
     return wr;
 }
 
 const ProtocolReader& operator>>(const ProtocolReader& rd, CompactSize& cs) {
-    auto v = CoinSerialized::ReadVarUInt64(rd);
+    auto v = CoinSerialized::ReadCompactSize64(rd);
     if (v > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     cs = CompactSize((uint16_t)v);
@@ -1115,10 +1115,10 @@ void CompactBlockMessage::Write(ProtocolWriter& wr) const {
     wr << Nonce;
     CoinSerialized::Write(wr, ShortTxIds);
 
-    CoinSerialized::WriteVarUInt64(wr, PrefilledTxes.size());
+    CoinSerialized::WriteCompactSize(wr, PrefilledTxes.size());
     uint16_t prev = uint16_t(-1);
     for (auto& pp : PrefilledTxes) {
-        CoinSerialized::WriteVarUInt64(wr, pp.first - exchange(prev, pp.first) - 1);
+        CoinSerialized::WriteCompactSize(wr, pp.first - exchange(prev, pp.first) - 1);
         pp.second.Write(wr);
     }
 }
@@ -1131,12 +1131,12 @@ void CompactBlockMessage::Read(const ProtocolReader& rd) {
     rd >> Nonce;
     CoinSerialized::Read(rd, ShortTxIds);
 
-    auto size = CoinSerialized::ReadVarUInt64(rd);
+    auto size = CoinSerialized::ReadCompactSize64(rd);
     if (size > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     PrefilledTxes.resize((size_t)size);
     for (size_t i = 0; i < PrefilledTxes.size(); ++i) {
-        auto off = CoinSerialized::ReadVarUInt64(rd);
+        auto off = CoinSerialized::ReadCompactSize64(rd);
         auto idx = off + (i ? PrefilledTxes[i - 1].first + 1 : 0);
         if (off > UINT16_MAX || idx > UINT16_MAX)
             Throw(ExtErr::Protocol_Violation);
@@ -1167,20 +1167,20 @@ void CompactBlockMessage::Process(Link& link) {
 
 void GetBlockTransactionsMessage::Write(ProtocolWriter& wr) const {
     wr << HashBlock;
-    CoinSerialized::WriteVarUInt64(wr, Indexes.size());
+    CoinSerialized::WriteCompactSize(wr, Indexes.size());
     uint16_t prev = uint16_t(-1);
     for (auto idx : Indexes)
-        CoinSerialized::WriteVarUInt64(wr, idx - exchange(prev, idx) - 1);
+        CoinSerialized::WriteCompactSize(wr, idx - exchange(prev, idx) - 1);
 }
 
 void GetBlockTransactionsMessage::Read(const ProtocolReader& rd) {
     rd >> HashBlock;
-    auto n = CoinSerialized::ReadVarUInt64(rd);
+    auto n = CoinSerialized::ReadCompactSize64(rd);
     if (n > UINT16_MAX)
         Throw(ExtErr::Protocol_Violation);
     Indexes.resize(n);
     for (size_t i = 0; i < n; ++i) {
-        auto off = CoinSerialized::ReadVarUInt64(rd);
+        auto off = CoinSerialized::ReadCompactSize64(rd);
         auto idx = off + (i ? Indexes[i - 1] + 1 : 0);
         if (off > UINT16_MAX || idx > UINT16_MAX)
             Throw(ExtErr::Protocol_Violation);

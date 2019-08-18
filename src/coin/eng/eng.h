@@ -23,6 +23,7 @@ using namespace Ext::Inet;
 using P2P::Peer;
 
 #include "coin-model.h"
+#include "../util/opcode.h"
 
 #if UCFG_COIN_GENERATE
 #	include "../miner/miner.h"
@@ -57,9 +58,9 @@ DB_VER_COMPACT_UTXO,
 DB_VER_LATEST;
 
 struct QueuedBlockItem {
-	Coin::Link& Link;
 	HashValue HashBlock;
 	DateTime DtGetdataReq;
+	Coin::Link& Link;
 
 	QueuedBlockItem(Coin::Link& link, const HashValue& hashBlock, const DateTime& dtGetdataReq) : Link(link), HashBlock(hashBlock), DtGetdataReq(dtGetdataReq) {}
 };
@@ -136,11 +137,15 @@ public:
 	int CoinbaseMaturity;
 	int AnnualPercentageRate;
 	int TargetInterval;
+	
 	Target MaxTarget, InitTarget;
+	HashValue HashValueMaxTarget;		// function of MaxTarget
 	Target MaxPossibleTarget;
-	uint32_t ProtocolMagic;
+
+	uint32_t ProtocolMagic, DiskMagic;
 	uint32_t ProtocolVersion;
 	uint16_t DefaultPort;
+	unsigned MaxBlockWeight;
 	int IrcRange;
 	int PayToScriptHashHeight;
 	int CheckDupTxHeight;
@@ -542,13 +547,17 @@ struct BlockTreeItem : public BlockHeader { // may be full block too
 
 class BlockTree {
 public:
+	CoinEng& Eng;
 	mutable mutex Mtx;
 	typedef unordered_map<HashValue, BlockTreeItem> CMap; //!!!TODO change to unordered_set<BlockTreeItem> to save space
 	CMap Map;
 	int HeightLastCheckpointed;
 	//----
 
-	BlockTree() : HeightLastCheckpointed(-1) {}
+	BlockTree(CoinEng& eng)
+		: Eng(eng)
+		, HeightLastCheckpointed(-1)
+	{}
 
 	BlockTreeItem FindInMap(const HashValue& hashBlock) const;
 	BlockHeader FindHeader(const HashValue& hashBlock) const;
@@ -655,9 +664,8 @@ public:
 	ptr<IBlockChainDb> Db;
 	uint64_t OffsetInBootstrap, NextOffsetInBootstrap;
 
-	class TxPool TxPool;
-
 	BlockTree Tree;
+	class TxPool TxPool;
 
 	typedef unordered_map<HashValue, BlocksInFlightList::iterator> CMapBlocksInFlight;
 	CMapBlocksInFlight MapBlocksInFlight;
@@ -688,6 +696,7 @@ public:
 	atomic<int> aSyncStartedPeers;
 
 	uint16_t MaxBlockVersion; //!!!Obsolete, never used
+	Opcode MaxOpcode;
 	CBool InWalJournalMode;
 	CBool JournalModeDelete;
 	CBool m_dbTxBegin;
@@ -842,7 +851,6 @@ public:
     virtual CoinMessage* CreateSendCompactBlockMessage();
     virtual CoinMessage* CreateCompactBlockMessage();
 
-
 	virtual TxObj* CreateTxObj() { return new TxObj; }
 	virtual bool CreateDb();
 	virtual bool OpenDb();
@@ -852,6 +860,18 @@ public:
 	void Commit() override {}
 	void Rollback() override {}
 
+	virtual void SetPolicyFlags(int height);
+	virtual void VerifySignature(SignatureHasher& sigHasher, RCSpan scriptPk);		//!!!? never overridden
+	virtual void PatchSigHasher(SignatureHasher& sigHasher) {}
+	virtual void CheckHashType(SignatureHasher& sigHasher, uint32_t sigHashType) {}
+	virtual bool IsCheckSigOp(Opcode opcode);
+	virtual int GetMaxSigOps(const Block& block) { return MAX_BLOCK_SIGOPS_COST; }
+	virtual void CheckBlock(const Block& block) {}
+	
+	void ConnectTx(CConnectJob& job, vector<shared_future<TxFeeTuple>>& futsTx, const Tx& tx, int height, bool bVerifySignature);
+	virtual vector<shared_future<TxFeeTuple>> ConnectBlockTxes(CConnectJob& job, const vector<Tx>& txes, int height);
+	virtual bool CoinEng::IsValidSignatureEncoding(RCSpan sig);
+	virtual bool VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig);
 protected:
 	void StartDns();
 #if UCFG_COIN_USE_IRC
@@ -875,11 +895,30 @@ protected:
 	virtual int GetIntervalForCalculatingTarget(int height);
 	Target KimotoGravityWell(const BlockHeader& headerLast, const Block& block, int minBlocks, int maxBlocks);
 	virtual TimeSpan AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan);
-	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval);
+	virtual BlockHeader GetFirstHeaderOfInterval(const BlockObj& bo, int nInterval);
+	virtual TimeSpan GetActualSpanForCalculatingTarget(const BlockHeader& firstHeader, const BlockObj& bo);
 	virtual Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block);
 	virtual void UpdateMinFeeForTxOuts(int64_t& minFee, const int64_t& baseFee, const Tx& tx);
 	virtual path VGetDbFilePath();
 
+	virtual void OpCat(VmStack& stack);
+	virtual void OpSubStr(VmStack& stack);
+	virtual void OpLeft(VmStack& stack);
+	virtual void OpRight(VmStack& stack);
+	virtual void OpSize(VmStack& stack);
+	virtual void OpInvert(VmStack& stack);
+	virtual void OpAnd(VmStack& stack);
+	virtual void OpOr(VmStack& stack);
+	virtual void OpXor(VmStack& stack);
+	virtual void Op2Mul(VmStack& stack);
+	virtual void Op2Div(VmStack& stack);
+	virtual void OpMul(VmStack& stack);
+	virtual void OpDiv(VmStack& stack);
+	virtual void OpMod(VmStack& stack);
+	virtual void OpLShift(VmStack& stack);
+	virtual void OpRShift(VmStack& stack);
+	virtual void OpCheckDataSig(VmStack& stack);
+	virtual void OpCheckDataSigVerify(VmStack& stack);
 private:
 	void LoadPeers();
 	void UpgradeTo(const Version& ver);
@@ -893,7 +932,9 @@ private:
 	friend class VersionMessage;
 	friend class CoinMessage;
 	friend class TxPool;
+	friend class Vm;
 };
+
 
 class CoinEngTransactionScope : noncopyable {
 public:

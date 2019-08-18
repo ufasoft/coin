@@ -11,7 +11,6 @@
 #include <el/crypto/ecdsa.h>
 using namespace Ext::Crypto;
 
-#include "coin-model.h"
 #include "eng.h"
 #include "coin-protocol.h"
 #include "script.h"
@@ -52,23 +51,13 @@ HashValue Hash(const CPersistent& pers) {
 }
 
 HashValue Hash(const Tx& tx) {
-#ifdef X_DEBUG //!!!D
-	if (tx.m_pimpl->m_hash && tx.m_pimpl->m_hash != Hash(EXT_BIN(tx))) {
-		HashValue hv = Hash(EXT_BIN(tx));
-		MemoryStream ms;
-		BinaryWriter wr(ms);
-		wr << tx;
-		hv = hv;
-	}
-	ASSERT(tx.m_pimpl->m_nBytesOfHash != 32 || tx.m_pimpl->m_hash == Hash(EXT_BIN(tx)));
-#endif
-	if (tx.m_pimpl->m_nBytesOfHash != 32)
+	if (tx->m_nBytesOfHash != 32)
 		tx.SetHash(Eng().HashFromTx(tx));
-	return tx.m_pimpl->m_hash;
+	return tx->m_hash;
 }
 
 HashValue WitnessHash(const Tx& tx) {
-    return tx.m_pimpl->HasWitness() ? Eng().WitnessHashFromTx(tx) : Hash(tx);
+    return tx->HasWitness() ? Eng().WitnessHashFromTx(tx) : Hash(tx);
 }
 
 void MerkleTx::Write(ProtocolWriter& wr) const {

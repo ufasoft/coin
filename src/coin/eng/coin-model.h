@@ -46,6 +46,7 @@ using P2P::Peer;
 namespace Coin {
 
 class Link;
+class SignatureHasher;
 
 class NodeServices {
 public:
@@ -65,12 +66,13 @@ const int BLOCK_VERSION_AUXPOW = 256;
 const uint32_t LOCKTIME_THRESHOLD = 500000000; // Year 1985. Pre-Bitcoin time
 
 ENUM_CLASS(SigHashType) {
-	ZERO = 0,
-	SIGHASH_ALL = 1,
-	SIGHASH_NONE = 2,
-	SIGHASH_SINGLE = 3,
-	SIGHASH_ANYONECANPAY = 0x80,
-	MASK = 0x1F,
+	ZERO = 0
+	, SIGHASH_ALL			= 1
+	, SIGHASH_NONE			= 2
+	, SIGHASH_SINGLE		= 3
+	, SIGHASH_FORKID		= 0x40			// BCH
+	, SIGHASH_ANYONECANPAY	= 0x80
+	, MASK = 0x1F,
 } END_ENUM_CLASS(SigHashType)
 
 class CoinEng;
@@ -251,7 +253,31 @@ public:
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 };
 
-typedef AutoBlob<71> StackValue;
+typedef AutoBlob<72> StackValue;	// signature length
+
+class VmStack {
+public:
+	typedef StackValue Value;
+
+	static const Value TrueValue, FalseValue;
+	vector<Value> Stack;
+
+	SignatureHasher* m_signatureHasher;
+
+	VmStack(SignatureHasher* signatureHasher)
+		: m_signatureHasher(signatureHasher)
+	{
+		Stack.reserve(6);
+	}
+
+	Value& operator[](unsigned idx) { return GetStack(idx); }
+	static BigInteger ToBigInteger(const Value& v);
+	static Value FromBigInteger(const BigInteger& bi);
+	Value& GetStack(unsigned idx);
+	void SkipStack(int n);
+	Value Pop();
+	void Push(const Value& v);
+};
 
 class COIN_CLASS TxIn { // Keep this struct small without VTBL
 	mutable Blob m_script;
@@ -302,6 +328,7 @@ public:
 	explicit Target(uint32_t v = 0x1d00ffff);
 	explicit Target(const BigInteger& bi);
 
+	bool operator==(const Target& t) const;
 	bool operator<(const Target& t) const;
 
 	operator BigInteger() const;
@@ -380,8 +407,8 @@ private:
 
 class SignatureHasher {
 public:
-	const TxObj& m_txoTo;
 	HashValue m_hashPrevOuts, m_hashSequence, m_hashOuts;
+	const TxObj& m_txoTo;
 	uint64_t m_amount;
 	uint32_t NIn;
 	SigHashType HashType;
@@ -389,7 +416,7 @@ public:
 
 	SignatureHasher(const TxObj& txoTo);
 	void CalcWitnessCache();
-	HashValue Hash(RCSpan script);
+	HashValue HashForSig(RCSpan script);
 	bool VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan witnessProgram);
 	bool VerifyScript(RCSpan scriptSig, Span scriptPk);
 	const OutPoint& GetOutPoint() const;
@@ -620,6 +647,7 @@ public:
 	virtual void ReadHeader(const ProtocolReader& rd, bool bParent, const HashValue* pMerkleRoot);
 	virtual void WriteHeaderInMessage(ProtocolWriter& wr) const;
 	virtual void ReadHeaderInMessage(const ProtocolReader& rd);
+	virtual BigInteger GetWork() const;
 
 	virtual void WriteSuffix(BinaryWriter& wr) const {
 	}
@@ -661,7 +689,6 @@ protected:
 	}
 	virtual void Write(ProtocolWriter& wr) const;
 	virtual void Read(const ProtocolReader& rd);
-	virtual BigInteger GetWork() const;
 	virtual void CheckPow(const Target& target);
 	virtual void CheckSignature() {
 	}
@@ -708,19 +735,11 @@ public:
 	}
 	DEFPROP_GET(int, SafeHeight);
 
-	uint32_t get_Ver() const {
-		return m_pimpl->Ver;
-	}
-	void put_Ver(uint32_t v) {
-		m_pimpl->Ver = v;
-	}
-	DEFPROP(uint32_t, Ver);
-
 	int get_ChainId() const {
-		return Ver >> 16;
+		return m_pimpl->Ver >> 16;
 	}
 	void put_ChainId(int v) {
-		Ver = (Ver & 0xFFFF) | (v << 16);
+		m_pimpl->Ver = (m_pimpl->Ver & 0xFFFF) | (v << 16);
 	}
 	DEFPROP(int, ChainId);
 
@@ -743,11 +762,6 @@ public:
 		return m_pimpl->Nonce;
 	}
 	DEFPROP_GET(uint32_t, Nonce);
-
-	Target get_DifficultyTarget() const {
-		return m_pimpl->DifficultyTarget;
-	}
-	DEFPROP_GET(Target, DifficultyTarget);
 
 	BigInteger GetWork() const {
 		return m_pimpl->GetWork();
@@ -843,7 +857,7 @@ protected:
 };
 
 inline HashValue Hash(const BlockHeader& block) {
-	return block.m_pimpl->Hash();
+	return block->Hash();
 }
 
 class MerkleTx : public Tx {
@@ -965,9 +979,11 @@ struct EnabledFeatures {
 };
 
 struct ScriptPolicy {
-	bool CleanStack, DiscourageUpgradableWidnessProgram;
+	bool CleanStack, DiscourageUpgradableWidnessProgram, MinimalData;
 
-	ScriptPolicy(bool bSet = false) {
+	ScriptPolicy(bool bSet = false)
+		: MinimalData(false)
+	{
 		CleanStack = DiscourageUpgradableWidnessProgram = bSet;
 	}
 };
@@ -1105,18 +1121,11 @@ public:
 
 	unordered_set<int64_t> InsertedIds;
 
+	int MaxSigOps;
 	mutable atomic<int> aSigOps;
 	mutable volatile bool Failed;
 
-	CConnectJob(CoinEng& eng)
-		: Eng(eng)
-//!!!R		, TxMap(eng)
-		, TxoMap(eng)
-		, Fee(0)
-		, aSigOps(0)
-		, Failed(false) {
-	}
-
+	CConnectJob(CoinEng& eng);
 	void AsynchCheckAll(const vector<Tx>& txes);	//!!!Obsolete
 	void AsynchCheckAllSharedFutures(const vector<Tx>& txes, int height);
 	void Prepare(const Block& block);

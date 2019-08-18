@@ -225,16 +225,6 @@ Blob KeyInfoBase::SignHash(RCSpan cbuf) {
 #endif
 }
 
-bool KeyInfoBase::VerifyHash(RCSpan pubKey, const HashValue& hash, RCSpan sig) {
-#if UCFG_COIN_ECC=='S'
-	Sec256DsaEx dsa;
-	dsa.ParsePubKey(pubKey);
-#else
-	ECDsa dsa(CngKey::Import(pubKey, CngKeyBlobFormat::OSslEccPublicBlob));
-#endif
-	return dsa.VerifyHash(hash.ToSpan(), sig);
-}
-
 
 /*
 void KeyInfoBase::put_PrivKey(const Blob& v) {

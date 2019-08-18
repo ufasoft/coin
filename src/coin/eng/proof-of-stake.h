@@ -72,12 +72,12 @@ public:
 
 	void WriteHeaderInMessage(BinaryWriter& wr) const override {
 		base::WriteHeaderInMessage(wr);
-		CoinSerialized::WriteVarInt(wr, 0);				// signature
+		CoinSerialized::WriteCompactSize(wr, 0);				// signature
 	}
 
 	void ReadHeaderInMessage(const BinaryReader& rd) override {
 		base::ReadHeaderInMessage(rd);
-		CoinSerialized::ReadVarInt(rd);					// signature unused
+		CoinSerialized::ReadCompactSize64(rd);					// signature unused
 	}
 
 	void WriteDbSuffix(BinaryWriter& wr) const override;
@@ -96,7 +96,7 @@ public:
 	}
 
 	BigInteger GetWork() const override {
-		return ProofType()==ProofOf::Stake ? base::GetWork() : 1;
+		return ProofType() == ProofOf::Stake ? base::GetWork() : 1;
 	}
 
 	const PosTxObj& GetTxObj(int idx) const { return *(const PosTxObj*)(get_Txes()[idx].m_pimpl.get()); }
@@ -160,7 +160,6 @@ public:
 	virtual int64_t GetProofOfStakeReward(int64_t coinAge, const Target& target, const DateTime& dt);
 protected:
 	void ClearByHeightCaches() override;
-	int64_t GetMinRelayTxFee() override { return ChainParams.MinTxFee; }
 	int64_t GetMaxSubsidy() { return ChainParams.InitBlockValue * ChainParams.CoinValue; }
 	int64_t GetSubsidy(int height, const HashValue& prevBlockHash, double difficulty, bool bForCheck) override;
 
@@ -179,4 +178,3 @@ protected:
 
 
 } // Coin::
-

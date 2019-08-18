@@ -18,7 +18,6 @@ class GroestlBlockObj : public BlockObj {
 public:
 	GroestlBlockObj() {
 	}
-protected:
 };
 
 
@@ -71,7 +70,7 @@ protected:
 
 	Target DarkGravityWave(const BlockHeader& headerLast, const Block& block, bool bWave3) {
 		if (!bWave3)
-			return block.get_DifficultyTarget();			// workaround of DarkGravityWave() v1 FP-non-determinism
+			return block->get_DifficultyTarget();			// workaround of DarkGravityWave() v1 FP-non-determinism
 
 		const int minBlocks = bWave3 ? 24 : 12,
 			maxBlocks = bWave3 ? 24 : 120;
@@ -88,12 +87,12 @@ protected:
 			DateTime dt = b.Timestamp;
 			if (bWave3) {
 				if (mass <= minBlocks) {
-					average = mass==1 ? BigInteger(b.get_DifficultyTarget())
-						: (BigInteger(b.get_DifficultyTarget()) + average*mass) / (mass + 1);
+					average = mass==1 ? BigInteger(b->get_DifficultyTarget())
+						: (BigInteger(b->get_DifficultyTarget()) + average*mass) / (mass + 1);
 				}
 			} else {
 				if (mass <= minBlocks)
-					average += (BigInteger(b.get_DifficultyTarget()) - average) / mass;
+					average += (BigInteger(b->get_DifficultyTarget()) - average) / mass;
 				int diff = (max)(0, (int)duration_cast<seconds>(dtPrev - dt).count());
 				if (mass > 1 && mass <= minBlocks + 2)
 					secAvg += (diff - secAvg)/(mass-1);
@@ -121,6 +120,10 @@ protected:
 	}
 
 	Target GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) override {
+		if (ChainParams.IsTestNet) {
+			if (block.get_Timestamp() - headerLast.Timestamp > ChainParams.BlockSpan * 2) // negative block timestamp delta is allowed
+				return ChainParams.MaxTarget;
+		}
 		return DarkGravityWave(headerLast, block, headerLast.Height >= 99999);
 	}
 
@@ -128,6 +131,6 @@ protected:
 
 
 
-static CurrencyFactory<GroestlcoinEng> s_groestlcoin("Groestlcoin");
+static CurrencyFactory<GroestlcoinEng> s_groestlcoin("Groestlcoin"), s_groestlcoinTestnet("Groestlcoin-testnet");
 
 } // Coin::

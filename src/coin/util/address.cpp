@@ -172,7 +172,7 @@ String AddressObj::ToString() const {
 		for (size_t i = sdata.length(); i--;)
 			buf[hrpLen * 2 + 2 + i] = s_base32FromChar[sdata[i]];
 		FillBech32Checksum(buf, hrpLen * 2 + 2 + sdata.length() + 6);
-		char sbuf[100] = "1";
+		char sbuf[100] = { Hasher.HrpSeparator };
 		for (size_t i = 1 + sdata.length() + 6; i--;)
 			sbuf[i + 1] = s_base32ToChar[buf[hrpLen * 2 + 1 + i]];
 		return Hasher.Hrp + String(sbuf, 2 + sdata.length() + 6);
@@ -182,7 +182,9 @@ String AddressObj::ToString() const {
 	}
 }
 
-static regex s_reBech32Adrress("^([-!\"#$%&\'()*+,./:;<=>?@\\[\\]\\\\^_`{|}~a-z0-1]{1,83})1([02-9ac-hj-np-z]{6,})$");
+static regex
+	s_reBech32AdrressOne(  "^([-!\"#$%&\'()*+,./:;<=>?@\\[\\]\\\\^_`{|}~a-z0-1]{1,83})1([02-9ac-hj-np-z]{6,})$"),
+	s_reBech32AdrressColon("^([-!\"#$%&\'()*+,./:;<=>?@\\[\\]\\\\^_`{|}~a-z0-1]{1,83}):([02-9ac-hj-np-z]{6,})$");
 
 // BIP173
 void AddressObj::DecodeBech32(RCString hrp, RCString s) {
@@ -201,8 +203,13 @@ void AddressObj::DecodeBech32(RCString hrp, RCString s) {
 	if (bHasLower && bHasUpper)
 		Throw(CoinErr::InvalidAddress);
 	lower[s.length()] = 0;
+	regex* pre = Hasher.HrpSeparator == '1' ? &s_reBech32AdrressOne
+		: Hasher.HrpSeparator == ':' ? &s_reBech32AdrressColon
+		: 0;
+	if (!pre)
+		Throw(E_NOTIMPL);
 	cmatch m;
-	if (!regex_match(lower, m, s_reBech32Adrress) || String(m[1]) != hrp)
+	if (!regex_match(lower, m, *pre) || String(m[1]) != hrp)
 		Throw(CoinErr::InvalidAddress);
 	String data = String(m[2]);
 	uint8_t buf[Address::MAX_LEN * 3]; // enough for max Hrp & Data

@@ -38,7 +38,7 @@ void BootstrapDbThread::Execute() {
 	rd.WitnessAware = true;
 	try {
 		while (!m_bStop && !stm.Eof()) {
-			if (rd.ReadUInt32() != Eng.ChainParams.ProtocolMagic)
+			if (rd.ReadUInt32() != Eng.ChainParams.DiskMagic)
 				Throw(CoinErr::InvalidBootstrapFile);
 			size_t size = rd.ReadUInt32();
 			uint64_t pos = stm.Position;
@@ -75,7 +75,7 @@ void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 	BinaryWriter wr(fs);
 
 	for (uint32_t i = 0; i < n && Runned; ++i) {
-		wr << ChainParams.ProtocolMagic;
+		wr << ChainParams.DiskMagic;
 		MemoryStream ms;
 
 		Block block = GetBlockByHeight(i);

@@ -31,12 +31,6 @@
     <Filter Include="comp\xml">
       <UniqueIdentifier>{42bd6f2c-064b-4479-b13f-127465310d56}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\currency">
-      <UniqueIdentifier>{985db27c-9a5f-4e52-a867-322305289df2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\currency\excluded">
-      <UniqueIdentifier>{a038683e-4e24-4a3b-82bb-0d19477f5859}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\COM">
       <UniqueIdentifier>{63ce99f8-bb76-466e-a0d4-fd9191cfa889}</UniqueIdentifier>
     </Filter>
@@ -45,6 +39,9 @@
     </Filter>
     <Filter Include="Source Files\Obsolete\backend-sqlite">
       <UniqueIdentifier>{56311435-2adf-4160-b7b4-d85dae621222}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="currency">
+      <UniqueIdentifier>{cf19bb68-daac-4abc-8f7c-c49c4d079944}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -108,9 +105,6 @@
     <ClCompile Include="backend-dblite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="proof-of-stake.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\el\crypto\merkle-tree.cpp">
       <Filter>comp\crypto</Filter>
     </ClCompile>
@@ -135,56 +129,14 @@
     <ClCompile Include="..\..\el\xml\xml-reader.cpp">
       <Filter>comp\xml</Filter>
     </ClCompile>
-    <ClCompile Include="currency\protoshares.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\bitcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\devcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\feathercoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\namecoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\novacoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\ppcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\primecoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\terracoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
     <ClCompile Include="mempool.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\crypto\ext-openssl.cpp">
       <Filter>comp\crypto</Filter>
     </ClCompile>
-    <ClCompile Include="currency\dogecoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\metiscoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\earthcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
     <ClCompile Include="backend-sqlite.cpp">
       <Filter>Source Files\Obsolete\backend-sqlite</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\ixcoin.cpp">
-      <Filter>Source Files\currency</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\litecoin.cpp">
-      <Filter>Source Files\currency</Filter>
     </ClCompile>
     <ClCompile Include="bootstrap.cpp">
       <Filter>Source Files</Filter>
@@ -194,12 +146,6 @@
     </ClCompile>
     <ClCompile Include="buggy-aes.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\maxcoin.cpp">
-      <Filter>Source Files\currency\excluded</Filter>
-    </ClCompile>
-    <ClCompile Include="currency\groestlcoin.cpp">
-      <Filter>Source Files\currency</Filter>
     </ClCompile>
     <ClCompile Include="..\..\el\elwin\dllmodul.cpp">
       <Filter>comp</Filter>
@@ -236,6 +182,60 @@
     </ClCompile>
     <ClCompile Include="blockchain-detector.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\bitcoin-cash.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\bitcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\devcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\dogecoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\earthcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\feathercoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\groestlcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\ixcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\litecoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\metiscoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\namecoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\novacoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\ppcoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\primecoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="proof-of-stake.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\protoshares.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\terracoin.cpp">
+      <Filter>currency</Filter>
+    </ClCompile>
+    <ClCompile Include="currency\maxcoin.cpp">
+      <Filter>currency</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

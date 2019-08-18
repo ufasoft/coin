@@ -613,6 +613,9 @@
     <ClCompile Include="buggy-aes.cpp" />
     <ClCompile Include="coinconf.cpp" />
     <ClCompile Include="currency\bitcoin.cpp" />
+    <ClCompile Include="currency\bitcoin-cash.cpp" />
+    <ClCompile Include="currency\litecoin.cpp" />
+    <ClCompile Include="currency\groestlcoin.cpp" />
     <ClCompile Include="block.cpp" />
     <ClCompile Include="coin-com.cpp" />
     <ClCompile Include="coin-model.cpp" />
@@ -642,7 +645,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="currency\groestlcoin.cpp" />
     <ClCompile Include="currency\ixcoin.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -653,7 +655,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="currency\litecoin.cpp" />
     <ClCompile Include="currency\maxcoin.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='R_St|Win32'">true</ExcludedFromBuild>

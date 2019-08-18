@@ -255,7 +255,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 
 void Filet::PutUInt32(uint64_t offset, uint32_t v) {
 	if (offset + sizeof(uint32_t) > Length)
-		Length = offset+sizeof(uint32_t);
+		Length = offset + sizeof(uint32_t);
 	if (offset & 3)
 		Throw(errc::invalid_argument);
 	*(uint32_t*)((uint8_t*)GetPageToModify(offset, false).get_Address() + size_t(offset & (m_tx.Storage.PageSize - 1))) = htole(v);

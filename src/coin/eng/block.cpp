@@ -125,7 +125,11 @@ Target::Target(const BigInteger& bi) {
 }
 
 Target::operator BigInteger() const {
-	return BigInteger(int32_t(m_value << 8) >> 8) << 8*((m_value >> 24)-3);
+	return BigInteger(int32_t(m_value << 8) >> 8) << 8 * ((m_value >> 24) - 3);
+}
+
+bool Target::operator==(const Target& t) const {
+	return BigInteger(_self) == BigInteger(t);
 }
 
 bool Target::operator<(const Target& t) const {
@@ -371,7 +375,7 @@ void BlockObj::Read(const ProtocolReader& rd) {
 void BlockObj::Write(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 
-	CoinSerialized::WriteVarUInt64(wr, Ver);
+	CoinSerialized::WriteCompactSize(wr, Ver);
 	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
 	if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::BlockParser || wr.ForHeader)
 		wr << MerkleRoot();
@@ -384,7 +388,7 @@ void BlockObj::Write(DbWriter& wr) const {
 void BlockObj::Read(const DbReader& rd) {
 	CoinEng& eng = Eng();
 
-	Ver = (uint32_t)CoinSerialized::ReadVarUInt64(rd);
+	Ver = (uint32_t)CoinSerialized::ReadCompactSize64(rd);
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
@@ -429,56 +433,64 @@ Target CoinEng::KimotoGravityWell(const BlockHeader& headerLast, const Block& bl
 	int actualSeconds = 0, targetSeconds = 0;
 	BigInteger average;
 	BlockHeader b = headerLast;
-	for (int mass=1; b.Height>0 && (maxBlocks<=0 || mass<=maxBlocks); ++mass, b=b.GetPrevHeader()) {
-		average += (BigInteger(b.get_DifficultyTarget()) - average)/mass;
+	for (int mass = 1; b.Height > 0 && (maxBlocks <= 0 || mass <= maxBlocks); ++mass, b = b.GetPrevHeader()) {
+		average += (BigInteger(b->get_DifficultyTarget()) - average) / mass;
 		actualSeconds = max(0, (int)duration_cast<seconds>(headerLast.get_Timestamp() - b.get_Timestamp()).count());
 		targetSeconds = (int)duration_cast<seconds>(ChainParams.BlockSpan * (double)mass).count();
 		if (mass >= minBlocks) {
 			double eventHorizonDeviation = 1 + 0.7084 * pow(mass / 28.2, -1.228);
 			double ratio = actualSeconds && targetSeconds ? double(targetSeconds) / actualSeconds :	1;
-			if (ratio<=1/eventHorizonDeviation || ratio>=eventHorizonDeviation)
+			if (ratio <= 1 / eventHorizonDeviation || ratio >= eventHorizonDeviation)
 				break;
 		}
 	}
 	return Target(actualSeconds && targetSeconds ? (average * actualSeconds / targetSeconds) : average);
 }
 
-TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockObj& bo, int nInterval) {
+BlockHeader CoinEng::GetFirstHeaderOfInterval(const BlockObj& bo, int nInterval) {
 	int r = bo.Height - nInterval + 1;
-	if (bo.Height >= ChainParams.AuxPowStartBlock || (ChainParams.FullPeriod && r>0))
+	if (bo.Height >= ChainParams.AuxPowStartBlock || (ChainParams.FullPeriod && r > 0))
 		--r;
 	BlockHeader b = Tree.FindHeader(bo.PrevBlockHash);
 	ASSERT(b.Height >= r);
 	while (b.Height > r)
 		b = b.IsInMainChain() ? Db->FindHeader(r) : b.GetPrevHeader();
-	return bo.Timestamp - b.Timestamp;
+	return b;
+}
+
+TimeSpan CoinEng::GetActualSpanForCalculatingTarget(const BlockHeader& firstHeader, const BlockObj& bo) {
+	return bo.Timestamp - firstHeader.Timestamp;
 }
 
 TimeSpan CoinEng::AdjustSpan(int height, const TimeSpan& span, const TimeSpan& targetSpan) {
-	return clamp(span, targetSpan/4, targetSpan*4);
+	return clamp(span, targetSpan / 4, targetSpan * 4);
 }
-
-static DateTime s_dt15Feb2012(2012, 2, 15);
-static Target s_minTestnetTarget(0x1D0FFFFF);
 
 Target CoinEng::GetNextTargetRequired(const BlockHeader& headerLast, const Block& block) {
 	int nIntervalForMod = GetIntervalForModDivision(headerLast.Height);
 
 	if ((headerLast.Height + 1) % nIntervalForMod) {
 		if (ChainParams.IsTestNet) {
-			if (block.get_Timestamp()-headerLast.Timestamp > ChainParams.BlockSpan*2)			// negative block timestamp delta allowed
+			if (block.get_Timestamp() - headerLast.Timestamp > ChainParams.BlockSpan * 2) // negative block timestamp delta allowed
 				return ChainParams.MaxTarget;
 			else {
-				for (BlockHeader prev(headerLast);; prev = prev.GetPrevHeader())
-					if (prev.Height % nIntervalForMod == 0 || prev.get_DifficultyTarget() != ChainParams.MaxTarget)
-						return prev.DifficultyTarget;
+				BigInteger maxTarget = ChainParams.MaxTarget;
+				for (BlockHeader prev(headerLast);; prev = Tree.FindHeader(prev.PrevBlockHash)) {
+					if (!prev)
+						Throw(CoinErr::OrphanedChain);
+					Target difficultyTarget = prev->get_DifficultyTarget();
+					if (prev.Height % nIntervalForMod == 0 || difficultyTarget != maxTarget)
+						return difficultyTarget;
+				}
 			}
 		}
-		return headerLast.DifficultyTarget;
+		return headerLast->DifficultyTarget;
 	}
 	int nInterval = GetIntervalForCalculatingTarget(headerLast.Height);
-	TimeSpan targetSpan = ChainParams.BlockSpan * nInterval,
-		span = AdjustSpan(headerLast.Height, GetActualSpanForCalculatingTarget(*headerLast.m_pimpl, nInterval), targetSpan);
+	BlockHeader firstHeader = GetFirstHeaderOfInterval(*headerLast.m_pimpl, nInterval);
+	TimeSpan targetSpan = ChainParams.BlockSpan * nInterval
+		, actualSpan = GetActualSpanForCalculatingTarget(firstHeader, *headerLast.m_pimpl)
+		, span = AdjustSpan(headerLast.Height, actualSpan, targetSpan);
 
 #ifdef X_DEBUG//!!!D
 	{
@@ -500,11 +512,15 @@ Target CoinEng::GetNextTargetRequired(const BlockHeader& headerLast, const Block
 	int len = strlen(shex);
 #endif
 
-	return Target(BigInteger(headerLast.get_DifficultyTarget()) * span.count() / targetSpan.count());
+	return Target(BigInteger(headerLast->get_DifficultyTarget())
+		* (int)duration_cast<seconds>(span).count()
+		/ (int)duration_cast<seconds>(targetSpan).count());
 }
 
 Target CoinEng::GetNextTarget(const BlockHeader& headerLast, const Block& block) {
-	return std::min(ChainParams.MaxTarget, GetNextTargetRequired(headerLast, block));
+	Target r = GetNextTargetRequired(headerLast, block);
+	return HashValue::FromDifficultyBits(r.m_value) < ChainParams.HashValueMaxTarget
+		? r : ChainParams.MaxTarget;
 }
 
 static const TimeSpan s_spanFuture = seconds(MAX_FUTURE_SECONDS);
@@ -598,7 +614,7 @@ uint32_t Block::OffsetOfTx(const HashValue& hashTx) const {
 	ProtocolWriter wr(ms);
 	m_pimpl->WriteHeader(wr);
 	const CTxes& txes = m_pimpl->get_Txes();
-	CoinSerialized::WriteVarUInt64(wr, txes.size());
+	CoinSerialized::WriteCompactSize(wr, txes.size());
 	for (size_t i=0; i<txes.size(); ++i) {
 		if (Hash(txes[i]) == hashTx)
 			return uint32_t(ms.Position);
@@ -632,6 +648,14 @@ Block Block::GetOrphanRoot() const {					// ASSERT(eng.Caches.Mtx is locked)
 	return *r;
 }
 
+void CoinEng::SetPolicyFlags(int height) {
+}
+
+void CoinEng::VerifySignature(SignatureHasher& sigHasher, RCSpan scriptPk) {
+	SetPolicyFlags(sigHasher.m_txoTo.Height);
+	sigHasher.VerifySignature(scriptPk);
+}
+
 static TxFeeTuple RunConnectAsync(const CConnectJob *pjob, TxObj *to, bool bVerifySignature) {
 	TxFeeTuple r;
 	const CConnectJob& job = *pjob;
@@ -642,11 +666,12 @@ static TxFeeTuple RunConnectAsync(const CConnectJob *pjob, TxObj *to, bool bVeri
 		r.Tx = tx;
 
 		int64_t nValueIn = 0;
-		if ((job.aSigOps += tx.SigOpCost(job.TxoMap)) > MAX_BLOCK_SIGOPS_COST)
+		if ((job.aSigOps += tx.SigOpCost(job.TxoMap)) > job.MaxSigOps)
 			Throw(CoinErr::TxTooManySigOps);
 		SignatureHasher sigHasher(*tx.m_pimpl);
 		if (bVerifySignature && tx.m_pimpl->HasWitness())
 			sigHasher.CalcWitnessCache();
+		job.Eng.PatchSigHasher(sigHasher);
 
 		auto& txIns = tx.TxIns();
 		for (int nIn = 0; nIn < txIns.size(); ++nIn) {
@@ -662,7 +687,7 @@ static TxFeeTuple RunConnectAsync(const CConnectJob *pjob, TxObj *to, bool bVeri
 				sigHasher.NIn = nIn;
 				sigHasher.m_amount = txo.Value;
 				sigHasher.HashType = SigHashType::ZERO;
-				sigHasher.VerifySignature(txo.ScriptPubKey);
+				job.Eng.VerifySignature(sigHasher, txo.ScriptPubKey);
 			}
 
 			job.Eng.CheckMoneyRange(nValueIn += txo.Value);
@@ -750,41 +775,64 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 }
 */
 
-void CConnectJob::AsynchCheckAllSharedFutures(const vector<Tx>& txes, int height) {
-	bool bVerifySignature = Eng.BestBlockHeight() > Eng.ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD;
+CConnectJob::CConnectJob(CoinEng& eng)
+	: Eng(eng)
+	, TxoMap(eng)
+	, Fee(0)
+	, MaxSigOps(0)
+	, aSigOps(0)
+	, Failed(false)
+{
+}
+
+void CoinEng::ConnectTx(CConnectJob& job, vector<shared_future<TxFeeTuple>>& futsTx, const Tx& tx, int height, bool bVerifySignature) {
+	if (tx.IsCoinStake())
+		tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
+	auto& txIns = tx.TxIns();
+	for (size_t nIn = 0; nIn < txIns.size(); ++nIn) {
+		const OutPoint& op = txIns[nIn].PrevOutPoint;
+		job.TxoMap.Add(op, height);
+#if UCFG_COIN_USE_NORMAL_MODE
+		if (Eng.Mode == EngMode::Normal || Eng.Mode == EngMode::BlockExplorer) {
+			auto launchType = UCFG_COIN_PKSCRIPT_FUTURES ? launch::async : launch::deferred;
+			futsTxOut.push_back(std::async(launchType, RecoverPubKey, this, &op, tx.m_pimpl.get(), nIn));
+		}
+#endif
+	}
+	auto launchType = UCFG_COIN_TX_CONNECT_FUTURES ? launch::async : launch::deferred;
+	shared_future<TxFeeTuple> ft = std::async(launchType, RunConnectAsync, &job, tx.m_pimpl.get(), bVerifySignature);
+	futsTx.push_back(ft);
+}
+
+vector<shared_future<TxFeeTuple>> CoinEng::ConnectBlockTxes(CConnectJob& job, const vector<Tx>& txes, int height) {
+	bool bVerifySignature = BestBlockHeight() > ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD;
 
 	vector<shared_future<TxFeeTuple>> futsTx;
 	futsTx.reserve(txes.size());
-	vector<future<void>> futsTxOut;
-	auto launchType = UCFG_COIN_TX_CONNECT_FUTURES ? launch::async : launch::deferred;
-	EXT_FOR(const Tx& tx, txes) {
+	EXT_FOR(const Tx & tx, txes) {
 		HashValue hashTx = Hash(tx);
 		if (tx.IsCoinBase()) {
-			if (Eng.ChainParams.CoinbaseMaturity == 0)
-				TxoMap.AddAllOuts(hashTx, tx);
+			if (ChainParams.CoinbaseMaturity == 0)
+				job.TxoMap.AddAllOuts(hashTx, tx);
 		} else {
-			if (tx.IsCoinStake())
-				tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
-			auto& txIns = tx.TxIns();
-			for (size_t nIn = 0; nIn < txIns.size(); ++nIn) {
-				const OutPoint& op = txIns[nIn].PrevOutPoint;
-				TxoMap.Add(op, height);
-#if UCFG_COIN_USE_NORMAL_MODE
-				if (Eng.Mode == EngMode::Normal || Eng.Mode == EngMode::BlockExplorer) {
-					auto launchType = UCFG_COIN_PKSCRIPT_FUTURES ? launch::async : launch::deferred;
-					futsTxOut.push_back(std::async(launchType, RecoverPubKey, this, &op, tx.m_pimpl.get(), nIn));
-				}
-#endif
-			}
-			shared_future<TxFeeTuple> ft = std::async(launchType, RunConnectAsync, this, tx.m_pimpl.get(), bVerifySignature);
-			futsTx.push_back(ft);
-			TxoMap.AddAllOuts(hashTx, tx);
+			ConnectTx(job, futsTx, tx, height, bVerifySignature);
+			job.TxoMap.AddAllOuts(hashTx, tx);
 		}
 	}
+	return futsTx;
+}
+
+void CConnectJob::AsynchCheckAllSharedFutures(const vector<Tx>& txes, int height) {
+#if UCFG_COIN_USE_NORMAL_MODE
+	vector<future<void>> futsTxOut;
+#endif
+
+	vector<shared_future<TxFeeTuple>> futsTx = Eng.ConnectBlockTxes(_self, txes, height);
+#if UCFG_COIN_USE_NORMAL_MODE
 	EXT_FOR(future<void>& fut, futsTxOut) {
 		fut.wait();
 	}
-
+#endif
 	Fee = 0;
 	for (auto ft : futsTx)
 		Fee = Eng.CheckMoneyRange(Fee + ft.get().Fee);
@@ -847,13 +895,25 @@ const uint8_t *Block::GetWitnessCommitment() const {
     return r;
 }
 
+// BIP113
+DateTime BlockHeader::GetMedianTimePast() const {
+	CoinEng& eng = Eng();
+
+	vector<DateTime> ar(eng.ChainParams.MedianTimeSpan);
+	vector<DateTime>::iterator beg = ar.end(), end = beg;
+	BlockHeader block = _self;
+	int height = Height;
+	for (int i = height, e = std::max(0, int(height - ar.size() + 1)); block && i >= e; --i, block = eng.Tree.FindHeader(block.PrevBlockHash))
+		* --beg = block.Timestamp;
+	sort(beg, end);
+	return *(beg + (end - beg) / 2);
+}
+
 void Block::ContextualCheck(const BlockHeader& blockPrev) {
     CoinEng& eng = Eng();
     auto height = Height;
-	if (height >= eng.ChainParams.BIP34Height) {
-		if (Ver >= 2 && height != m_pimpl->GetBlockHeightFromCoinbase())
-			Throw(CoinErr::BlockHeightMismatchInCoinbase);
-	}
+	if (height >= eng.ChainParams.BIP34Height && m_pimpl->Ver >= 2 && height != m_pimpl->GetBlockHeightFromCoinbase())
+		Throw(CoinErr::BlockHeightMismatchInCoinbase);
 
     auto mtp = blockPrev.GetMedianTimePast();
     if (Timestamp <= mtp)
@@ -866,6 +926,8 @@ void Block::ContextualCheck(const BlockHeader& blockPrev) {
         if (!tx.IsFinal(height, lockTimeCutoff))
             Throw(CoinErr::ContainsNonFinalTx);
     }
+
+	eng.CheckBlock(_self);
 
     bool bHaveWitness = false;
     if (height >= eng.ChainParams.SegwitHeight) {
@@ -885,7 +947,7 @@ void Block::ContextualCheck(const BlockHeader& blockPrev) {
             if (tx.m_pimpl->HasWitness())
                 Throw(CoinErr::UnexpectedWitness);
 
-    if (Weight() > MAX_BLOCK_WEIGHT)
+    if (Weight() > eng.ChainParams.MaxBlockWeight)
         Throw(CoinErr::BadBlockWeight);
 }
 
@@ -899,12 +961,12 @@ void Block::Connect() const {
 	int64_t nFees = 0;
 
     int height = Height;
-    uint32_t minVersion =
+    int32_t minVersion =
         height >= eng.ChainParams.BIP65Height ? 4
         : height >= eng.ChainParams.BIP66Height ? 3
         : height >= eng.ChainParams.BIP34Height ? 2
         : 0;
-    if (Ver < minVersion)
+    if (m_pimpl->Ver < minVersion)
         Throw(CoinErr::BadBlockVersion);
 
     EnabledFeatures& f = t_features;
@@ -915,7 +977,8 @@ void Block::Connect() const {
 	f.SegWit = height >= eng.ChainParams.SegwitHeight;
 
 	CConnectJob job(eng);
-	job.DifficultyTarget = DifficultyTarget;
+	job.MaxSigOps = eng.GetMaxSigOps(_self);
+	job.DifficultyTarget = m_pimpl->DifficultyTarget;
 
 	switch (eng.Mode) {
 	case EngMode::Normal:
@@ -1028,20 +1091,6 @@ void Block::Connect() const {
 #endif
 }
 
-// BIP113
-DateTime BlockHeader::GetMedianTimePast() const {
-	CoinEng& eng = Eng();
-
-	vector<DateTime> ar(eng.ChainParams.MedianTimeSpan);
-	vector<DateTime>::iterator beg = ar.end(), end = beg;
-	BlockHeader block = _self;
-	int height = Height;
-	for (int i = height, e = std::max(0, int(height - ar.size() + 1)); block && i >= e; --i, block = eng.Tree.FindHeader(block.PrevBlockHash))
-		*--beg = block.Timestamp;
-	sort(beg, end);
-	return *(beg + (end - beg) / 2);
-}
-
 BlockHeader BlockHeader::GetPrevHeader() const {
 	if (BlockHeader r = Eng().Tree.FindHeader(PrevBlockHash))
 		return r;
@@ -1051,8 +1100,8 @@ BlockHeader BlockHeader::GetPrevHeader() const {
 bool BlockHeader::IsSuperMajority(int minVersion, int nRequired, int nToCheck) const {
 	int n = 0;
 	BlockHeader block = _self;
-	for (int i=0; i<nToCheck && n<nRequired; ++i, block = block.GetPrevHeader()) {
-		n += int(block.Ver >= minVersion);
+	for (int i = 0; i < nToCheck && n < nRequired; ++i, block = block.GetPrevHeader()) {
+		n += int(block->Ver >= minVersion);
 		if (block.Height == 0)
 			break;
 	}
@@ -1106,13 +1155,13 @@ bool BlockHeader::HasBestChainWork() const {
 	HashValue hash = Hash(_self);
 	while (!eng.Db->HaveHeader(hash)) {
 		hash = btiRoot.PrevBlockHash;
-		forkWork += eng.ChainParams.MaxTarget / exchange(btiRoot, eng.Tree.GetHeader(btiRoot.PrevBlockHash)).DifficultyTarget;
+		forkWork += eng.ChainParams.MaxTarget / exchange(btiRoot, eng.Tree.GetHeader(btiRoot.PrevBlockHash))->DifficultyTarget;
 	}
 
 	HashValue hashB = Hash(bestHeader);
 	for (BlockTreeItem bti = bestHeader; hashB != hash && forkWork > work;) {
 		hashB = bti.PrevBlockHash;
-		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti.PrevBlockHash)).DifficultyTarget;
+		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti.PrevBlockHash))->DifficultyTarget;
 	}
 
 	return forkWork > work;
@@ -1176,9 +1225,9 @@ void Block::Accept(Link *link) {
 		BlockHeader blockPrev = eng.Tree.FindHeader(hashPrev);
 
 		Target targetNext = eng.GetNextTarget(blockPrev, _self);
-		if (get_DifficultyTarget() != targetNext) {
+		if (m_pimpl->get_DifficultyTarget() != targetNext) {
 			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
-			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(get_DifficultyTarget()));
+			TRC(1, "CurBlock DifficultyTarget: " << hex << BigInteger(m_pimpl->get_DifficultyTarget()));
 			TRC(1, "Should be                  " << hex << BigInteger(eng.GetNextTarget(blockPrev, _self)));
 #ifdef _DEBUG//!!!D
  			eng.GetNextTarget(blockPrev, _self);

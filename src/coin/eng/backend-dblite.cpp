@@ -706,6 +706,7 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
 	uint32_t h = 0;
 	rd.BaseStream.ReadBuffer(&h, BLOCKID_SIZE);
 	Height = letoh(h);
+	uint8_t utxo = 0;
 	switch (eng.Mode) {
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 	case EngMode::Normal:
@@ -718,12 +719,16 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
 	case EngMode::Bootstrap:
 		rd.BaseStream.ReadBuffer(&TxOffset, 3);
 		TxOffset = letoh(TxOffset) & 0xFFFFFF;
+		if (TxOffset)
+			utxo = uint8_t(TxOffset >> 22);
+		else
+			TxOffset = rd.ReadUInt32();
 		break;
 	default:
 		rd >> Data >> TxIns;
 	}
 	if (rd.BaseStream.Eof()) {
-		if (uint8_t utxo = uint8_t(TxOffset >> 22)) {
+		if (utxo) {
 			Utxo = Span(&utxo, 1);
 			TxOffset &= 0x3FFFFF;
 		} else {
@@ -759,7 +764,13 @@ void DbliteBlockChainDb::TxData::Write(BinaryWriter& wr, CoinEng& eng, bool bWri
 			return;
 		} else {
 			uint32_t txOffset = htole(TxOffset);
-			wr.BaseStream.WriteBuffer(&txOffset, 3);
+			if (TxOffset < 0x1000000)
+				wr.BaseStream.WriteBuffer(&txOffset, 3);
+			else {
+				txOffset = 0;
+				wr.BaseStream.WriteBuffer(&txOffset, 3);
+				wr << TxOffset;
+			}
 		}
 		break;
 	default:
@@ -945,11 +956,11 @@ void DbliteBlockChainDb::DeleteBlock(int height, const vector<int64_t>* txids) {
 	dbt.CommitIfLocal();
 }
 
-static const size_t AVG_TX_SIZE = 400;
+static const size_t AVG_TX_SIZE = 300;		// Average is ~259 bytes, but we read some reserve.
 
 void DbliteBlockChainDb::ReadTx(uint64_t off, Tx& tx) {
-    tx.Read(off + MAX_BLOCK_SIZE < MappedSize
-        ? ProtocolReader(CMemReadStream(Span((uint8_t*)m_viewBootstrap.Address + off, MAX_BLOCK_WEIGHT)), true)
+    tx.Read(off + MAX_BLOCK_SIZE_FOR_ALL_CHAINS < MappedSize
+        ? ProtocolReader(CMemReadStream(Span((uint8_t*)m_viewBootstrap.Address + off, MAX_BLOCK_SIZE_FOR_ALL_CHAINS)), true)
         : ProtocolReader(BufferedStream(PositionOwningFileStream(m_fileBootstrap, off), AVG_TX_SIZE), true));
 }
 
@@ -1277,7 +1288,7 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 		MemoryStream ms(MAX_BLOCK_SIZE + 8);
 		ProtocolWriter wr(ms);
 		block->WriteHeader(wr);
-		CoinSerialized::WriteVarUInt64(wr, txes.size());
+		CoinSerialized::WriteCompactSize(wr, txes.size());
 		for (size_t i = 0; i < txes.size(); ++i) {
 			txOffsets[i] = uint32_t(ms.Position);
             txes[i].Write(wr);
@@ -1286,7 +1297,7 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 		Span cb = ms;
 		if (!block->OffsetInBootstrap) {
 			vector<uint32_t> ar((cb.size() + 3) / 4 + 2);
-			ar[0] = htole(Eng.ChainParams.ProtocolMagic);
+			ar[0] = htole(Eng.ChainParams.DiskMagic);
 			ar[1] = htole(uint32_t(cb.size()));
 			memcpy(&ar[2], cb.data(), cb.size());
 			m_fileBootstrap.Write(&ar[0], cb.size() + 8, Eng.OffsetInBootstrap);
@@ -1367,15 +1378,15 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 	case EngMode::Normal:
 	case EngMode::BlockExplorer:
-#	endif
-		for (int nTx = 0; nTx < txes.size(); ++nTx) {
-			const Tx& tx = txes[nTx];
-			Coin::HashValue txHash = Coin::Hash(tx);
+#	endif	
+		for (int nTx = 0; nTx < txes.size(); ++nTx) {			// Don't require topological order for BCH compatibility,
+			const Tx& tx = txes[nTx];							// CoinEng::ConnectBlockTxes() already checked topological order for Bitcoin chain
 			uint32_t txOffset = txOffsets[nTx];
 			uint32_t leOffset = htole(txOffset);
-			InsertTx(tx, (uint16_t)nTx, txHashOutNums, txHash, height, Span(), CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), Span((const uint8_t*)& leOffset, 3), txOffset);
-			SpendInputs(tx);
+			InsertTx(tx, (uint16_t)nTx, txHashOutNums, Coin::Hash(tx), height, Span(), CoinEng::SpendVectorToBlob(vector<bool>(tx.TxOuts().size(), true)), Span((const uint8_t*)& leOffset, 3), txOffset);
 		}
+		for (auto& tx : txes)
+			SpendInputs(tx);
 		break;
 	}
 
