@@ -156,7 +156,8 @@ void KVStorage::Init() {
 }
 
 KVStorage::~KVStorage() {
-	switch (m_state) {
+	OpenState state = m_state;
+	switch (state) {
 	case OpenState::Closing:
 		m_futClose.wait();
 		break;
@@ -770,12 +771,12 @@ void KVStorage::DoClose(bool bLock) {
 		DbFile.Length = PageSpaceSize();
 	DbFile.Close();
 	m_bModified = false;
-	m_state = OpenState::Closed;
 	EXT_LOCK(MtxFreePages) {
 		CurGen.reset();
 		ReleasedPages.clear();
 		FreePages.clear();
 	}
+	m_state = OpenState::Closed;
 	m_nextFreePages.clear();
 #if UCFG_DB_FREE_PAGES_BITSET
 	FreePagesBitset.clear();

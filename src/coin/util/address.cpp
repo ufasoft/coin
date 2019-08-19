@@ -164,6 +164,8 @@ String AddressObj::ToString() const {
 		v[0] = Hasher.ScriptAddressVersion;
 		memcpy(&v[1], Data.data(), 20);
 		return ConvertToBase58(Span(v));
+	case AddressType::WitnessV0KeyHash:
+	case AddressType::WitnessV0ScriptHash:
 	case AddressType::Bech32: {
 		uint8_t buf[Address::MAX_LEN * 3]; // enough for max Hrp & Data
 		auto hrpLen = ExpandHrp(buf, Hasher.Hrp);

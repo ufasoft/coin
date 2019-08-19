@@ -54,11 +54,7 @@ namespace Coin {
         Dictionary<IWallet, WalletForms> m_wallet2forms = new Dictionary<IWallet, WalletForms>();
         Dictionary<string, int> AllAlerts = new Dictionary<string, int>();
 
-        public static RegistryKey UserAppRegistryKey {
-            get {
-                return Registry.CurrentUser.CreateSubKey(@"Software\Ufasoft\Coin");
-            }
-        }
+        public static RegistryKey UserAppRegistryKey => Registry.CurrentUser.CreateSubKey(@"Software\Ufasoft\Coin");
 
         public class WalletEvent {
             public DateTime Timestamp { get; set; }
@@ -135,7 +131,6 @@ namespace Coin {
                 }
             UserAppRegistryKey.SetValue("ActiveCurrencies", list.ToArray());
         }
-
 
         void Currency_CheckChanged(object s, RoutedEventArgs e) {
             var wf1 = (WalletForms)((MenuItem)s).Tag;
@@ -271,9 +266,7 @@ namespace Coin {
                 //!!!R              foreach (var de in m_wallet2forms)
                 //!!!R                  ar.Add(de.Value);
             } else {
-                foreach (var s in (string[])obj) {
-                    string[] ss = s.Split();
-                    string name = ss[0];
+                foreach (var name in (string[])obj) {
                     try {
                         WalletForms wf = null;
                         foreach (var pp in m_wallet2forms)

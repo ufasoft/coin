@@ -57,15 +57,14 @@ namespace Coin {
             mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.Legacy);
             subMenu.Items.Add(mi = new MenuItem { Header = "P2_SH" });
             mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.P2SH);
-//!!!T Until testing            subMenu.Items.Add(mi = new MenuItem { Header = "_Bech32" });
-//            mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.Bech32);
+            subMenu.Items.Add(mi = new MenuItem { Header = "_Bech32" });
+            mi.Click += (s, e) => OnMyAddressGenerateNew(EAddressType.Bech32);
             menu.Items.Add(subMenu);
 
             ContextMenu = menu;
 
             LvMyAddressesSortHelper.ListView = this;
         }
-
 
         Address GetMySelectedAddress() {
             return (Address)SelectedItem;
