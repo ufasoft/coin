@@ -311,6 +311,18 @@ Block::Block() {
 	m_pimpl = Eng().CreateBlockObj();
 }
 
+BlockObj::BlockObj(BlockObj& bo)
+	: base(bo)
+	, AuxPow(bo.AuxPow)
+	, m_txHashesOutNums(bo.m_txHashesOutNums)
+	, OffsetInBootstrap(bo.OffsetInBootstrap)
+	, m_bTxesLoaded(bo.m_bTxesLoaded)
+	, m_hash(bo.m_hash)
+	, m_txes(bo.m_txes)
+	, m_pMtx(0)
+	, m_merkleTree(bo.m_merkleTree) {
+}
+
 void BlockObj::WriteHeader(ProtocolWriter& wr) const {
 	base::WriteHeader(wr);
 	CoinEng& eng = Eng();

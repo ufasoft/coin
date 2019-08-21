@@ -563,10 +563,10 @@ void Wallet::ReacceptWalletTxes() {
 
 void Wallet::SetNextResendTime(const DateTime& dt) {
 	m_dtNextResend = dt + seconds(Ext::Random().Next(SECONDS_RESEND_PERIODICITY));
-	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
 #ifdef X_DEBUG//!!!D
-	m_dtNextResend = dt + seconds(3);
+	m_dtNextResend = dt + seconds(10);
 #endif
+	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
 }
 
 void Wallet::Start() {

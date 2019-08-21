@@ -348,11 +348,12 @@ class COIN_CLASS TxObj : public Object, public CoinSerialized {
 public:
 	typedef InterlockedPolicy interlocked_policy;
 
+	mutable Coin::HashValue m_hash;
+
 	vector<TxOut> TxOuts;
 	DateTime LockTimestamp;
 
 	mutable vector<TxIn> m_txIns;
-	mutable Coin::HashValue m_hash;
 	uint32_t LockBlock;
 	int32_t Height;
 	mutable volatile uint8_t m_nBytesOfHash;
@@ -609,14 +610,17 @@ class COIN_CLASS BlockObj : public BlockBase {
 	typedef BlockBase base;
 	typedef BlockObj class_type;
 
+	mutable mutex* volatile m_pMtx;
+	mutable CCoinMerkleTree m_merkleTree;
 public:
+	mutable CTxes m_txes;
 	ptr<Coin::AuxPow> AuxPow;
 
 	TxHashesOutNums m_txHashesOutNums;
 	mutable uint64_t OffsetInBootstrap;
 
-	mutable volatile bool m_bTxesLoaded;
 	mutable optional<Coin::HashValue> m_hash;
+	mutable volatile bool m_bTxesLoaded;
 
 	BlockObj()
 		: OffsetInBootstrap(0)
@@ -660,9 +664,9 @@ public:
 	}
 	virtual void CheckHeader();
 
-	mutable CTxes m_txes;
-
 protected:
+	BlockObj(BlockObj& bo);
+
 	mutex& Mtx() const {
 		if (!m_pMtx) {
 			auto pMtx = new mutex;
@@ -670,18 +674,6 @@ protected:
 				delete pMtx;
 		}
 		return *m_pMtx;
-	}
-
-	BlockObj(BlockObj& bo)
-		: base(bo)
-		, AuxPow(bo.AuxPow)
-		, m_txHashesOutNums(bo.m_txHashesOutNums)
-		, OffsetInBootstrap(bo.OffsetInBootstrap)
-		, m_bTxesLoaded(bo.m_bTxesLoaded)
-		, m_hash(bo.m_hash)
-		, m_txes(bo.m_txes)
-		, m_pMtx(0)
-		, m_merkleTree(bo.m_merkleTree) {
 	}
 
 	virtual BlockObj* Clone() {
@@ -699,9 +691,6 @@ protected:
 	}
 
 private:
-	mutable mutex* volatile m_pMtx;
-	mutable CCoinMerkleTree m_merkleTree;
-
 	friend class Block;
 	friend class BlockHeader;
 	friend class TxMessage;
@@ -1102,7 +1091,7 @@ public:
 //!!!R	unordered_set<ptr<ConnectTask>> Tasks;
 	EnabledFeatures Features;
 	int32_t Height;
-	//!!!?R	CFutureTxMap TxMap; 
+	//!!!?R	CFutureTxMap TxMap;
 	TxoMap TxoMap;
 	int64_t Fee;
 	Target DifficultyTarget;

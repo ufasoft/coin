@@ -465,6 +465,7 @@ KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
 	switch (parsed.Type) {
 	case AddressType::P2SH:
 	case AddressType::P2PKH:
+	case AddressType::WitnessV0KeyHash:
 		hash160 = HashValue160(parsed);	// prepare
 	}
 
@@ -481,6 +482,11 @@ KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
 	case AddressType::WitnessV0KeyHash:
 		if (context == ScriptContext::WitnessV0)
 			return nullptr;
+		EXT_LOCK(MtxDb) {
+			if (auto o = Lookup(Hash160ToKey, hash160))
+				return o.value();
+		}
+		break;
 	case AddressType::WitnessV0ScriptHash:
 		if (context == ScriptContext::WitnessV0)
 			return nullptr;
@@ -508,9 +514,8 @@ KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
 		}
 	case AddressType::P2PKH:
 		EXT_LOCK(MtxDb) {
-			CoinDb::CHash160ToKey::iterator it = Hash160ToKey.find(hash160);
-			if (it != Hash160ToKey.end())
-				return it->second;
+			if (auto o = Lookup(Hash160ToKey, hash160))
+				return o.value();
 		}
 		break;
 	case AddressType::MultiSig:

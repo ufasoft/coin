@@ -37,7 +37,7 @@ static const int64_t
 
 const int INITIAL_BLOCK_THRESHOLD = 120;
 
-const int SECONDS_RESEND_PERIODICITY = 15 * 60;
+const int SECONDS_RESEND_PERIODICITY = 5 * 60;
 
 const size_t MAX_LAST_SPENT_TXES = 5000;
 

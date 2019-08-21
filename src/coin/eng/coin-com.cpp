@@ -688,10 +688,10 @@ public:
 	METHOD_BEGIN {
 		TRC(1, "");
 
-		for (int i=0; i<m_vWalletEng.size(); ++i)
+		for (int i = 0; i < m_vWalletEng.size(); ++i)
 			m_vWalletEng[i]->m_peng->SignalStop();
 
-		for (int i=0; i<m_vWalletEng.size(); ++i) {
+		for (int i = 0; i < m_vWalletEng.size(); ++i) {
 			m_vWalletEng[i]->m_peng->Stop();
 			m_vWalletEng[i]->Close();
 		}

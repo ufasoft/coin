@@ -349,8 +349,13 @@ bool DbliteBlockChainDb::Open(const path& p) {
 		}
 		OnOpenTables(dbt, false);
 	}
-	if (Eng.Mode == EngMode::Bootstrap)
+	if (Eng.Mode == EngMode::Bootstrap) {
 		OpenBootstrapFile(p.parent_path());
+
+		DbReadTxRef dbt(m_db);
+		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext();)
+			BlockOffsets.push_back(letoh(*(uint64_t*)c.get_Data().data()));
+	}
 	if (TryToConvert(p))
 		return false;
 	return true;
@@ -636,6 +641,14 @@ Block DbliteBlockChainDb::FindBlockPrefixSuffix(int height) {
 	if (!c.Get(BlockKey(height)))
 		Throw(CoinErr::BlockNotFound);
 	return LoadBlock(dbt, height, c.DataStream, false);
+}
+
+int DbliteBlockChainDb::FindHeightByOffset(uint64_t offset) {
+	vector<uint64_t>::const_iterator b = BlockOffsets.begin(), e = BlockOffsets.end();
+	if (b == e)
+		return -1;
+	auto it = lower_bound(b, e, offset);
+	return int(it - b) - (it != e && *it == offset ? 0 : 1);
 }
 
 TxHashesOutNums DbliteBlockChainDb::GetTxHashesOutNums(int height) {
@@ -1375,6 +1388,10 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 
 	switch (Eng.Mode) {
 	case EngMode::Bootstrap:
+		if (BlockOffsets.size() < height + 1)
+			BlockOffsets.resize(height + 1);
+		BlockOffsets[height] = block->OffsetInBootstrap;
+
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 	case EngMode::Normal:
 	case EngMode::BlockExplorer:

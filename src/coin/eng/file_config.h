@@ -19,6 +19,6 @@
 #define VER_ORIGINALFILENAME_STR "coineng.dll"
 
 #ifdef _DEBUG//!!!T
-//#	define UCFG_COIN_USE_FUTURES 0
+#	define UCFG_COIN_USE_FUTURES 0
 #endif
 

@@ -87,6 +87,7 @@ class DbliteBlockChainDb : public IBlockChainDb {
 	File m_fileBootstrap;
 	MemoryMappedFile m_mmBootstrap;
 	MemoryMappedView m_viewBootstrap;
+	vector<uint64_t> BlockOffsets;		// Cached offset, not modified on DeleteBlock() because txes never reference on deleted blocks
 	uint64_t MappedSize;
 public:
 	CoinEng& Eng;
@@ -118,13 +119,15 @@ public:
 	Block FindBlock(const HashValue& hash) override;
 	Block FindBlock(int height) override;
 	Block FindBlockPrefixSuffix(int height) override;
+	int FindHeightByOffset(uint64_t offset);
 	int GetMaxHeight() override;
 	int GetMaxHeaderHeight() override;
 	TxHashesOutNums GetTxHashesOutNums(int height) override;
 	pair<OutPoint, TxOut> GetOutPointTxOut(int height, int idxOut) override;
 	void SpendInputs(const Tx& tx);
 
-	struct TxData {
+	class TxData {
+	public:
 		HashValue HashTx;
 		Blob Data,
 			TxIns;
@@ -247,4 +250,3 @@ private:
 
 
 } // Coin::
-
