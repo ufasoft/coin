@@ -159,7 +159,7 @@ void CFutureTxMap::Ensure(const HashValue& hash) {
 static Txo LoadTxoFromDbAsync(CoinEng* eng, OutPoint op, int height) {
 	Tx tx;
 	if (eng->Db->FindTx(op.TxHash, &tx)) {		// Don't use the cache as it is usually one-time operation
-		if (tx.IsCoinBase())
+		if (tx->IsCoinBase())
 			eng->CheckCoinbasedTxPrev(height, tx.Height);
 		try {
 			return tx.TxOuts().at(op.Index);
@@ -667,7 +667,7 @@ void Tx::Check() const {
 	if (TxOuts().empty())
 		Throw(CoinErr::BadTxnsVoutEmpty);
 
-	bool bIsCoinBase = IsCoinBase();
+	bool bIsCoinBase = m_pimpl->IsCoinBase();
 	int64_t nOut = 0;
 	EXT_FOR(const TxOut& txOut, TxOuts()) {
 		if (!txOut.IsEmpty()) {
@@ -797,7 +797,7 @@ int64_t Tx::get_ValueOut() const {
 }
 
 int64_t Tx::get_Fee() const {
-	if (IsCoinBase())
+	if (m_pimpl->IsCoinBase())
 		return 0;
 	int64_t sum = 0;
 	EXT_FOR(const TxIn& txIn, TxIns()) {
@@ -813,7 +813,7 @@ int Tx::get_DepthInMainChain() const {
 }
 
 unsigned Tx::GetP2SHSigOpCount(const ITxoMap& txoMap) const {
-	if (IsCoinBase())
+	if (m_pimpl->IsCoinBase())
 		return 0;
 	int r = 0;
 	EXT_FOR(const TxIn& txIn, TxIns()) {
@@ -847,7 +847,7 @@ pair<int, DateTime> Tx::CalculateSequenceLocks(vector<int>& inHeights, const Has
 
 void Tx::CheckInOutValue(int64_t nValueIn, int64_t& nFees, int64_t minFee, const Target& target) const {
 	int64_t valOut = ValueOut;
-	if (IsCoinStake())
+	if (m_pimpl->IsCoinStake())
 		m_pimpl->CheckCoinStakeReward(valOut - nValueIn, target);
 	else {
 		if (nValueIn < valOut)
@@ -867,7 +867,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
     if (nSigOp > MAX_BLOCK_SIGOPS_COST)
         Throw(CoinErr::TxTooManySigOps);
 
-	if (!IsCoinBase()) {
+	if (!m_pimpl->IsCoinBase()) {
 		vector<Txo> vTxo;
 		int64_t nValueIn = 0;
 		if (eng.Mode != EngMode::Lite) {
@@ -901,7 +901,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 					Throw(E_FAIL);
 				const TxOut& txOut = txPrev.TxOuts()[op.Index];
 
-				if (txPrev.IsCoinBase())
+				if (txPrev->IsCoinBase())
 					eng.CheckCoinbasedTxPrev(height, txPrev.Height);
 
 				if (!view.HasInput(op))
@@ -949,7 +949,7 @@ unsigned Tx::SigOpCost(const ITxoMap& txoMap) const {
 		}
 	}
     r *= WITNESS_SCALE_FACTOR;
-    if (!IsCoinBase()) {
+    if (!m_pimpl->IsCoinBase()) {
         r += GetP2SHSigOpCount(txoMap) * WITNESS_SCALE_FACTOR;
 
         for (auto& txIn : txIns)

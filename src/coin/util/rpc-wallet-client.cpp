@@ -46,8 +46,8 @@ uint16_t GetFreePort() {
 	Throw(HRESULT_FROM_WIN32(ERROR_NO_SYSTEM_RESOURCES));
 }
 
-TxInfo ToTxInfo(const VarValue& v) {
-	TxInfo r;
+WalletTxInfo ToTxInfo(const VarValue& v) {
+	WalletTxInfo r;
 	if (VarValue vAddress = v["address"])
 		r.Address = vAddress.ToString();
 	r.HashTx = HashValue(v["txid"].ToString());
@@ -61,7 +61,7 @@ TxInfo ToTxInfo(const VarValue& v) {
 	if (VarValue vDetails = v["details"]) {
 		for (size_t i=0; i<vDetails.size(); ++i) {
 			VarValue vd = vDetails[i];
-			TxInfo::TxDetails d;
+			WalletTxInfo::TxDetails d;
 			d.Account = vd["account"].ToString();
 			d.Address = vd["address"].ToString();
 			d.IsSend = vd["category"].ToString() == "send";
@@ -73,13 +73,20 @@ TxInfo ToTxInfo(const VarValue& v) {
 }
 
 class RpcWalletClient : public IWalletClient {
+	Socket Sock;
+	NetworkStream Stm;
+	WebClient m_wc;
+
+	mutex MtxRpc;
+	Ext::Inet::JsonRpc JsonRpc;
+
 public:
 	Process m_process;
 	bool HasSubmitBlockMethod;
 
 	RpcWalletClient()
-		:	Stm(Sock)
-		,	HasSubmitBlockMethod(true)
+		: Stm(Sock)
+		, HasSubmitBlockMethod(true)
 	{
 		m_wc.CacheLevel = RequestCacheLevel::BypassCache;
 		m_wc.Credentials.UserName = Login;
@@ -208,7 +215,7 @@ public:
 		return Call("getdifficulty").ToDouble();
 	}
 
-	TxInfo GetTransaction(const HashValue& hashTx) override {
+	WalletTxInfo GetTransaction(const HashValue& hashTx) override {
 		return ToTxInfo(Call("gettransaction", EXT_STR(hashTx)));
 	}
 
@@ -227,13 +234,17 @@ public:
 		return Call("getaccountaddress", account).ToString();
 	}
 
+	String GetNewAddress(RCString account) override {
+		return (!!account ? Call("getnewaddress", account) : Call("getnewaddress")).ToString();
+	}
+
 	HashValue SendToAddress(RCString address, decimal64 amount, RCString comment) override {
 		return HashValue(Call("sendtoaddress", address, decimal_to_double(amount), comment).ToString());
 	}
 
 	ptr<MinerBlock> GetBlockTemplate(const vector<String>& capabilities) override {
 		VarValue caps;
-		for (int i=0; i<capabilities.size(); ++i)
+		for (int i = 0; i < capabilities.size(); ++i)
 			caps.Set(i, capabilities[i]);
 		VarValue par;
 		par.Set("capabilities", caps);
@@ -284,10 +295,6 @@ public:
 
 	void GetWork(RCSpan data) override {
 		ProcessSubmitResult(Call("getwork", EXT_STR(data)));
-	}
-
-	String GetNewAddress(RCString account) override {
-		return (!!account ? Call("getnewaddress", account) : Call("getnewaddress")).ToString();
 	}
 protected:
 	WebClient GetWebClient() {
@@ -350,13 +357,6 @@ protected:
 		return Call(method, VarValue(v0), VarValue(v1));
 	}
 private:
-	Socket Sock;
-	NetworkStream Stm;
-	WebClient m_wc;
-
-	mutex MtxRpc;
-	Ext::Inet::JsonRpc JsonRpc;
-
 	friend ptr<IWalletClient> CreateRpcWalletClient(RCString name, const path& pathDaemon, WebClient *pwc);
 };
 

@@ -30,7 +30,7 @@ void Block::Disconnect() const {
 
 			eng.OnDisconnectInputs(tx);
 
-			if (!tx.IsCoinBase()) {
+			if (!tx->IsCoinBase()) {
 				EXT_FOR(const TxIn& txIn, tx.TxIns()) {
 					eng.Db->UpdateCoins(txIn.PrevOutPoint, false, Height);
 				}
@@ -71,7 +71,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 		vDisconnect.push_back(b.m_pimpl);
 		if (Mode == EngMode::Bootstrap || UCFG_COIN_TXES_IN_BLOCKTABLE) {
 			EXT_FOR(const Tx& tx, b.get_Txes()) {
-				if (!tx.IsCoinBase()) {
+				if (!tx->IsCoinBase()) {
 					EXT_FOR(const TxIn& txIn, tx.TxIns()) {
 						Tx tx;													// necessary, because without it FindTx() returns 'False Positive' (checks only 6 bytes of hash)
 						if (!Db->FindTxByHash(txIn.PrevOutPoint.TxHash, &tx))
@@ -141,7 +141,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 				b.Disconnect();
 				const CTxes& txes = b.get_Txes();
 				for (CTxes::const_reverse_iterator it = txes.rbegin(); it != txes.rend(); ++it) {
-					if (!it->IsCoinBase())
+					if (!it->m_pimpl->IsCoinBase())
 						vResurrect.push_front(*it);
 				}
 			}

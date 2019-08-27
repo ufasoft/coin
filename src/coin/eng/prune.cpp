@@ -12,14 +12,17 @@ namespace Coin {
 void PruneDbThread::Execute() {
 	Name = "PruneThread";
 	CCoinEngThreadKeeper engKeeper(&Eng);
+	IBlockChainDb& db = *Eng.Db;
 	for (int h = From; h <= To; ++h) {
 		if (m_bStop)
 			return;
+		Block block = db.FindBlock(h);
+		const auto& txes = block.Txes;
 		CoinEngTransactionScope scopeBlockSavepoint(Eng);
-		for (auto& tx : Eng.Db->FindBlock(h).Txes)
-			for (auto& txIn : tx.TxIns())
-				Eng.Db->PruneTxo(txIn.PrevOutPoint, h);
-		Eng.Db->SetLastPrunedHeight(h);
+		for (size_t i = 1; i < txes.size(); ++i)
+			for (auto& txIn : txes[i].TxIns())
+				db.PruneTxo(txIn.PrevOutPoint, h);
+		db.SetLastPrunedHeight(h);
 	}
 	TRC(1, "Pruned spent TXOs upto Block " << To)
 }

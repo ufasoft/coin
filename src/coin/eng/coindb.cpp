@@ -419,7 +419,7 @@ void CoinDb::LoadKeys(RCString password) {
 		}
 #ifdef X_DEBUG//!!!T
 		if (!password.IsEmpty()) {
-			for (auto it=keys.begin(), e=keys.end(); it!=e; ++it) {
+			for (auto it = keys.begin(), e = keys.end(); it != e; ++it) {
 				KeyInfo& ki = it->second;
 				if (ki.PrivKey.Size > 33) {
 					ki.PrivKey = ki.Key.Export(CngKeyBlobFormat::OSslEccPrivateBignum);

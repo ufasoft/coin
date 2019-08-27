@@ -15,7 +15,7 @@ using namespace Ext::DB::KV;
 namespace Coin {
 
 const size_t BLOCKID_SIZE = 3;
-const size_t TXID_SIZE = 6;
+const size_t TXID_SIZE = 6;				// Probability of collision 1/16M
 const size_t PUBKEYID_SIZE = 5;
 const size_t PUBKEYTOTXES_ID_SIZE = 8;
 

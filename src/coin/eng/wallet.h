@@ -30,8 +30,8 @@ public:
 	CBool m_bFromMe;
 
 	WalletTx()
-		:	To(Eng())
-//		:	Confirmations(0)
+		: To(Eng())
+//		: Confirmations(0)
 	{}
 
 	explicit WalletTx(const Tx& tx);
@@ -60,7 +60,7 @@ public:
 	CBool IsSpent;
 
 	Penny()
-		:	Value(0)
+		: Value(0)
 	{}
 
 	bool operator==(const Penny& v) const {
@@ -95,9 +95,9 @@ extern EXT_THREAD_PTR(Wallet) t_pWallet;
 class RescanThread : public Thread {
 	typedef Thread base;
 public:
+	HashValue m_hashFrom;
 	Coin::Wallet& Wallet;
 	int64_t m_i, m_count;
-	HashValue m_hashFrom;
 
 	RescanThread(Coin::Wallet& wallet, const HashValue& hashFrom);
 protected:
@@ -107,10 +107,10 @@ protected:
 class CompactThread : public Thread {
 	typedef Thread base;
 public:
+	HashValue m_hashFrom;
 	Coin::Wallet& Wallet;
 	atomic<int> m_ai;
 	uint32_t m_count;
-	HashValue m_hashFrom;
 
 	CompactThread(Coin::Wallet& wallet);
 protected:
@@ -120,6 +120,13 @@ protected:
 class COIN_CLASS Wallet : public WalletBase {
 	typedef Wallet class_type;
 	typedef WalletBase base;
+
+	String DbFilePath;
+	DateTime m_dtNextResend;
+	DateTime m_dtLastResend;
+
+	mutex m_mtxMyTxHashes;
+	unordered_set<HashValue> m_myTxHashes;
 public:
 	recursive_mutex Mtx;
 	HashValue BestBlockHash;
@@ -137,6 +144,7 @@ public:
 	int32_t m_dbNetId;
 	float Progress;
 	CBool m_bLoaded;
+	CBool m_bMiningEnabled;
 
 	Wallet(CoinEng& eng);
 	Wallet(CoinDb& cdb, RCString name);
@@ -160,8 +168,6 @@ public:
 	DEFPROP_GET(decimal64, Balance);
 
 	decimal64 GetDecimalFee(const WalletTx& wtx);
-
-	CBool m_bMiningEnabled;
 
 	bool get_MiningEnabled() { return m_bMiningEnabled; }
 
@@ -203,13 +209,6 @@ protected:
 	void OnPeriodicForLink(Link& link) override;
 
 private:
-	String DbFilePath;
-	DateTime m_dtNextResend;
-	DateTime m_dtLastResend;
-
-	mutex m_mtxMyTxHashes;
-	unordered_set<HashValue> m_myTxHashes;
-
 	void Init();
 	void StartRescan(const HashValue& hashFrom = HashValue::Null());
 	void TryRescanStep();

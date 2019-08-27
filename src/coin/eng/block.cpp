@@ -579,10 +579,10 @@ void BlockObj::Check(bool bCheckMerkleRoot) {
 		Throw(CoinErr::SizeLimits);
 
 	if (eng.Mode != EngMode::Lite && eng.Mode != EngMode::BlockParser) {
-		if (!m_txes[0].IsCoinBase())
+		if (!m_txes[0]->IsCoinBase())
 			Throw(CoinErr::FirstTxIsNotCoinbase);
 		for (int i = 1; i < m_txes.size(); ++i)
-			if (m_txes[i].IsCoinBase())
+			if (m_txes[i]->IsCoinBase())
 				Throw(CoinErr::FirstTxIsNotTheOnlyCoinbase);
 		EXT_FOR (const Tx& tx, m_txes) {
 			tx.Check();
@@ -798,8 +798,8 @@ CConnectJob::CConnectJob(CoinEng& eng)
 }
 
 void CoinEng::ConnectTx(CConnectJob& job, vector<shared_future<TxFeeTuple>>& futsTx, const Tx& tx, int height, bool bVerifySignature) {
-	if (tx.IsCoinStake())
-		tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
+	if (tx->IsCoinStake())
+		tx->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
 	auto& txIns = tx.TxIns();
 	for (size_t nIn = 0; nIn < txIns.size(); ++nIn) {
 		const OutPoint& op = txIns[nIn].PrevOutPoint;
@@ -823,7 +823,7 @@ vector<shared_future<TxFeeTuple>> CoinEng::ConnectBlockTxes(CConnectJob& job, co
 	futsTx.reserve(txes.size());
 	EXT_FOR(const Tx & tx, txes) {
 		HashValue hashTx = Hash(tx);
-		if (tx.IsCoinBase()) {
+		if (tx->IsCoinBase()) {
 			if (ChainParams.CoinbaseMaturity == 0)
 				job.TxoMap.AddAllOuts(hashTx, tx);
 		} else {
@@ -935,7 +935,7 @@ void Block::ContextualCheck(const BlockHeader& blockPrev) {
 	CTxes& txes = m_pimpl->m_txes;
     for (auto& tx : txes) {
         tx.Height = height;
-        if (!tx.IsFinal(height, lockTimeCutoff))
+        if (!tx->IsFinal(height, lockTimeCutoff))
             Throw(CoinErr::ContainsNonFinalTx);
     }
 
@@ -1041,7 +1041,7 @@ void Block::Connect() const {
 
 		if (eng.Mode != EngMode::Lite) {
 			EXT_FOR (const Tx& tx, txes) {
-				if (!tx.IsCoinBase()) {
+				if (!tx->IsCoinBase()) {
 					vector<Txo> vTxo;
 					if (eng.Mode != EngMode::BlockParser) {
 						const vector<TxIn>& txIns = tx.TxIns();

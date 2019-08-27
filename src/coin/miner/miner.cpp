@@ -776,7 +776,7 @@ LAB_FALLBACK_GETWORK:
 
 			if (!newMinerBlock->CoinbaseTxn) {
 				Pooled = false;
-				newMinerBlock->AssemblyCoinbaseTx(DestinationAddress.empty() ? (DestinationAddress = WalletClient->GetAccountAddress("Mining")) : DestinationAddress);
+				newMinerBlock->AssemblyCoinbaseTx(DestinationAddress.empty() ? (DestinationAddress = WalletClient->GetNewAddress("Mining")) : DestinationAddress);
 			}
 
 
@@ -891,7 +891,7 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 		ProtocolWriter wr(ms);
 		mblock.WriteHeader(wr);
 
-		CoinSerialized::WriteVarUInt64(wr, txes.size());
+		CoinSerialized::WriteCompactSize(wr, txes.size());
 		wr.BaseStream.Write(tx0);
 		for (size_t i = 1; i < txes.size(); ++i)
 			wr.BaseStream.Write(txes[i].Data);

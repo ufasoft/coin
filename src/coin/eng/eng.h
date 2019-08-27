@@ -216,13 +216,18 @@ interface IEngEvents {
 
 interface COIN_CLASS WalletBase : public Object, IEngEvents {
 	typedef WalletBase class_type;
-
 public:
 	typedef InterlockedPolicy interlocked_policy;
 
 	observer_ptr<CoinEng> m_eng;
 	float Speed;
 	observer_ptr<IIWalletEvents> m_iiWalletEvents;
+#if UCFG_COIN_GENERATE
+	mutex MtxMiner;
+	unique_ptr<BitcoinMiner> Miner;
+	CanonicalPubKey m_genPubKey;
+	HashValue160 m_genHash160;
+#endif
 
 	WalletBase(CoinEng & eng) : m_eng(&eng), Speed(0) {}
 
@@ -235,11 +240,6 @@ public:
 	virtual void AddRecipient(const Address& a) { Throw(E_NOTIMPL); }
 
 #if UCFG_COIN_GENERATE
-	mutex MtxMiner;
-	unique_ptr<BitcoinMiner> Miner;
-
-	CanonicalPubKey m_genPubKey;
-	HashValue160 m_genHash160;
 	void ReserveGenKey();
 	Tx CreateCoinbaseTx();
 	virtual Block CreateNewBlock();
@@ -867,7 +867,8 @@ public:
 	virtual bool IsCheckSigOp(Opcode opcode);
 	virtual int GetMaxSigOps(const Block& block) { return MAX_BLOCK_SIGOPS_COST; }
 	virtual void CheckBlock(const Block& block) {}
-	
+	virtual void OrderTxes(CTxes& txes) {}
+
 	void ConnectTx(CConnectJob& job, vector<shared_future<TxFeeTuple>>& futsTx, const Tx& tx, int height, bool bVerifySignature);
 	virtual vector<shared_future<TxFeeTuple>> ConnectBlockTxes(CConnectJob& job, const vector<Tx>& txes, int height);
 	virtual bool CoinEng::IsValidSignatureEncoding(RCSpan sig);

@@ -78,7 +78,7 @@ static const CodeMessage<CoinErr> s_coinMessageTable[] {
 	, { CoinErr::TxPrematureSpend								, "Premature Spend"								}
 	, { CoinErr::TxOrdering										, "Transaction order is invalid"				}
 	, { CoinErr::CannotReorganizeBeyondPrunedBlocks				, "Cannot reorganize beyond pruned blocks"		}
-	, { CoinErr::NonCanonicalCompactSize						, "Non-canonical CompactSize"					}	
+	, { CoinErr::NonCanonicalCompactSize						, "Non-canonical CompactSize"					}
 
 	, { CoinErr::SCRIPT_ERR_UNKNOWN_ERROR						, "Unknown Script error"						}
 	, { CoinErr::SCRIPT_ERR_EVAL_FALSE							, "Script evaluated without error but finished with a false/empty top stack element"	}
@@ -192,7 +192,7 @@ public:
 	unordered_map<CoinErr, const char*> m_map;
 
 	CoinCategory()
-		:	base("Coin", FACILITY_COIN)
+		: base("Coin", FACILITY_COIN)
 	{
 		for (auto& m : s_coinMessageTable) {
 			m_map[m.Code] = m.Msg;

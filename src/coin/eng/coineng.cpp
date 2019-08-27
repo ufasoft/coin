@@ -964,7 +964,7 @@ void CoinEng::Relay(const TxInfo& txInfo) {
 
 	TRC(TRC_LEVEL_TX_MESSAGE, hash);
 
-	if (!txInfo.Tx.IsCoinBase() && !HaveTxInDb(hash)) {
+	if (!txInfo.Tx->IsCoinBase() && !HaveTxInDb(hash)) {
 		EXT_LOCKED(Caches.Mtx, Caches.m_relayHashToTx.insert(make_pair(hash, txInfo.Tx)));
 		Push(txInfo);
 	}

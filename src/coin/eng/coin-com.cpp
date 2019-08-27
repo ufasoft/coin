@@ -240,31 +240,32 @@ public:
 	HRESULT __stdcall get_Transactions(SAFEARRAY **r)		// Transactions in descending timestamp order
 	METHOD_BEGIN {
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
+		CoinDb& cdb = m_wallet.Eng.m_cdb;
 		EXT_LOCK (Mtx) {
 			if (m_saTxes.vt == VT_EMPTY) {
 				vector<WalletTx> vec;
-				EXT_LOCK (m_wallet.Eng.m_cdb.MtxDb) {
-					for (DbDataReader dr = m_wallet.Eng.m_cdb.CmdGetTxes.Bind(1, m_wallet.m_dbNetId).ExecuteReader(); dr.Read();) {
+				EXT_LOCK (cdb.MtxDb) {
+					for (DbDataReader dr = cdb.CmdGetTxes.Bind(1, m_wallet.m_dbNetId).ExecuteReader(); dr.Read();) {
 						WalletTx wtx;
 						wtx.LoadFromDb(dr, true);
 						auto& to = wtx.To;
 						switch (to.Type) {
 						case AddressType::P2PKH:
-							if (!m_wallet.Eng.m_cdb.Hash160ToKey.count((HashValue160)to))
+							if (!cdb.Hash160ToKey.count((HashValue160)to))
 								wtx.Amount = -wtx.Amount;
 							break;
 						case AddressType::P2SH:
-							if (!m_wallet.Eng.m_cdb.P2SHToKey.count((HashValue160)to))
+							if (!cdb.P2SHToKey.count((HashValue160)to))
 								wtx.Amount = -wtx.Amount;
 							break;
 						case AddressType::Bech32:
 							switch (to.Data().size()) {
 							case 20:
-								if (!m_wallet.Eng.m_cdb.Hash160ToKey.count((HashValue160)to))
+								if (!cdb.Hash160ToKey.count((HashValue160)to))
 									wtx.Amount = -wtx.Amount;
 								break;
 							case 32:
-								if (!m_wallet.Eng.m_cdb.P2SHToKey.count(Hash160(((HashValue)to).ToSpan())))	//!!!?
+								if (!cdb.P2SHToKey.count(Hash160(((HashValue)to).ToSpan())))	//!!!?
 									wtx.Amount = -wtx.Amount;
 								break;
 							}
@@ -274,7 +275,7 @@ public:
 					}
 				}
 				m_saTxes.CreateOneDim(VT_DISPATCH, vec.size());
-				for (long idx=0; idx<vec.size(); ++idx) {
+				for (long idx = 0; idx < vec.size(); ++idx) {
 					WalletTx& wtx = vec[idx];
 					CComPtr<ITransaction> iTx;
 					if (optional<CComPtr<ITransaction>> oiTx = Lookup(m_keyToTxCom, wtx.UniqueKey()))
@@ -460,7 +461,9 @@ public:
 					os << ", Rescanning block " << m_wallet.CurrentHeight;
 				}
 				if (m_wallet.MiningEnabled) {
-					os << ", Mining " << setprecision(3) << fixed << m_wallet.Speed/1000000 << " MH/s";
+					char sNum[20];
+					sprintf(sNum, "%3.2f", m_wallet.Speed / 1000000);
+					os << ", Mining " << sNum << " MH/s";
 				}
 			} while (false);
 		}
@@ -825,7 +828,7 @@ METHOD_BEGIN {
 	*r = 0;
 	Block bestBlock = m_wallet.m_wallet.Eng.BestBlock();
 	if (m_wtx.Height >= 0 && bestBlock)
-		*r = bestBlock.Height - m_wtx.Height+1;
+		*r = bestBlock.Height - m_wtx.Height + 1;
 } METHOD_END
 
 HRESULT TransactionCom::put_Comment(BSTR s)

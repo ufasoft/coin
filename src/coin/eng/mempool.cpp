@@ -68,7 +68,7 @@ void TxPool::AddOrphan(const Tx& tx) {
 // returns pair(added, missingInputs)
 bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	tx.Check();
-	if (tx.IsCoinBase())
+	if (tx->IsCoinBase())
 		Throw(CoinErr::Misbehaving);
 
 	if (!g_conf.AcceptNonStdTxn)
@@ -76,7 +76,7 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 
 	DateTime now = Clock::now();
 
-	if (!tx.IsFinal(Eng.BestBlockHeight() + 1, now))
+	if (!tx->IsFinal(Eng.BestBlockHeight() + 1, now))
 		Throw(CoinErr::ContainsNonFinalTx);
 
 

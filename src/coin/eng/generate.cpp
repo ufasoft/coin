@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2013-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2013-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -16,16 +16,30 @@ namespace Coin {
 
 class EmbeddedMiner : public BitcoinMiner {
 	typedef BitcoinMiner base;
+
+	HashValue BestHash;
+	Wallet& m_wallet;
+	vector<WalletBase*> m_childWallets;
+	DateTime m_dtPrevGetwork;
+	Block m_prevBlock;
+
+	mutex m_mtxMerkleToBlock;
+	LruMap<HashValue, Block> m_merkleToBlock;
+
+	uint32_t m_extraNonce;
+	int m_merkleSize;
+	uint32_t m_merkleNonce;
+
 public:
 	EmbeddedMiner(Wallet& wallet)
-		:	m_wallet(wallet)
-		,	m_merkleToBlock(10)
-		,	m_prevBlock(nullptr)
+		: m_wallet(wallet)
+		, m_merkleToBlock(10)
+		, m_prevBlock(nullptr)
 	{
 		HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
 
 #	ifdef _DEBUG//!!!D
-		ThreadCount = 1;
+		ThreadCount = 2;
 #	endif
 	}
 
@@ -36,24 +50,10 @@ protected:
 	ptr<BitcoinWorkData> GetWork(WebClient*& curWebClient) override;
 	void SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) override;
 private:
-	Wallet& m_wallet;
-
-	HashValue BestHash;
-
-	vector<WalletBase*> m_childWallets;
-	int m_merkleSize;
-	uint32_t m_merkleNonce;
-	DateTime m_dtPrevGetwork;
-	uint32_t m_extraNonce;
-	Block m_prevBlock;
-	
-	mutex m_mtxMerkleToBlock;
-	LruMap<HashValue, Block> m_merkleToBlock;
 
 	void UpdateParentChilds();
 	void SetUniqueExtraNonce(Block& block, CoinEng& eng);
 };
-
 
 
 class COrphan {
@@ -66,8 +66,8 @@ public:
 	}
 
 	COrphan(const Coin::Tx& tx)
-		:	Tx(tx)
-		,	Priority(0)
+		: Tx(tx)
+		, Priority(0)
 	{}
 };
 
@@ -75,7 +75,7 @@ typedef list<COrphan> COrhpans;
 
 void WalletBase::ReserveGenKey() {
 	EXT_LOCK (m_eng->Mtx) {
-		pair<Blob, HashValue160> pp = GetReservedPublicKey();
+		pair<CanonicalPubKey, HashValue160> pp = GetReservedPublicKey();
 		m_genPubKey = pp.first;
 		m_genHash160 = pp.second;
 	}
@@ -83,25 +83,25 @@ void WalletBase::ReserveGenKey() {
 
 Tx WalletBase::CreateCoinbaseTx() {
 	Tx tx;
-	tx.EnsureCreate();
+	tx.EnsureCreate(get_Eng());
 	tx.m_pimpl->m_txIns.resize(1);
 	tx.m_pimpl->m_bLoadedIns = true;
 	tx.TxOuts().resize(1);
 
 	MemoryStream ms;
 	ScriptWriter wr(ms);
-//!!!?	if (m_genPubKey.Size != 0)
-//!!!?		wr << m_genPubKey << OP_CHECKSIG;
+//!!!?	if (m_genPubKey.Data.Size != 0)
+//!!!?		wr << m_genPubKey.Data << OP_CHECKSIG;
 //!!!?	else
-		wr << OP_DUP << OP_HASH160 << HashValue160(m_genHash160) << OP_EQUALVERIFY << OP_CHECKSIG;
+		wr << Opcode::OP_DUP << Opcode::OP_HASH160 << HashValue160(m_genHash160) << Opcode::OP_EQUALVERIFY << Opcode::OP_CHECKSIG;
 
-	tx.TxOuts()[0].m_pkScript = Blob(ConstBuf(ms));
-
+		tx.TxOuts()[0].m_scriptPubKey = ms.AsSpan();
 	return tx;
 }
 
 Block WalletBase::CreateNewBlock() {
-	CCoinEngThreadKeeper engKeeper(&get_Eng());
+	CoinEng& eng = get_Eng();
+	CCoinEngThreadKeeper engKeeper(&eng);
 
 	if (m_eng->IsInitialBlockDownload())
 		return Block(nullptr);
@@ -117,9 +117,9 @@ Block WalletBase::CreateNewBlock() {
 		multimap<double, Tx> mapPriority;
 
 		EXT_LOCK (m_eng->TxPool.Mtx) {
-			for (auto it=m_eng->TxPool.m_hashToTx.begin(), e=m_eng->TxPool.m_hashToTx.end(); it!=e; ++it) {
-				const Tx& tx = it->second;
-				if (!tx.IsCoinBase() && tx.IsFinal()) {
+			for (auto it = m_eng->TxPool.m_hashToTxInfo.begin(), e = m_eng->TxPool.m_hashToTxInfo.end(); it!= e; ++it) {
+				const Tx& tx = it->second.Tx;
+				if (!tx->IsCoinBase() && tx->IsFinal()) {
 					double priority = 0;
 					COrhpans::iterator itOrphan = orphans.end();
 					EXT_FOR (const TxIn& txIn, tx.TxIns()) {
@@ -145,32 +145,32 @@ Block WalletBase::CreateNewBlock() {
 #endif // UCFG_COIN_GENERATE_TXES_FROM_POOL
 
 		Block bestBlock = m_eng->BestBlock();
-		block.m_pimpl->PrevBlockHash = Hash(bestBlock);
-		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height+1, block.m_pimpl->PrevBlockHash) + nFees;
-		block.m_pimpl->Height = bestBlock.Height+1;
-		block.m_pimpl->Timestamp = m_eng->GetTimestampForNextBlock();
-		block.m_pimpl->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
-		block.m_pimpl->Nonce = 0;
+		block->PrevBlockHash = Hash(bestBlock);
+		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height + 1, block->PrevBlockHash) + nFees;
+		block->Height = bestBlock.Height+1;
+		block->Timestamp = m_eng->GetTimestampForNextBlock();
+		block->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
+		block->Nonce = 0;
 
 #if UCFG_COIN_GENERATE_TXES_FROM_POOL
-		CoinsView view;
+		CoinsView view(eng);
 		int nBlockSigOps = 100;
-		for (uint32_t cbBlockSize=1000; !mapPriority.empty();) {
+		for (uint32_t cbBlockSize = 1000; !mapPriority.empty();) {
 			auto it = mapPriority.begin();
 			double priority = -it->first;
 			Tx tx = it->second;
-			mapPriority.erase(it);		
+			mapPriority.erase(it);
 
 			uint32_t cbNewBlockSize = cbBlockSize + tx.GetSerializeSize();
 
-			if (cbNewBlockSize < MAX_BLOCK_SIZE_GEN) {
-				bool bAllowFree = cbNewBlockSize<400 || Tx::AllowFree(priority);
+			if (cbNewBlockSize < eng.ChainParams.MaxBlockWeight) {
+				bool bAllowFree = cbNewBlockSize < 400 || Tx::AllowFree(priority);
 				int64_t minFee = tx.GetMinFee(cbBlockSize, cbNewBlockSize<400 || Tx::AllowFree(priority));
 
-				CoinsView viewTmp;
+				CoinsView viewTmp(eng);
 				viewTmp.TxMap = view.TxMap;
 				try {
-					tx.ConnectInputs(viewTmp, m_eng->BestBlockHeight()+1, nBlockSigOps, nFees, false, true, minFee, block.DifficultyTarget);
+					tx.ConnectInputs(viewTmp, m_eng->BestBlockHeight() + 1, nBlockSigOps, nFees, false, true, minFee, block->DifficultyTarget);
 				} catch (RCExc) {
 					continue;
 				}
@@ -187,6 +187,7 @@ Block WalletBase::CreateNewBlock() {
 					}
 				}
 			}
+			eng.OrderTxes(block->m_txes);
 		}
 #endif // UCFG_COIN_GENERATE_TXES_FROM_POOL
 	}
@@ -198,7 +199,7 @@ void EmbeddedMiner::UpdateParentChilds() {
 	/*!!!
 	EXT_FOR (WalletBase *w, m_genWallets) {
 		if (m_parentWallets.empty()) {
-			WalletBestHash wbh = { w, HashValue() }; //!!!
+			WalletBestHash wbh = { w, HashValue::Null() }; //!!!
 			m_parentWallets.push_back(wbh);
 		}
 		else if (w->m_eng->ChainParams.AuxPowEnabled) {
@@ -212,7 +213,7 @@ void EmbeddedMiner::UpdateParentChilds() {
 			}
 			m_childWallets.push_back(w);
 LAB_DUP_CHAIN_ID:
-			;	
+			;
 		}
 	}
 	*/
@@ -276,15 +277,15 @@ void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
 		blob = blob + aux;
 		MemoryStream ms;
 		ScriptWriter wr(ms);
-		if (block.Ver >= 2)
+		if (block->Ver >= 2)
 			wr << int64_t(block.Height);
-		wr << BigInteger(to_time_t(block.get_Timestamp())) << BigInteger(m_extraNonce) << OP_2 << blob;
+		wr << BigInteger(to_time_t(block.get_Timestamp())) << BigInteger(m_extraNonce) << Opcode::OP_2 << blob;
 		Tx& tx = block.GetFirstTxRef();
-		tx.m_pimpl->m_txIns.at(0).put_Script(ms);
-		tx.m_pimpl->m_nBytesOfHash = 0;
+		tx->m_txIns.at(0).put_Script(ms);
+		tx->m_nBytesOfHash = 0;
 	} while (eng.HaveTxInDb(Hash(block.GetFirstTxRef())));
-	block.m_pimpl->m_merkleRoot.reset();
-	block.m_pimpl->m_hash.reset();
+	block->m_merkleRoot.reset();
+	block->m_hash.reset();
 }
 
 void EmbeddedMiner::SetSpeedCPD(float speed, float cpd) {
@@ -302,12 +303,12 @@ LAB_START:
 
 	ptr<BitcoinWorkData> wd = new BitcoinWorkData;
 
-	DateTime now = DateTime::UtcNow();		
+	DateTime now = Clock::now();
 	Block block(nullptr);
-		
+
 	if (now > m_dtPrevGetwork + seconds(60) ||
 		m_wallet.m_eng->IsInitialBlockDownload() || BestHash != EXT_LOCKED(m_wallet.m_eng->Mtx, Hash(m_wallet.m_eng->BestBlock())))
-	{	
+	{
 		block = m_wallet.CreateNewBlock();
 		if (!block) {
 			msWait = 1000;
@@ -329,13 +330,13 @@ LAB_START:
 	}
 
 	MemoryStream stm;
-	BinaryWriter wr(stm);
+	ProtocolWriter wr(stm);
 	block.WriteHeader(wr);
 
-	Blob blob = stm;
-	size_t len = blob.Size;
+	Blob blob = stm.AsSpan();
+	size_t len = blob.size();
 
-	wd->HashTarget = HashValue::FromDifficultyBits(block.get_DifficultyTarget().m_value);
+	wd->HashTarget = HashValue::FromDifficultyBits(block->get_DifficultyTarget().m_value);
 	wd->Timestamp = now;
 	wd->HashAlgo = m_wallet.m_eng->ChainParams.HashAlgo;
 	wd->Height = MaxHeight = block.Height;
@@ -348,8 +349,8 @@ LAB_START:
 #endif
 
 	switch (wd->HashAlgo) {
-	case Coin::HashAlgo::Sha256:			
-		blob.Size = 128;
+	case Coin::HashAlgo::Sha256:
+		blob.resize(128);
 		FormatHashBlocks(blob.data(), len);
 
 		wd->Hash1 = Blob(0, 64);
@@ -361,7 +362,7 @@ LAB_START:
 	default:
 		{
 			uint32_t *pd = (uint32_t*)blob.data();
-			for (int i=0, n=blob.Size/4; i<n; ++i)
+		for (int i = 0, n = blob.size() / 4; i < n; ++i)
 				pd[i] = betoh(pd[i]);
 			wd->Data = blob;
 		}
@@ -372,11 +373,11 @@ LAB_START:
 }
 
 void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData& wd) {
-	if (wd.Data.Size != 128 && wd.Data.Size != 80)
+	if (wd.Data.size() != 128 && wd.Data.size() != 80)
 		Throw(errc::invalid_argument);
 	Blob data = wd.Data;
-	uint32_t *pd = (uint32_t*)data.data();
-	for (int i=0, n=wd.Data.Size/4; i<n; ++i)
+	uint32_t* pd = (uint32_t*)data.data();
+	for (int i = 0, n = wd.Data.size() / 4; i < n; ++i)
 		pd[i] = betoh(pd[i]);
 
 	TRC(0, "FOUND BLOCK " << wd.Data);
@@ -384,7 +385,7 @@ void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	HashValue merkle(ConstBuf(data.constData()+36, 32));
 
 	Block block(nullptr);
-	WalletBase *wb = 0;
+	WalletBase* wb = &m_wallet;
 	EXT_LOCK (m_mtxMerkleToBlock) {
 		auto it = m_merkleToBlock.find(merkle);
 		if (it == m_merkleToBlock.end())
@@ -392,15 +393,16 @@ void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 		block = it->second.first;
 		m_merkleToBlock.erase(it);
 	}
-	block.m_pimpl->Timestamp = DateTime::from_time_t(letoh(pd[17]));
-	block.m_pimpl->Nonce = letoh(pd[19]);
-	block.m_pimpl->m_hash.reset();
+	block->Timestamp = DateTime::from_time_t(letoh(pd[17]));
+	block->Nonce = letoh(pd[19]);
+	block->m_hash.reset();
+	TRC(0, "Hash of Found Block: " << Hash(block));
 	CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
 	ptr<BlockMessage> m = new BlockMessage(block);
 	EXT_LOCK (m_wallet.m_eng->Mtx) {
 		EXT_LOCK (m_wallet.m_eng->MtxPeers) {
-			for (auto it=begin(wb->m_eng->Links); it!=end(wb->m_eng->Links); ++it) {			// early broadcast found Block
-				CoinLink& link = static_cast<CoinLink&>(**it);
+			for (auto it = begin(wb->m_eng->Links); it != end(wb->m_eng->Links); ++it) {			// early broadcast found Block
+				Link& link = static_cast<Link&>(**it);
 				link.Send(m);
 			}
 		}
@@ -414,4 +416,3 @@ void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 } // Coin::
 
 #endif // UCFG_COIN_GENERATE
-

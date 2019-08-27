@@ -353,8 +353,10 @@ bool DbliteBlockChainDb::Open(const path& p) {
 		OpenBootstrapFile(p.parent_path());
 
 		DbReadTxRef dbt(m_db);
-		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext();)
-			BlockOffsets.push_back(letoh(*(uint64_t*)c.get_Data().data()));
+		BlockOffsets.resize(GetMaxHeight() + 1);
+		size_t i = 0;
+		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext() && i < BlockOffsets.size();)
+			BlockOffsets[i++] = *(uint64_t*)c.get_Data().data();
 	}
 	if (TryToConvert(p))
 		return false;
@@ -751,10 +753,9 @@ void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
 	} else {
 		rd >> Utxo;
 		if (Utxo.empty()) {
-			if (rd.BaseStream.Eof())
-				LastSpendHeight = Height; // Inconsistent DB, support for compatibility withh old format
-			else
-				LastSpendHeight = uint32_t(Height + rd.Read7BitEncoded());
+			LastSpendHeight = rd.BaseStream.Eof()
+				? Height // Inconsistent DB, support for compatibility with old format
+				: uint32_t(Height + rd.Read7BitEncoded());
 		}
 	}
 }
@@ -1128,35 +1129,34 @@ void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend, int32_t he
 	TxData& txData = txDatas.Items[txDatas.Index];
 	int pos = op.Index >> 3;
 	uint8_t mask = 1 << (op.Index & 7);
-	uint8_t* p;
 	if (bSpend) {
-		p = txData.Utxo.data();
+		uint8_t* p = txData.Utxo.data();
 		if (pos >= txData.Utxo.size() || !(p[pos] & mask))
 			Throw(CoinErr::InputsAlreadySpent);
 		p[pos] &= ~mask;
+		size_t i;
+		for (i = txData.Utxo.size(); i-- && !p[i];)
+			;
+		if (i + 1 != txData.Utxo.size())
+			txData.Utxo.resize(i + 1);
+		if (txData.Utxo.size() == 0) {
+			if (Eng.Mode == EngMode::Bootstrap || UCFG_COIN_TXES_IN_BLOCKTABLE) {
+				uint32_t txOffset = Eng.Mode == EngMode::Bootstrap ? txData.TxOffset : GetLeUInt32(txData.Data.constData());
+				SpentTx stx = { op.TxHash, txData.Height, txOffset, txData.N };
+				auto& caches = Eng.Caches;
+				EXT_LOCK(caches.Mtx) {
+					caches.m_cacheSpentTxes.push_front(stx);
+					if (caches.m_cacheSpentTxes.size() > MAX_LAST_SPENT_TXES)
+						caches.m_cacheSpentTxes.pop_back();
+				}
+			}
+			txData.LastSpendHeight = heightCur;
+			//-		txDatas.Items.erase(txDatas.Items.begin() + txDatas.Index);  // Don't remove fully spent TxDatas because Reorganize may need them
+		}
 	} else {
 		if (pos >= txData.Utxo.size())
 			txData.Utxo.resize(pos + 1);
-		(p = txData.Utxo.data())[pos] |= mask;
-	}
-	size_t i;
-	for (i = txData.Utxo.size(); i-- && !p[i];)
-		;
-	if (i + 1 != txData.Utxo.size())
-		txData.Utxo.resize(i + 1);
-	if (txData.Utxo.size() == 0) {
-		if (Eng.Mode == EngMode::Bootstrap || UCFG_COIN_TXES_IN_BLOCKTABLE) {
-			uint32_t txOffset = Eng.Mode == EngMode::Bootstrap ? txData.TxOffset : GetLeUInt32(txData.Data.constData());
-			SpentTx stx = { op.TxHash, txData.Height, txOffset, txData.N };
-			auto& caches = Eng.Caches;
-			EXT_LOCK(caches.Mtx) {
-				caches.m_cacheSpentTxes.push_front(stx);
-				if (caches.m_cacheSpentTxes.size() > MAX_LAST_SPENT_TXES)
-					caches.m_cacheSpentTxes.pop_back();
-			}
-		}
-		txData.LastSpendHeight = heightCur;
-//-		txDatas.Items.erase(txDatas.Items.begin() + txDatas.Index);  // Don't remove fully spent TxDatas because Reorganize may need them
+		txData.Utxo.data()[pos] |= mask;
 	}
 
 	PutTxDatas(cTxes, TxKey(txid8), txDatas, true);
@@ -1167,14 +1167,23 @@ void DbliteBlockChainDb::PruneTxo(const OutPoint& op, int32_t heightCur) {
 	DbTxRef dbt(m_db);
 	DbCursor cTxes(dbt, m_tableTxes);
 	if (TxDatas txDatas = FindTxDatas(cTxes, Span(op.TxHash.data(), 8))) {	// May be has been removed in other txin of this heightCur
-		if (!txDatas.Items[txDatas.Index].IsCoinSpent(op.Index)) {
-			//!!!C Throw(CoinErr::InconsistentDatabase);	/!!!C Don't throw, because prev versions coud prune on the fly
+		if (!txDatas.Items[txDatas.Index].IsCoinSpent(op.Index)) {		// May be TxKey collision
+			TxData& d = txDatas.Items[txDatas.Index];	//!!!D
 			return;
 		}
-		for (auto& d : txDatas.Items)
-			if (!d.Utxo.empty() || d.LastSpendHeight > heightCur)
+		for (auto& d : txDatas.Items) {
+			if (!d.Utxo.empty()) {
+#ifdef _DEBUG
+				if (!d.Utxo.back())
+					Throw(CoinErr::InconsistentDatabase);
+#endif
 				return;
-		cTxes.Delete();		// Only when all UTXO are spent
+			}
+			if (d.LastSpendHeight > heightCur)
+				return;
+		}
+
+		cTxes.Delete();		// Only when there are no UTXO
 	}
 }
 
@@ -1276,7 +1285,7 @@ void DbliteBlockChainDb::InsertSpentTxOffsets(const unordered_map<HashValue, Spe
 }
 
 void DbliteBlockChainDb::SpendInputs(const Tx& tx) {
-	if (!tx.IsCoinBase()) {
+	if (!tx->IsCoinBase()) {
 		EXT_FOR(const TxIn& txIn, tx.TxIns()) {
 			UpdateCoins(txIn.PrevOutPoint, true, tx.Height);
 		}

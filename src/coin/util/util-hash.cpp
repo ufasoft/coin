@@ -12,13 +12,16 @@ using namespace Crypto;
 
 namespace Coin {
 
+static SHA256 s_sha256;
+static RIPEMD160 s_ripemd160;
+static Groestl512Hash s_groestl512hasher;
+
 HashValue SHA256_SHA256(RCSpan cbuf) {
-	SHA256 sha;
-	return sha.ComputeHash(sha.ComputeHash(cbuf));
+	return s_sha256.ComputeHash(s_sha256.ComputeHash(cbuf));
 }
 
 HashValue160 Hash160(RCSpan mb) {
-	return HashValue160(RIPEMD160().ComputeHash(SHA256().ComputeHash(mb)));
+	return HashValue160(s_ripemd160.ComputeHash(s_sha256.ComputeHash(mb)));
 }
 
 HashValue ScryptHash(RCSpan mb) {
@@ -31,8 +34,7 @@ HashValue NeoSCryptHash(RCSpan mb, int profile) {
 }
 
 HashValue GroestlHash(RCSpan mb) {
-	Groestl512Hash hf;
-	return HashValue(ConstBuf(hf.ComputeHash(hf.ComputeHash(mb)).data(), 32));
+	return HashValue(Span(s_groestl512hasher.ComputeHash(s_groestl512hasher.ComputeHash(mb)).data(), 32));
 }
 
 

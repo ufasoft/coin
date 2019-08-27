@@ -31,7 +31,7 @@ using namespace Ext::Inet;
 using P2P::Peer;
 
 #ifndef UCFG_COIN_GENERATE
-#	define UCFG_COIN_GENERATE 0 //!!!T (!UCFG_WCE)
+#	define UCFG_COIN_GENERATE (!UCFG_WCE)
 #endif
 
 #ifndef UCFG_COIN_GENERATE_TXES_FROM_POOL
@@ -381,7 +381,7 @@ public:
 	virtual void ReadSuffix(const BinaryReader& rd) {
 	}
 	bool HasWitness() const;
-	bool IsFinal(int height, const DateTime dt) const;
+	bool IsFinal(int height = 0, const DateTime dt = DateTime(0)) const;
 	virtual int64_t GetCoinAge() const {
 		Throw(E_NOTIMPL);
 	}
@@ -393,13 +393,11 @@ public:
 	bool IsCoinBase() const {
 		return m_txIns.empty() ? bool(m_bIsCoinBase) : m_txIns.size() == 1 && m_txIns[0].PrevOutPoint.IsNull();
 	}
-protected:
 	virtual bool IsCoinStake() const { return false; }
-
+protected:
 	const vector<TxIn>& TxIns() const;
 	virtual void CheckCoinStakeReward(int64_t reward, const Target& target) const {
 	}
-
 private:
 	friend class Tx;
 	friend class SignatureHasher;
@@ -503,9 +501,6 @@ public:
 	const vector<TxOut>& TxOuts() const { return m_pimpl->TxOuts; }
 	vector<TxOut>& TxOuts() { return m_pimpl->TxOuts; }
 	const vector<TxIn>& TxIns() const { return m_pimpl->TxIns(); }
-	bool IsFinal(int height = 0, const DateTime dt = DateTime(0)) const { return m_pimpl->IsFinal(height, dt); }
-	bool IsCoinBase() const { return m_pimpl->IsCoinBase(); }
-	bool IsCoinStake() const { return m_pimpl->IsCoinStake(); }
 
 	int64_t get_Fee() const;
 	DEFPROP_GET(int64_t, Fee);

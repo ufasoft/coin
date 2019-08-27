@@ -5,7 +5,7 @@
 		 	MaxMoney='21000000' MinTxFee='1000' InitBlockValue='50' HalfLife='210000' MaxTargetHex='1D00FFFF'
 		 	PayToScriptHashHeight='173500' BIP34Height='227931' BIP65Height='388381' BIP66Height='363725' BIP68Height='419327' SegwitHeight='481824'
 		 	CheckDupTxHeight='171200'
-		 	 ProtocolMagicHex='D9B4BEF9' DefaultPort='8333'
+		 	ProtocolMagicHex='D9B4BEF9' DefaultPort='8333'
 			BootUrls='dns://seed.bitcoin.sipa.be dns://dnsseed.bluematt.me dns://dnsseed.bitcoin.dashjr.org dns://seed.bitcoinstats.com'>
 
 		<AlertPubKey Key='04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284' />
@@ -26,6 +26,7 @@
 			BootUrls='dns://testnet-seed.bitcoin.petertodd.org dns://testnet-seed.bluematt.me'>
 		<Checkpoint Block='546' Hash='000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70' />
 	</Chain>
+
 
 	<Chain Name='Bitcoin Cash' Symbol='BCH'  AddressVersion='0' ScriptAddressVersion='5' Hrp='bitcoincash'
 		 	Genesis='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f'
@@ -52,6 +53,7 @@
 		<Checkpoint Block='1303885'  Hash='00000000000000479138892ef0e4fa478ccc938fb94df862ef5bde7e8dee23d3' />
 	</Chain>
 
+
 	<Chain Name='LiteCoin' Symbol='LTC' Algo='scrypt' FullPeriod='1' AddressVersion='48' ScriptAddressVersion='5' Hrp='ltc'
 			Genesis='12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2' InitBlockValue='50' BlockSpan='150'
 			MaxMoney='84000000' MinTxFee='100000'
@@ -66,7 +68,6 @@
 		<Checkpoint Block='500000' 	Hash='65858117fadcff3b591ad4cbd320ecd3b0a63ffda1db9609822cf09ade790aa9' />
 		<Checkpoint Block='1000000' Hash='8ceae698f0a2d338e39b213eb9c253a91a270ca6451a4d9bba7bf2c9e637dfda' />
 		<Checkpoint Block='1600000' Hash='d136037e14d275b7b71c06994b83a297297e045b74d48b84dc0ad5c893fc7fa9' />
-
 	</Chain>
 
 
@@ -89,7 +90,7 @@
 			BIP34Height='286' BIP65Height='982000' BIP66Height='286' SegwitHeight='70000'
 			InitBlockValue='100' MaxTargetHex='1E00FFFF' InitTargetHex='1E0FFFFF'  BlockSpan='60'
 			ProtocolMagicHex='0709110B' DefaultPort='17777'
-			BootUrls='dns://testnet1.groestlcoin.org dns://testnet2.groestlcoin.org dns://testp2pool.groestlcoin.org dns://testp2pool2.groestlcoin.org' >
+			BootUrls='dns://testnet-seed1.groestlcoin.org dns://testnet-seed2.groestlcoin.org' >
 		<Checkpoint Block='50000'	Hash='00000081951486bb535f8cffec8ac0641bd24b814f89641f6cc2cad737f18950' />
 		<Checkpoint Block='887766'	Hash='000000cc069338b7cd182dbf3e98dedd80c9ce85f26b78daaec0a6c964ffa501' />
 	</Chain>

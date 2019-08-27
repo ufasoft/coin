@@ -53,7 +53,7 @@ bool CoinEng::IsInitialBlockDownload() {
 	if (UpgradingDatabaseHeight)
 		return true;
 	Block bestBlock = BestBlock();
-	if (!bestBlock || bestBlock.Height < ChainParams.LastCheckpointHeight-INITIAL_BLOCK_THRESHOLD)
+	if (!bestBlock || bestBlock.Height < ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD)
 		return true;
 	DateTime now = Clock::now();
 	HashValue hash = Hash(bestBlock);

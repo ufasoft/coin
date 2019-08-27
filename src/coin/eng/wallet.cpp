@@ -76,14 +76,14 @@ void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
 }
 
 bool WalletTx::IsConfirmed(Wallet& wallet) const {
-	if (!IsFinal())
+	if (!m_pimpl->IsFinal())
 		return false;
 	if (DepthInMainChain >= 1)
 		return true;
 	if (!m_bFromMe && !wallet.IsFromMe(_self))
 		return false;
 	EXT_FOR (const Tx& tx, PrevTxes) {
-		if (!tx.IsFinal())
+		if (!tx.m_pimpl->IsFinal())
 			return false;
 		if (tx.DepthInMainChain < 1) {
 			if (!wallet.IsFromMe(tx))
@@ -164,7 +164,7 @@ int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 		cmd.ExecuteNonQuery();
 	} else {
 		wtx.Timestamp = wtx.Height >= 0 ? m_eng->GetBlockByHeight(wtx.Height).Timestamp : Clock::now();
-		if (wtx.IsCoinBase() && wtx.Comment.empty())
+		if (wtx->IsCoinBase() && wtx.Comment.empty())
 			wtx.Comment = "Mined";
 		MemoryStream ms;
 		DbWriter wr(ms);
@@ -209,6 +209,7 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 		bool bIsFromMe = IsFromMe(wtx),
 			bIsToMe = IsToMe(wtx);
 		TRC(2, txHash << boolalpha << ", IsFromMe: " << bIsFromMe << ", IsToMe: " << bIsToMe);
+		const auto& txOuts = wtx.TxOuts();
 		if (bIsFromMe) {
 //!!!?			SqliteCommand cmdCoin("UPDATE coins SET spent=1 WHERE txid=? AND nout=?", m_eng->m_cdb.m_dbWallet);
 			SqliteCommand cmdCoin("DELETE FROM coins WHERE txid=? AND nout=?", m_eng->m_cdb.m_dbWallet);
@@ -219,8 +220,8 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 					.ExecuteNonQuery();
 			}
 			HashValue160 hash160;
-			for (int i = 0; i < wtx.TxOuts().size(); ++i) {
-				const TxOut& txOut = wtx.TxOuts()[i];
+			for (int i = 0; i < txOuts.size(); ++i) {
+				const TxOut& txOut = txOuts[i];
 				Span scriptPubKey = txOut.get_ScriptPubKey();
 				if (!cdb.FindMine(scriptPubKey)) {
 					Address dest = TxOut::CheckStandardType(scriptPubKey);
@@ -237,8 +238,8 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 //			;
 		}
 		if (bIsToMe) {
-			for (int i = 0; i < wtx.TxOuts().size(); ++i) {
-				const TxOut& txOut = wtx.TxOuts()[i];
+			for (int i = 0; i < txOuts.size(); ++i) {
+				const TxOut& txOut = txOuts[i];
 				if (KeyInfo ki = cdb.FindMine(txOut.get_ScriptPubKey())) {
 					if (!m_eng->m_cdb.CmdFindCoin.Bind(1, txid).Bind(2, i).ExecuteReader().Read()) {
 						m_eng->m_cdb.CmdInsertCoin
@@ -326,7 +327,7 @@ void Wallet::OnBlockchainChanged() {
 		EXT_LOCK(MtxCurrentHeight) {
 			EXT_LOCK(m_eng->m_cdb.MtxDb) {
 				bool bUpdateWallet = m_eng->Mode == EngMode::Lite;
-				if (bUpdateWallet) {
+				if (!bUpdateWallet) {
 					EXT_FOR(const Tx & tx, block.get_Txes()) {
 						bUpdateWallet |= ProcessTx(tx);
 					}
@@ -456,7 +457,7 @@ CONTINUE_SCAN_LAB:
 		if (hashBest == Wallet.BestBlockHash) {
 			Wallet.ProcessPendingTxes();
 		} else {
-			ord = int(ord+m_i);
+			ord = int(ord + m_i);
 			m_count = Wallet.m_eng->BestBlockHeight() - ord + 1;
 			goto CONTINUE_SCAN_LAB;
 		}
@@ -549,9 +550,9 @@ void Wallet::ReacceptWalletTxes() {
 
 		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
 		try {
-			if (!wtx.IsCoinBase()) {
+			if (!wtx->IsCoinBase()) {
 				EXT_FOR (const Tx& txPrev, wtx.PrevTxes) {
-					if (!txPrev.IsCoinBase())
+					if (!txPrev->IsCoinBase())
 						m_eng->TxPool.AddToPool(txPrev, vQueue);
 				}
 				m_eng->TxPool.AddToPool(wtx, vQueue);
@@ -716,7 +717,7 @@ WalletTx Wallet::GetTx(const HashValue& hashTx) {
 }
 
 decimal64 Wallet::GetDecimalFee(const WalletTx& wtx) {
-	if (wtx.IsCoinBase())
+	if (wtx->IsCoinBase())
 		return 0;
 	int64_t sum = 0;
 	EXT_FOR (const TxIn& txIn, wtx.TxIns()) {
@@ -806,8 +807,7 @@ bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConf
 		Penny& coin = coins[i];
 		WalletTx wtx = GetTx(coin.OutPoint.TxHash);
 		int depth = wtx.DepthInMainChain;
-		if (wtx.IsConfirmed(_self) &&
-			(!wtx.IsCoinBase() || depth > m_eng->ChainParams.CoinbaseMaturity+20) &&
+		if (wtx.IsConfirmed(_self) && (!wtx->IsCoinBase() || depth > m_eng->ChainParams.CoinbaseMaturity + 20) &&
 			depth >= (wtx.m_bFromMe || IsFromMe(wtx) ? nConfMine : nConfTheirs))
 		{
 			if (coin.Value >= amount) {
@@ -935,12 +935,12 @@ void Wallet::Relay(const WalletTx& wtx) {
 #endif
 
 	EXT_FOR (const Tx& tx, wtx.PrevTxes) {
-		if (!tx.IsCoinBase()) {
+		if (!tx->IsCoinBase()) {
 			TxInfo txInfo(tx, tx.GetSerializeSize());
 			m_eng->Relay(txInfo);
 		}
 	}
-	if (!wtx.IsCoinBase()) {
+	if (!wtx->IsCoinBase()) {
 		TxInfo txInfo(wtx, wtx.GetSerializeSize());
 		m_eng->Relay(txInfo);
 	}
@@ -967,7 +967,7 @@ void Wallet::ResendWalletTxes(const DateTime& now) {
 					for (DbDataReader dr=m_eng->m_cdb.CmdPendingTxes.Bind(1, m_dbNetId).ExecuteReader(); dr.Read();) {
 						WalletTx wtx;
 						wtx.LoadFromDb(dr);
-						if (!wtx.IsCoinBase()) {
+						if (!wtx->IsCoinBase()) {
 
 #ifdef X_DEBUG//!!!D
 							{

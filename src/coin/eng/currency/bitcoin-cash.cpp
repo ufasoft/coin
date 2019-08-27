@@ -236,6 +236,10 @@ protected:
 		}
 	}
 
+	void OrderTxes(CTxes& txes) override {
+		sort(txes.begin() + 1, txes.end(), [](const Tx& a, const Tx& b) { return Hash(a) < Hash(b); });
+	}
+
 	vector<shared_future<TxFeeTuple>> ConnectBlockTxes(CConnectJob& job, const vector<Tx>& txes, int height) override {
 		if (height < m_heightMagneticAnomaly)
 			return base::ConnectBlockTxes(job, txes, height);
@@ -244,10 +248,10 @@ protected:
 		vector<shared_future<TxFeeTuple>> futsTx;
 		futsTx.reserve(txes.size());
 		for (auto& tx : txes)
-			if (!tx.IsCoinBase() || ChainParams.CoinbaseMaturity == 0)
+			if (!tx->IsCoinBase() || ChainParams.CoinbaseMaturity == 0)
 				job.TxoMap.AddAllOuts(Hash(tx), tx);
 		for (auto& tx : txes)
-			if (!tx.IsCoinBase())
+			if (!tx->IsCoinBase())
 				ConnectTx(job, futsTx, tx, height, bVerifySignature);
 		return futsTx;
 	}
