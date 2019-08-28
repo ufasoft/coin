@@ -37,7 +37,7 @@
 #endif
 
 #ifndef UCFG_BITCOIN_NPAR
-#	define UCFG_BITCOIN_NPAR 128
+#	define UCFG_BITCOIN_NPAR 256
 #endif
 
 

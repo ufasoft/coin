@@ -256,8 +256,8 @@ bool BitcoinWorkData::TestNonceGivesZeroH(uint32_t nonce) {
 }
 
 void CpuDevice::Start(BitcoinMiner& miner, thread_group *tr) {
-	for (int i=0; i<miner.ThreadCount; ++i) {
-		ptr<WorkerThread> t = new WorkerThread(miner, tr);
+	for (int i = 0; i < miner.ThreadCount; ++i) {
+		ptr<CpuMinerThread> t = new CpuMinerThread(miner, tr);
 		t->Device = this;
 		miner.Threads.push_back(t.get());
 		t->Start();
@@ -265,37 +265,36 @@ void CpuDevice::Start(BitcoinMiner& miner, thread_group *tr) {
 }
 
 BitcoinMiner::BitcoinMiner()
-	:	aHashCount(0)
-	,	aSubmittedCount(0)
-	,	aAcceptedCount(0)
-	,	MaxHeight(0)
-	,	NPAR(UCFG_BITCOIN_NPAR)
-	,	Verbosity(0)
-	,	GetworkPeriod(15)
-	,	Login(nullptr)
-	,	Password(nullptr)
-	,	ThreadCount(-1)
-	,	MaxGpuTemperature(Temperature::FromCelsius(MAX_GPU_TEMPERATURE))
-	,	MaxFpgaTemperature(Temperature::FromCelsius(MAX_FPGA_TEMPERATURE))
-	,	GpuIdleMilliseconds(1)
-	,	m_bTryGpu(true)
-	,	m_bTryFpga(true)
-	,	m_bLongPolling(true)
-	,	m_dtSwichToMainUrl(DateTime::MaxValue)
-	,	m_msWait(NORMAL_WAIT)
-	,	m_minGetworkQueue(MIN_GETWORK_QUEUE)
-	,	Speed(0)
-	,	CPD(0)
-	,	ChainsExpectedCount(0)
-	,	EntireHashCount(0)
-	,	Pooled(true)
-//!!!R	,	m_lastBlockCache(20)
+	: aHashCount(0)
+	, aSubmittedCount(0)
+	, aAcceptedCount(0)
+	, MaxHeight(0)
+	, NPAR(UCFG_BITCOIN_NPAR)
+	, Verbosity(0)
+	, GetworkPeriod(15)
+	, Login(nullptr)
+	, Password(nullptr)
+	, ThreadCount(-1)
+	, MaxGpuTemperature(Temperature::FromCelsius(MAX_GPU_TEMPERATURE))
+	, MaxFpgaTemperature(Temperature::FromCelsius(MAX_FPGA_TEMPERATURE))
+	, GpuIdleMilliseconds(1)
+	, m_bTryGpu(true)
+	, m_bTryFpga(true)
+	, m_bLongPolling(true)
+	, m_dtSwichToMainUrl(DateTime::MaxValue)
+	, m_msWait(NORMAL_WAIT)
+	, m_minGetworkQueue(MIN_GETWORK_QUEUE)
+	, Speed(0)
+	, CPD(0)
+	, ChainsExpectedCount(0)
+	, EntireHashCount(0)
+	, Pooled(true)
 #if UCFG_BITCOIN_TRACE
-	,	m_pTraceStream(&cerr)
-	,	m_pWTraceStream(&wcerr)
+	, m_pTraceStream(&cerr)
+	, m_pWTraceStream(&wcerr)
 #else
-	,	m_pTraceStream(&GetNullStream())
-	,	m_pWTraceStream(&GetWNullStream())
+	, m_pTraceStream(&GetNullStream())
+	, m_pWTraceStream(&GetWNullStream())
 #endif
 {
 	HashAlgo = Coin::HashAlgo::Sha256;
@@ -915,18 +914,13 @@ void BitcoinMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData&
 	}
 }
 
-bool BitcoinMiner::TestAndSubmit(BitcoinWorkData *wd, uint32_t nonce) {
-	wd->Nonce = betoh(nonce);
+bool BitcoinMiner::TestAndSubmit(BitcoinWorkData *wd, uint32_t beNonce) {
+	wd->Nonce = betoh(beNonce);
 	HashValue hash = Hasher::Find(wd->HashAlgo).CalcWorkDataHash(*wd);
 
-	TRC(3, "Pre-result Nonce Found: " << hex << nonce << ", hash: " << hash);
+	TRC(3, "Pre-result Nonce Found: " << hex << wd->Nonce << ", hash: " << hash);
 
 	if (hash < wd->HashTarget) {
-
-#ifdef X_DEBUG//!!!D
-		cout << "\nMerkle: " << wd->MerkleRoot << "\n";
-#endif
-
 		EXT_LOCK (m_csCurrentData) {
 			WorksToSubmit.push_back(wd);
 		}
@@ -1214,8 +1208,8 @@ void BitcoinMiner::Stop() {
 	Started = false;
 }
 
-void WorkerThread::Execute() {
-	Name = "WorkerThread";
+void CpuMinerThread::Execute() {
+	Name = "CpuMinerThread";
 
 	Priority = THREAD_PRIORITY_LOWEST;
 
@@ -1277,36 +1271,20 @@ HashValue Hasher::CalcWorkDataHash(const BitcoinWorkData& wd) {
 	int nWords = int(GetDataSize() / sizeof(uint32_t));
 	ASSERT(nWords <= size(buf));
 	const uint32_t *p = (uint32_t*)wd.Data.constData();
-	for (int i=0; i<nWords; ++i)
+	for (int i = 0; i < nWords; ++i)
 		buf[i] = betoh(p[i]);
-	return CalcHash(ConstBuf(buf, nWords*sizeof(uint32_t)));
+	return CalcHash(ConstBuf(buf, nWords * sizeof(uint32_t)));
 }
 
 void Hasher::SetNonce(uint32_t *buf, uint32_t nonce) noexcept {
-	buf[19] = nonce;
+	buf[19] = htole(nonce);
 }
 
 void Hasher::MineNparNonces(BitcoinMiner& miner, BitcoinWorkData& wd, uint32_t *buf, uint32_t nonce) {
-	size_t cbBuf = GetDataSize();
+	Span s((uint8_t*)buf, GetDataSize());
 	for (int i = 0; i < UCFG_BITCOIN_NPAR; ++i, ++nonce) {
 		SetNonce(buf, nonce);
-#ifdef X_DEBUG//!!!D
-		SetNonce(buf, nonce = 0x00667935);
-#endif
-		HashValue hash = CalcHash(ConstBuf(buf, cbBuf));
-#ifdef X_DEBUG //!!!D
-		wd.Nonce = nonce;
-		HashValue hash2 = Hasher::Find(wd.HashAlgo).CalcWorkDataHash(wd);
-		ASSERT(hash == hash2);
-
-
-/*		if (rand() < 10) {
-			EXT_LOCK (miner.m_csCurrentData) {
-				miner.WorksToSubmit.push_back(&wd);
-			}
-			miner.m_evGetWork.Set();
-		}*/
-#endif
+		HashValue hash = CalcHash(s);
 		if (!hash.data()[31] && hash <= wd.HashTarget)
 			miner.TestAndSubmit(&wd, htobe(nonce));
 	}
@@ -1320,7 +1298,7 @@ uint32_t Hasher::MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd) {
 	for (int i=0; i<nWords; ++i)
 		buf[i] = betoh(p[i]);
 	uint32_t nonce = wd.FirstNonce;
-	for (uint32_t end=wd.LastNonce+1; nonce!=end && !Ext::this_thread::interruption_requested(); nonce+=UCFG_BITCOIN_NPAR) {
+	for (uint32_t end=wd.LastNonce+1; nonce!=end && !Ext::this_thread::interruption_requested(); nonce += UCFG_BITCOIN_NPAR) {
 		MineNparNonces(miner, wd, buf, nonce);
 		++miner.aHashCount;
 		if (wd.Height!=0 && wd.Height!=uint32_t(-1) && wd.Height!=miner.MaxHeight)
@@ -1330,11 +1308,3 @@ uint32_t Hasher::MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& wd) {
 }
 
 } // Coin::
-
-
-
-
-
-
-
-

@@ -461,9 +461,9 @@ public:
 					os << ", Rescanning block " << m_wallet.CurrentHeight;
 				}
 				if (m_wallet.MiningEnabled) {
-					char sNum[20];
-					sprintf(sNum, "%3.2f", m_wallet.Speed / 1000000);
-					os << ", Mining " << sNum << " MH/s";
+					char sNum[30];
+					sprintf(sNum, ", Mining %3.1f MH/s", m_wallet.Speed / 1000000);
+					os << sNum;
 				}
 			} while (false);
 		}

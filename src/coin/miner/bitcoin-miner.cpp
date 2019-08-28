@@ -152,26 +152,27 @@ public:
 		for (Hasher *p=Hasher::GetRoot(); p; p=p->Next, ++nHasher) {
 			cout << (nHasher ? "|" : "") << p->Name;
 		}
-		cout <<	"|<seconds>   hashing algorithm or time between getwork requests 1..60, default 15\n"
-				"  -A user-agent       Set custom User-agent string in HTTP header, default: Ufasoft bitcoin miner \n"
-				"  -g yes|no           set \'no\' to disable GPU, default \'yes\'\n"
-				"  -h                  this help\n"
-				"  -i index|name       select device from Device List, can be used multiple times, default - all devices\n"
-				"  -I intensity        Intensity of GPU usage [-10..10], default 0\n"
-				"  -l yes|no           set \'no\' to disable Long-Polling, default \'yes\'\n"
-				"  -o url              in form http://user:password@server.tld:port/path, stratum+tcp://server.tld:port, by default http://127.0.0.1:8332\n"
-				"  -p password         Password to Pool\n"
-				"  -t threads          Number of threads for CPU mining, 0..256, by default is number of CPUs (Cores), 0 - disable CPU mining\n"
+		cout <<	"|<seconds>   hashing algorithm or time between getwork requests 1..60, default 15"
+				"\n  -A user-agent       Set custom User-agent string in HTTP header, default: Ufasoft bitcoin miner"
+				"\n  -g yes|no           set \'no\' to disable GPU, default \'yes\'"
+				"\n  -h                  this help"
+				"\n  -i index|name       select device from Device List, can be used multiple times, default - all devices"
+				"\n  -I intensity        Intensity of GPU usage [-10..10], default 0"
+				"\n  -l yes|no           set \'no\' to disable Long-Polling, default \'yes\'"
+				"\n  -o url              in form http://user:password@server.tld:port/path, stratum+tcp://server.tld:port, by default http://127.0.0.1:8332"
+				"\n  -p password         Password to Pool"
+				"\n  -t threads          Number of threads for CPU mining, 0..256, by default is number of CPUs (Cores), 0 - disable CPU mining"
 #if UCFG_BITCOIN_THERMAL_CONTROL
-				"  -T temperature      max temperature in Celsius degrees, default: " + Convert::ToString(MAX_GPU_TEMPERATURE) + "\n"
+				"\n  -T temperature      max temperature in Celsius degrees, default: " + Convert::ToString(MAX_GPU_TEMPERATURE) + ""
 #endif
-				"  -u login            Login to Pool\n"
+				"\n  -u login            Login to Pool"
 #if UCFG_COIN_MINER_SERVICE
-				"  -S                  Install service\n"
-				"  -U                  Uninstall service\n"
+				"\n  -S                  Install service"
+				"\n  -U                  Uninstall service"
 #endif
-			    "  -v                  Verbose output\n"
-				"  -x type=host:port   Use HTTP or SOCKS proxy. Examples: -x http=127.0.0.1:3128, -x socks=127.0.0.1:1080\n"
+			    "\n  -v                  Verbose output"
+				"\n  -x type=host:port   Use HTTP or SOCKS proxy. Examples: -x http=127.0.0.1:3128, -x socks=127.0.0.1:1080"
+				"\n"
 			 << endl;
 	}
 
@@ -198,9 +199,7 @@ public:
 #endif
 
 		bool bMine = false;
-
 		vector<String> selectedDevs;
-
 
 		for (int arg; (arg = getopt(Argc, Argv, "a:A:g:hi:I:l:"
 #if UCFG_BITCOIN_THERMAL_CONTROL

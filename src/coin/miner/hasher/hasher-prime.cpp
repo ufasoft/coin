@@ -294,7 +294,7 @@ uint32_t PrimeHasher::MineOnCpu(BitcoinMiner& miner, BitcoinWorkData& rwd) {
 	while (!Ext::this_thread::interruption_requested() && (!wd.Interruptible || wd.Height == miner.MaxHeight)) {
 		HashValue hashPow = Hasher::Find(wd.HashAlgo).CalcWorkDataHash(wd);
 		Bn bnHash;
-		if (hashPow[31] < 0x80 || !(bnHash = Bn::FromBinary(hashPow, Endian::Little)).DivisibleP(hashFactor))
+		if (hashPow.data()[31] < 0x80 || !(bnHash = Bn::FromBinary(hashPow.ToSpan(), Endian::Little)).DivisibleP(hashFactor))
 			goto LAB_NEXT_NONCE;
 		{
 			Bn hashMultiplier = bnHash * fixedMultiplier;

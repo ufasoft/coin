@@ -401,7 +401,7 @@ void XptPeer::Send(ptr<P2P::Message> m) {
 
 	MemoryStream ms;
 	BinaryWriter(ms).Ref() << (uint32_t)static_cast<XptMessage*>(m.get())->Opcode << *m;
-	Blob blob = ms.Blob;
+	Span blob = ms.AsSpan();
 	*(uint32_t*)blob.data() |= htole(uint32_t(blob.size() - 4) << 8);
 	SendBuf(blob);
 }

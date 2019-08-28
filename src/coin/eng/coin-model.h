@@ -356,13 +356,13 @@ public:
 	mutable vector<TxIn> m_txIns;
 	uint32_t LockBlock;
 	int32_t Height;
+#if UCFG_COIN_TXES_IN_BLOCKTABLE
+	uint32_t OffsetInBlock;
+#endif
 	mutable volatile uint8_t m_nBytesOfHash;
 	CBool m_bIsCoinBase;
 	mutable volatile bool m_bLoadedIns;
 
-#if UCFG_COIN_TXES_IN_BLOCKTABLE
-	uint32_t OffsetInBlock;
-#endif
 
 	TxObj();
 
@@ -1081,9 +1081,6 @@ class CConnectJob : noncopyable {
 public:
 	CoinEng& Eng;
 
-//!!!R	typedef unordered_map<HashValue, ptr<ConnectTask>> CHashToTask;
-//!!!R	CHashToTask HashToTask;
-//!!!R	unordered_set<ptr<ConnectTask>> Tasks;
 	EnabledFeatures Features;
 	int32_t Height;
 	//!!!?R	CFutureTxMap TxMap;

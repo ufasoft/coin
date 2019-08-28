@@ -12,10 +12,10 @@ namespace Coin {
 class GroestlHasher : public Hasher {
 public:
 	GroestlHasher()
-		:	Hasher("groestl", HashAlgo::Groestl)
+		: Hasher("groestl", HashAlgo::Groestl)
 	{}
 
-	HashValue CalcHash(const ConstBuf& cbuf) override {
+	HashValue CalcHash(RCSpan cbuf) override {
 		return GroestlHash(cbuf);
 	}
 

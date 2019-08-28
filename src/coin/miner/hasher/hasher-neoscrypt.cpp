@@ -7,10 +7,10 @@ namespace Coin {
 class NeoSCryptHasher : public Hasher {
 public:
 	NeoSCryptHasher()
-		:	Hasher("neoscrypt", HashAlgo::NeoSCrypt)
+		: Hasher("neoscrypt", HashAlgo::NeoSCrypt)
 	{}
 
-	HashValue CalcHash(const ConstBuf& cbuf) override {
+	HashValue CalcHash(RCSpan cbuf) override {
 		array<uint32_t, 8> res = CalcNeoSCryptHash(cbuf);
 		return HashValue(ConstBuf(res.data(), 32));
 	}

@@ -7,10 +7,10 @@ namespace Coin {
 class MetisHasher : public Hasher {
 public:
 	MetisHasher()
-		:	Hasher("metis", HashAlgo::Metis) 
+		: Hasher("metis", HashAlgo::Metis) 
 	{}
 
-	HashValue CalcHash(const ConstBuf& cbuf) override {
+	HashValue CalcHash(RCSpan cbuf) override {
 		return MetisHash(cbuf);
 	}
 } g_metisHasher;

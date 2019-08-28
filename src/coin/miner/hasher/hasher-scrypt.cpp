@@ -12,10 +12,10 @@ namespace Coin {
 class ScryptHasher : public Hasher {
 public:
 	ScryptHasher()
-		:	Hasher("scrypt", HashAlgo::SCrypt)
+		: Hasher("scrypt", HashAlgo::SCrypt)
 	{}
 
-	HashValue CalcHash(const ConstBuf& cbuf) override {
+	HashValue CalcHash(RCSpan cbuf) override {
 		array<uint32_t, 8> res = CalcSCryptHash(cbuf);
 		return HashValue(ConstBuf(res.data(), 32));
 	}

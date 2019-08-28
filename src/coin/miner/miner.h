@@ -134,7 +134,7 @@ public:
 	ComputationArchitecture *m_pNext;
 
 	ComputationArchitecture()
-		:	m_pNext(exchange(s_pChain, this))
+		: m_pNext(exchange(s_pChain, this))
 	{
 	}
 
@@ -208,11 +208,11 @@ private:
 
 class XptWorkData;
 
-class WorkerThread : public WorkerThreadBase {
+class CpuMinerThread : public WorkerThreadBase {
 	typedef WorkerThreadBase base;
 public:
-	WorkerThread(BitcoinMiner& miner, thread_group *tr)
-		:	base(miner, tr)
+	CpuMinerThread(BitcoinMiner& miner, thread_group *tr)
+		: base(miner, tr)
 	{}
 
 	String GetDeviceName() override {
@@ -250,7 +250,7 @@ class GpuThreadBase : public WorkerThreadBase {
 	typedef WorkerThreadBase base;
 public:
 	GpuThreadBase(BitcoinMiner& miner, thread_group *tr)
-		:	base(miner, tr)
+		: base(miner, tr)
 	{}
 };
 
@@ -274,7 +274,7 @@ public:
 	int Timeout;
 
 	BitcoinWebClient()
-		:	Timeout(-1)
+		: Timeout(-1)
 	{}
 protected:
 	void OnHttpWebRequest(HttpWebRequest& req) {
@@ -289,11 +289,11 @@ void ThrowRejectionError(RCString reason);
 
 class StratumTask : public JsonRpcRequest {
 public:
-	int State;
 	ptr<BitcoinWorkData> m_wd;
+	int State;
 
 	StratumTask(int state)
-		:	State(0)
+		: State(0)
 	{}
 };
 
@@ -305,7 +305,7 @@ public:
 	ptr<Coin::MinerBlock> MinerBlock;
 
 	ConnectionClient(BitcoinMiner& miner)
-		:	Miner(miner)
+		: Miner(miner)
 	{}
 
 	virtual ~ConnectionClient() {}
@@ -319,12 +319,12 @@ public:
 class StratumClient : public AsyncTextClient, public ConnectionClient {
 	typedef AsyncTextClient base;
 public:
-	int State;
+	HashValue HashTarget;					// these values have the same meaning
 	Ext::Inet::JsonRpc JsonRpc;
 	Blob ExtraNonce1, ExtraNonce2;
 
-	HashValue HashTarget;					// these values have the same meaning
 	double CurrentDifficulty;				//
+	int State;
 
 	StratumClient(Coin::BitcoinMiner& miner);
 	void Call(RCString method, const vector<VarValue>& params, ptr<StratumTask> task = nullptr);
@@ -339,13 +339,24 @@ protected:
 
 class MINER_CLASS BitcoinMiner : public IMiner {
 	typedef BitcoinMiner class_type;
+
+	CInt<int> m_getWorkMethodLevel;
+
+	String BitcoinUrl;
+	vector<SUrlTtr> HostList;
+	CInt<int> HostIndex;
+
+	String GetCurrentUrl();
+
+	mutex m_csLongPollingThread;
+	ptr<Thread> m_LongPollingThread;
+
+	Coin::HashAlgo m_hashAlgo;
 public:
-	int GetworkPeriod;
-	float Speed;					// float to be atomic
-	int64_t EntireHashCount;
-	float CPD; 						//!!! should be atomic
+	HashValue HashBest;
+
 	DateTime DtStart;
-	volatile uint32_t MaxHeight;
+	int64_t EntireHashCount;
 
 	mutex m_csGetWork;
 	ManualResetEvent m_evDataReady;
@@ -353,8 +364,6 @@ public:
 
 	int GpuIdleMilliseconds;
 	CBool m_bTryGpu, m_bTryFpga, m_bLongPolling;
-
-	HashValue HashBest;
 
 	mutex MtxDevices;
 	vector<ptr<ComputationDevice>> Devices;
@@ -389,31 +398,31 @@ public:
 	list<ptr<BitcoinWorkData>> WorksToSubmit;
 
 	DateTime m_dtNextGetWork;
-	CBool Pooled;
 
 	String MainBitcoinUrl, Login, Password;
 	DateTime m_dtSwichToMainUrl;
 	String ProxyString;
 
-	int ThreadCount;
 	observer_ptr<thread_group> m_tr;
 	vector<ptr<Thread> > Threads;
 	ptr<Thread> GetWorkThread;
 	ptr<Thread> GpuThread;
 	int m_minGetworkQueue;
+	int ThreadCount;
 	Temperature MaxGpuTemperature, MaxFpgaTemperature;
 
-//!!!R	typedef LruMap<HashValue, Coin::MinerBlock> CLastBlockCache;
-//!!!R	CLastBlockCache m_lastBlockCache;
-
+	int GetworkPeriod;
+	float Speed;					// float to be atomic
+	float CPD; 						//!!! should be atomic
+	volatile uint32_t MaxHeight;
 
 	CBool m_bStop;
 	CBool m_bInited;
 	CBool Started;
+	CBool Pooled;
 
 	BitcoinMiner();
 	virtual ~BitcoinMiner() {}
-
 
 	void Release() override { delete this; }
 
@@ -440,7 +449,7 @@ public:
 		Intensity = v;
 	}
 
-	bool TestAndSubmit(BitcoinWorkData *wd, uint32_t nonce);
+	bool TestAndSubmit(BitcoinWorkData *wd, uint32_t beNonce);
 	virtual String GetCalIlCode(bool bEvergreen);
 	virtual String GetOpenclCode();
 	virtual String GetCudaCode();
@@ -472,20 +481,7 @@ public:
 
 	ptr<BitcoinWorkData> GetTestData();
 private:
-	CInt<int> m_getWorkMethodLevel;
-
-	String BitcoinUrl;
-	vector<SUrlTtr> HostList;
-	CInt<int> HostIndex;
-
-	String GetCurrentUrl();
-
-	mutex m_csLongPollingThread;
-	ptr<Thread> m_LongPollingThread;
-
-	Coin::HashAlgo m_hashAlgo;
-
-	friend class WorkerThread;
+	friend class CpuMinerThread;
 	friend class LongPollingThread;
 	friend class GetWorkThread;
 };
@@ -501,7 +497,7 @@ public:
 	CBool m_bIsVector2;
 
 	GpuTask(GpuMiner& gpuMiner)
-		:	m_gpuMiner(gpuMiner)
+		: m_gpuMiner(gpuMiner)
 	{}
 
 	virtual void Prepare(const BitcoinWorkData& wd, WorkerThreadBase *pwt) =0;
@@ -519,7 +515,7 @@ public:
 
 	GpuMiner(BitcoinMiner& miner)
 		: Miner(miner)
-		, DevicePortion(1024*1024/UCFG_BITCOIN_NPAR)
+		, DevicePortion(1024 * 1024 / UCFG_BITCOIN_NPAR)
 	{}
 
 //!!!	virtual void InitBeforeRun() {}
@@ -577,9 +573,9 @@ public:
 	HashAlgo Algo;
 
 	Hasher(RCString name, HashAlgo algo)
-		:	base(true)
-		,	Name(name)
-		,	Algo(algo)
+		: base(true)
+		, Name(name)
+		, Algo(algo)
 	{}
 
 	static MINER_CLASS Hasher *GetRoot();
@@ -596,4 +592,3 @@ protected:
 
 
 } // Coin::
-
