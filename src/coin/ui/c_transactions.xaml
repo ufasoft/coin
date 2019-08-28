@@ -19,26 +19,28 @@
 			</ListView.ContextMenu>
 			<ListView.View>
 				<GridView>
+					<GridViewColumn  DisplayMemberBinding="{Binding Status}" Width="36">
+						<GridViewColumnHeader Tag="Status" Content="Status" />
+					</GridViewColumn>
 					<GridViewColumn DisplayMemberBinding="{Binding Timestamp, Converter={StaticResource dateTimeConverter}}" Width="auto">
-						<GridViewColumnHeader  Tag="Timestamp" Content="Date Time" />
+						<GridViewColumnHeader Tag="Timestamp" Content="Date Time" />
 					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Debit}"  Width="50">
-						<GridViewColumnHeader  Tag="Debit" Content="Debit" />
-					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Credit}"  Width="50">
-						<GridViewColumnHeader Tag="Credit" Content="Credit" />
+					<GridViewColumn Width="66">
+						<GridViewColumnHeader Tag="Amount" Content="Amount"/>
+						<GridViewColumn.CellTemplate>
+    	   					<DataTemplate>
+        	    				<TextBlock x:Name="Txt" Text="{Binding Path=Amount}" Foreground="{Binding Path=AmountColor}" />
+							</DataTemplate>
+						</GridViewColumn.CellTemplate>
 					</GridViewColumn>
 					<GridViewColumn DisplayMemberBinding="{Binding Fee}"  Width="60">
 						<GridViewColumnHeader Tag="Fee" Content="Fee" />
 					</GridViewColumn>
-					<GridViewColumn  DisplayMemberBinding="{Binding Confirmations}" Width="70">
-						<GridViewColumnHeader  Tag="Confirmations" Content="Confirmations" />
-					</GridViewColumn>
 					<GridViewColumn  DisplayMemberBinding="{Binding Address}" Width="150" >
-						<GridViewColumnHeader  Tag="Address" Content="Address" />
+						<GridViewColumnHeader Tag="Address" Content="Address" />
 					</GridViewColumn>
 					<GridViewColumn DisplayMemberBinding="{Binding Comment}" Width="150" >
-						<GridViewColumnHeader  Tag="Comment" Content="Comment" />
+						<GridViewColumnHeader Tag="Comment" Content="Comment" />
 					</GridViewColumn>
 					<GridViewColumn DisplayMemberBinding="{Binding Hash}" Width="110" >
 						<GridViewColumnHeader Tag="Hash" Content="Hash" />
