@@ -15,8 +15,8 @@ ELSE
 ENDIF
 
 
-EXTRN g_sha256_hinit:PTR BYTE
-EXTRN g_sha256_k:PTR BYTE
+EXTRN s_pSha256_hinit:PTR BYTE
+EXTRN s_pSha256_k:PTR BYTE
 
 
 .CODE
@@ -44,7 +44,7 @@ ELSE
 	mov	npar, r9
 ENDIF
 
-	lea	r14, g_sha256_k
+	mov	r14, s_pSha256_k
 ELSE
 	CalcSha256	PROC PUBLIC USES EBX ECX EDX ESI EDI, w:DWORD, midstate:DWORD, init:DWORD, npar:DWORD, pnonce:DWORD
 ENDIF
@@ -139,7 +139,8 @@ LAB_LOOP:
 IF X64
 	add	edx, DWORD PTR [r14+zdi*4]
 ELSE
-	add	edx, DWORD PTR g_sha256_k[zdi*4]
+	mov	ebx, s_pSha256_k
+	add	edx, DWORD PTR ebx[zdi*4]
 ENDIF
 	inc	zdi
 	add	edx, [zsp+7*ZWORD_SIZE+ZWORD_SIZE*1]	; +h
@@ -217,12 +218,13 @@ ENDIF
 	mov	zcx, 61
 	mov	zax, 16
 	xor	zdi, zdi
-	mov	zsi, OFFSET g_sha256_hinit
+	mov	zsi, s_pSha256_hinit
 	jmp	LAB_SHA
 LAB_DONE:
 	mov	eax, [zsp+4*ZWORD_SIZE]		; +e
 	lea	zsp, [zsp+(64+8)*ZWORD_SIZE]
-	add	eax, DWORD PTR g_sha256_hinit[7*4]
+	mov	zbx, s_pSha256_hinit
+	add	eax, DWORD PTR [zbx + 7*4]
 	jz	LAB_RET
 	mov	zbx, pnonce
 	inc	DWORD PTR [zbx]
@@ -234,7 +236,7 @@ LAB_RET:
 	ret
 CalcSha256	ENDP
 
-EXTRN g_4sha256_k:PTR BYTE
+EXTRN s_p4Sha256_k:PTR BYTE
 
 IF X64
 IFDEF __JWASM__			; UNIX calling convention
@@ -252,7 +254,7 @@ ELSE
 	mov	init, r8
 	mov	npar, r9
 ENDIF
-	lea	r15, g_4sha256_k
+	mov	r15, s_p4sha256_k
 ELSE
 	CalcSha256Sse	PROC PUBLIC USES EBX ECX EDX ESI EDI, w:DWORD, midstate:DWORD, init:DWORD, npar:DWORD, pnonce:DWORD
 ENDIF
@@ -372,7 +374,8 @@ IF X64
 	paddd	xmm6, OWORD PTR [r15+zax*4]
 ELSE
 	movdqa	xmm2, [zsp+6*16]
-	paddd	xmm6, OWORD PTR g_4sha256_k[zax*4]
+	mov	zdx, s_p4Sha256_k
+	paddd	xmm6, OWORD PTR [zdx + zax*4]
 ENDIF
 	pandn	xmm1, xmm2				; ~e & g
 
@@ -441,7 +444,7 @@ ENDIF
 	pslld	xmm2, 11
 	pxor	xmm7, xmm2
 	paddd	xmm7, xmm6			; a = t1 + (Rotr32(a, 2) ^ Rotr32(a, 13) ^ Rotr32(a, 22)) + maj(a, b, c);
-	
+
 	cmp	zax, zcx
 	jb	LAB_LOOP
 
@@ -486,10 +489,11 @@ ENDIF
 	mov	zcx, 61*4
 	mov	zax, 16*4
 	xor	zdi, zdi
-	mov	zdx, OFFSET g_sha256_hinit
+	mov	zdx, s_pSha256_hinit
 	jmp	LAB_SHA
 LAB_DONE:
-	movd	xmm1, DWORD PTR g_sha256_hinit[7*4]
+	mov	zax, s_pSha256_hinit
+	movd	xmm1, DWORD PTR [zax + 7*4]
 	pshufd  xmm1, xmm1, 0
 	paddd	xmm0, xmm1
 	pxor	xmm1, xmm1

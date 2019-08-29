@@ -83,9 +83,9 @@ public:
 
 		T a = v[0], b = v[1], c = v[2], d = v[3], e = v[4], f = v[5], g = v[6], h = v[7];
 
-		for (int j=nFrom; j<n; ++j) {
-//!!!			T t2 = (Rotr32(a, 2) ^ Rotr32(a, 13) ^ Rotr32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
-			T t1 = h + (Rotr32(e, 6) ^ Rotr32(e, 11) ^ Rotr32(e, 25)) + ((e & f) ^ AndNot(e, g)) + Expand32<T>(::g_sha256_k[j]) + w[j];
+		for (int j = nFrom; j < n; ++j) {
+			//!!!			T t2 = (Rotr32(a, 2) ^ Rotr32(a, 13) ^ Rotr32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+			T t1 = h + (Rotr32(e, 6) ^ Rotr32(e, 11) ^ Rotr32(e, 25)) + ((e & f) ^ AndNot(e, g)) + Expand32<T>(s_pSha256_k[j]) + w[j];
 			h = g; g = f; f = e;
 			e = d+t1;
 			d = c; c = b; b = a;
