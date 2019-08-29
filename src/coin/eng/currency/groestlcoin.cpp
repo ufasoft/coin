@@ -129,8 +129,12 @@ protected:
 
 };
 
-
-
 static CurrencyFactory<GroestlcoinEng> s_groestlcoin("Groestlcoin"), s_groestlcoinTestnet("Groestlcoin-testnet");
+
+#if UCFG_COIN_GENERATE
+	class GroestlHasher;
+	extern GroestlHasher g_groestlHasher;
+	static GroestlHasher* s_pGroestlHasher = &g_groestlHasher;
+#endif // UCFG_COIN_GENERATE
 
 } // Coin::
