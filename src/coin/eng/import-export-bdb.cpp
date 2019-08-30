@@ -171,8 +171,14 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
 				String comment = dr.GetString(2);
 				if (!comment.empty()) {
-					Address addr(*m_eng, AddressType(dr.GetInt32(1)), HashValue160(dr.GetBytes(0)), 0, comment);
-					w.Write(make_pair(string("name"), addr.ToString()), comment);
+					AddressType typ = AddressType(dr.GetInt32(1));
+					Span data = dr.GetBytes(0);
+					Address a = typ == AddressType::Bech32
+						? TxOut::CheckStandardType(data)
+						: Address(*m_eng, typ, HashValue160(data));
+					a->Type = typ;			// override for Bech32
+					a->Comment = comment;
+					w.Write(make_pair(string("name"), a.ToString()), comment);
 				}
 			}
 		}

@@ -598,7 +598,6 @@ public:
 
 	uint8_t WitnessVer() const { return m_pimpl->WitnessVer; }
 	String ToString() const override { return m_pimpl->ToString(); }
-	Blob ToScriptPubKey() const { return m_pimpl->ToScriptPubKey(); }
 	explicit operator HashValue160() const;
 	explicit operator HashValue() const;
 

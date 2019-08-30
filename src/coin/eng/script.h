@@ -16,7 +16,6 @@ class Tx;
 class Script;
 class Address;
 
-
 const unsigned
     WITNESS_V0_SCRIPTHASH_SIZE = 32,
     WITNESS_V0_KEYHASH_SIZE = 20;

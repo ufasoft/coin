@@ -269,8 +269,21 @@ public:
 									wtx.Amount = -wtx.Amount;
 								break;
 							}
+							break;
+						case AddressType::WitnessV0KeyHash:
+							if (!cdb.Hash160ToKey.count((HashValue160)to))
+								wtx.Amount = -wtx.Amount;
+							break;
+						case AddressType::WitnessV0ScriptHash:
+							{
+								MemoryStream ms;
+								ScriptWriter(ms) << Opcode::OP_RETURN << to.Data();
+								HashValue160 hash160 = Hash160(ms);
+								if (!cdb.P2SHToKey.count(Hash160(hash160)))	//!!!?
+									wtx.Amount = -wtx.Amount;
+							}
+							break;
 						}
-
 						vec.push_back(wtx);
 					}
 				}

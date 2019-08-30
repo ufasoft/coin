@@ -134,7 +134,7 @@ static CurrencyFactory<GroestlcoinEng> s_groestlcoin("Groestlcoin"), s_groestlco
 #if UCFG_COIN_GENERATE
 	class GroestlHasher;
 	extern GroestlHasher g_groestlHasher;
-	static GroestlHasher* s_pGroestlHasher = &g_groestlHasher;
+	static GroestlHasher* s_pGroestlHasher = &g_groestlHasher;		// Reference to link GroestlHasher into static build
 #endif // UCFG_COIN_GENERATE
 
 } // Coin::

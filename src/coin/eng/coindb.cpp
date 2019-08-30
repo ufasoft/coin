@@ -676,7 +676,7 @@ KeyInfo CoinDb::GetMyKeyInfoByScriptHash(const HashValue160& hash160) {
 }
 
 Blob CoinDb::GetMyRedeemScript(const HashValue160& hash160) {
-	return GetMyKeyInfoByScriptHash(hash160).ToAddress().ToScriptPubKey();
+	return GetMyKeyInfoByScriptHash(hash160).ToAddress()->ToScriptPubKey();
 }
 
 P2P::Link *CoinDb::CreateLink(thread_group& tr) {

@@ -307,7 +307,7 @@ LAB_DECRYPTED:
 				addresses.erase(it);
 			}
 
-			Blob redeemScript = Address(eng, AddressType::P2PKH, pubKeyHash).ToScriptPubKey();
+			Blob redeemScript = Address(eng, AddressType::P2PKH, pubKeyHash)->ToScriptPubKey();
 			a = Address(eng, AddressType::Bech32, SHA256().ComputeHash(redeemScript));
 			if ((it = addresses.find(a)) != addresses.end()) {
 				ki->Comment = it->Comment;

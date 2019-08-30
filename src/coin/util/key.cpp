@@ -307,7 +307,7 @@ CanonicalPubKey CanonicalPubKey::FromCompressed(RCSpan cbuf) {
 }
 
 HashValue160 CanonicalPubKey::get_ScriptHash() const {
-	Blob redeemScript = Address(*(HasherEng*)0, AddressType::P2PKH, Hash160).ToScriptPubKey();
+	Blob redeemScript = Address(*(HasherEng*)0, AddressType::P2PKH, Hash160)->ToScriptPubKey();
 	return Coin::Hash160(redeemScript);
 }
 

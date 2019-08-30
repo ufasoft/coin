@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -18,9 +18,6 @@ using GuiComp;
 using Interop.coineng;
 
 namespace Coin {
-    /// <summary>
-    /// Interaction logic for c_transactions.xaml
-    /// </summary>
     public partial class CtlTransactions : UserControl {
         ListViewSortHelper ListViewSortHelper = new ListViewSortHelper();
 
@@ -36,7 +33,7 @@ namespace Coin {
             get { return m_walletForms; }
             set {
                 m_walletForms = value;
-            //  Title = WalletForms.Wallet.CurrencyName + " Transactions";
+                //  Title = WalletForms.Wallet.CurrencyName + " Transactions";
             }
         }
 
@@ -149,7 +146,8 @@ namespace Coin {
             get {
                 try {
                     return m_iTx.Fee switch { 0 => "", var v => v.ToString() };
-                } catch (Exception) {
+                }
+                catch (Exception) {
                     return "Unknown";
                 }
             }
@@ -167,5 +165,4 @@ namespace Coin {
             throw new NotImplementedException();
         }
     }
-
 }

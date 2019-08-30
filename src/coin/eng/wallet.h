@@ -121,12 +121,12 @@ class COIN_CLASS Wallet : public WalletBase {
 	typedef Wallet class_type;
 	typedef WalletBase base;
 
-	String DbFilePath;
 	DateTime m_dtNextResend;
 	DateTime m_dtLastResend;
 
 	mutex m_mtxMyTxHashes;
 	unordered_set<HashValue> m_myTxHashes;
+	//----
 public:
 	recursive_mutex Mtx;
 	HashValue BestBlockHash;
@@ -140,6 +140,7 @@ public:
 
 	mutex MtxCurrentHeight;
 	int CurrentHeight;
+	//----
 
 	int32_t m_dbNetId;
 	float Progress;
