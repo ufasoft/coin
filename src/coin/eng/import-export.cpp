@@ -71,11 +71,9 @@ void CoinDb::ImportXml(const path& filepath) {
 	EXT_LOCK (MtxDb) {
 		TransactionScope dbtx(m_dbWallet);
 
-		for (int i = 0; i < vKey.size(); ++i) {
-			KeyInfo& ki = vKey[i];
-			if (!SetPrivkeyComment(ki.PubKey.Hash160, ki->Comment))
+		for (auto& ki : vKey)
+			if (!SetPrivkeyComment(ki->ToAddress(), ki->Comment))
 				AddNewKey(ki);
-		}
 	}
 }
 
@@ -284,8 +282,7 @@ LAB_DECRYPTED:
 		TransactionScope dbtx(m_dbWallet);
 
 		for (auto& ki : myKeys) {
-
-			auto a = ki.ToAddress();
+			auto a = ki->ToAddress();
 			auto it = addresses.find(a);
 			if (it != addresses.end()) {
 				ki->Comment = it->Comment;
@@ -323,7 +320,7 @@ LAB_DECRYPTED:
 				addresses.erase(it);
 			}
 
-			if (!SetPrivkeyComment(ki.PubKey.Hash160, ki->Comment))
+			if (!SetPrivkeyComment(ki->ToAddress(), ki->Comment))
 				AddNewKey(ki);
 		}
 

@@ -233,7 +233,7 @@ public:
 	HRESULT __stdcall GenerateNewAddress(EAddressType type, BSTR comment, IAddress** r)
 	METHOD_BEGIN {
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng);
-		CComPtr<IAddress> iA = new AddressCom(_self, m_wallet.Eng.m_cdb.GenerateNewAddress((AddressType)type, comment).ToAddress());
+		CComPtr<IAddress> iA = new AddressCom(_self, m_wallet.Eng.m_cdb.GenerateNewAddress((AddressType)type, comment)->ToAddress());
 		*r = iA.Detach();
 	} METHOD_END
 

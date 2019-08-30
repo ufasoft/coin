@@ -637,10 +637,10 @@ unordered_set<Address> Wallet::get_MyAddresses() {
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
 		for (auto& kv : m_eng->m_cdb.Hash160ToKey)
 			if (kv.second->Comment != nullptr)
-				r.insert(kv.second.ToAddress());
+				r.insert(kv.second->ToAddress());
 		for (auto& kv : m_eng->m_cdb.P2SHToKey)
 			if (kv.second->Comment != nullptr)
-				r.insert(kv.second.ToAddress());
+				r.insert(kv.second->ToAddress());
 	}
 	return r;
 }
@@ -734,13 +734,12 @@ decimal64 Wallet::GetDecimalFee(const WalletTx& wtx) {
 }
 
 void Wallet::SetAddressComment(const Address& addr, RCString comment) {
+	if (m_eng->m_cdb.SetPrivkeyComment(addr, comment))
+		return;
+
 	if (addr.Type != AddressType::P2PKH && addr.Type != AddressType::P2SH)	//!!!TODO
 		Throw(E_NOTIMPL);
 	HashValue160 hash160(addr);
-
-	if (m_eng->m_cdb.SetPrivkeyComment(hash160, comment))
-		return;
-
 	EXT_LOCK (Mtx) {
 		vector<Address> ar = Recipients;
 		for (int i = 0; i < ar.size(); ++i) { //!!!TODO  INSERT OR IGNORE; UPDATE

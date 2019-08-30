@@ -161,7 +161,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 				}
 
 				if (!ki->Comment.empty()) {
-					Address addr = ki.ToAddress();
+					Address addr = ki->ToAddress();
 					w.Write(make_pair(string("name"), addr.ToString()), ki->Comment);
 				}
 			}

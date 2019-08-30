@@ -357,7 +357,8 @@ public:
 	KeyInfo GetMyKeyInfoByScriptHash(const HashValue160& hash160);
 	Blob GetMyRedeemScript(const HashValue160& hash160);
 
-	bool SetPrivkeyComment(const HashValue160& hash160, RCString comment);
+	KeyInfo FindPrivkey(const Address& addr);
+	bool SetPrivkeyComment(const Address& addr, RCString comment);
 	void ImportXml(const path& filepath);
 	void ImportDat(const path& filepath, RCString password);
 	void ImportWallet(const path& filepath, RCString password);

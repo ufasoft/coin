@@ -153,11 +153,41 @@ void CoinDb::TopUpPool() {
 	}
 }
 
-bool CoinDb::SetPrivkeyComment(const HashValue160& hash160, RCString comment) {
-	EXT_LOCK (MtxDb) {
-		CHash160ToKey::iterator it = Hash160ToKey.find(hash160);
-		if (it != Hash160ToKey.end()) {
-			KeyInfo key = it->second;
+// Contract: MtxDb is locked
+KeyInfo CoinDb::FindPrivkey(const Address& addr) {
+	Span data = addr.Data();
+	switch (addr.Type) {
+	case AddressType::P2PKH:
+		if (auto o = Lookup(Hash160ToKey, (HashValue160)addr))
+			return o.value();
+		break;
+	case AddressType::P2SH:
+		if (auto o = Lookup(P2SHToKey, (HashValue160)addr))
+			return o.value();
+		break;
+	case AddressType::Bech32:
+		switch (data.size()) {
+		case 20:
+			if (auto o = Lookup(Hash160ToKey, (HashValue160)addr))
+				return o.value();
+			break;
+		case 32:
+			if (auto o = Lookup(P2SHToKey, Hash160(((HashValue)addr).ToSpan())))		//!!!?
+				return o.value();
+			break;
+		default:
+			Throw(E_NOTIMPL);
+		}
+		break;
+	default:
+		Throw(E_NOTIMPL);
+	}
+	return nullptr;
+}
+
+bool CoinDb::SetPrivkeyComment(const Address& addr, RCString comment) {
+	EXT_LOCK(MtxDb) {
+		if (KeyInfo key = FindPrivkey(addr)) {
 			key->Comment = comment;
 			SqliteCommand(EXT_STR("UPDATE privkeys SET comment=?, reserved=? WHERE id=" << key->KeyRowId), m_dbWallet)
 				.Bind(1, comment)
@@ -165,8 +195,8 @@ bool CoinDb::SetPrivkeyComment(const HashValue160& hash160, RCString comment) {
 				.ExecuteNonQuery();
 			return true;
 		}
+		return false;
 	}
-	return false;
 }
 
 KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment) {
@@ -175,8 +205,8 @@ KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment) {
 		if (!ki) {
 			TopUpPool();
 			ki = FindReservedKey(type);
-		}
-		SetPrivkeyComment(ki.get_PubKey().Hash160, comment);
+		}		
+		SetPrivkeyComment(ki->ToAddress(), comment);
 		return ki;
 	}
 }
@@ -676,7 +706,7 @@ KeyInfo CoinDb::GetMyKeyInfoByScriptHash(const HashValue160& hash160) {
 }
 
 Blob CoinDb::GetMyRedeemScript(const HashValue160& hash160) {
-	return GetMyKeyInfoByScriptHash(hash160).ToAddress()->ToScriptPubKey();
+	return GetMyKeyInfoByScriptHash(hash160)->ToAddress()->ToScriptPubKey();
 }
 
 P2P::Link *CoinDb::CreateLink(thread_group& tr) {

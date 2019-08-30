@@ -100,8 +100,6 @@ public:
 	AddressType get_AddressType() const { return m_pimpl->AddressType; }
 	void put_AddressType(AddressType v) { m_pimpl->AddressType = v; }
 	DEFPROP(AddressType, AddressType);
-
-	Address ToAddress() const { return m_pimpl->ToAddress(); }
 };
 
 Blob EncryptedPrivKey(BuggyAes& aes, const KeyInfo& key);
