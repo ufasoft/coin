@@ -19,15 +19,15 @@ using namespace Ext::Crypto;
 namespace Coin {
 
 Blob Signer::SignHash(const HashValue& hash) {
-	return Key.m_pimpl->SignHash(hash.ToSpan());
+	return Key->SignHash(hash.ToSpan());
 }
 
-void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHashType hashType, Span scriptPrereq) {
+void Signer::Sign(const KeyInfo& randomKey, const Penny& penny, uint32_t nIn, SigHashType hashType, Span scriptPrereq) {
+	Span pkScript = penny.get_ScriptPubKey();
 	Address parsed = TxOut::CheckStandardType(pkScript);
-	TxIn& txIn = m_tx.m_pimpl->m_txIns.at(nIn);
+	TxIn& txIn = m_tx->m_txIns.at(nIn);
 	Hasher.NIn = nIn;
-	Hasher.HashType = hashType;
-	HashValue hash = Hasher.HashForSig(scriptPrereq + pkScript);
+	Hasher.HashType = hashType;	
 	KeyInfo ki(nullptr);
 	MemoryStream msSig;
 	ScriptWriter wrSig(msSig);
@@ -39,6 +39,7 @@ void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHa
 		ki = GetMyKeyInfo(hash160);
 		uint8_t byHashType = uint8_t(hashType);
 		Key = randomKey ? randomKey : ki;
+		HashValue hash = Hasher.HashForSig(scriptPrereq + pkScript);	//!!!?
 		Blob sig = SignHash(hash) + Span(&byHashType, 1);
 		wrSig << sig;
 	} break;
@@ -48,7 +49,7 @@ void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHa
 		auto redeemScript = ki->ToPubScript();
 		uint8_t byHashType = uint8_t(hashType);
 		Key = randomKey ? randomKey : ki;
-		hash = Hasher.HashForSig(scriptPrereq + redeemScript);
+		HashValue hash = Hasher.HashForSig(scriptPrereq + redeemScript);
 		Blob sig = SignHash(hash) + Span(&byHashType, 1);
 		wrSig << sig << Span(ki.PubKey.Data) << Span(redeemScript);
 	} break;
@@ -56,11 +57,39 @@ void Signer::Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHa
 		ki = GetMyKeyInfo(HashValue160(parsed));
 		uint8_t byHashType = uint8_t(hashType);
 		Key = randomKey ? randomKey : ki;
+		HashValue hash = Hasher.HashForSig(scriptPrereq + pkScript);
 		Blob sig = SignHash(hash) + Span(&byHashType, 1);
 		wrSig << sig << Span(ki.PubKey.Data);
 	} break;
+	case AddressType::WitnessV0KeyHash: {
+		Hasher.CalcWitnessCache();
+		Hasher.m_amount = penny.Value;
+		ki = GetMyKeyInfo(HashValue160(parsed));
+		uint8_t byHashType = uint8_t(hashType);
+		Key = randomKey ? randomKey : ki;
+		MemoryStream ms;
+		ScriptWriter(ms) << Opcode::OP_DUP << Opcode::OP_HASH160 << parsed.Data() << Opcode::OP_EQUALVERIFY << Opcode::OP_CHECKSIG;
+		CBoolKeeper witnessKeeper(Hasher.m_bWitness, true);
+		HashValue hash = Hasher.HashForSig(ms);
+		txIn.Witness.push_back(StackValue(SignHash(hash) + Span(&byHashType, 1)));
+		txIn.Witness.push_back(StackValue(ki.PubKey.Data));
+	} break;
+	case AddressType::WitnessV0ScriptHash: {
+		Hasher.CalcWitnessCache();
+		Hasher.m_amount = penny.Value;
+		HashValue160 scriptId(RIPEMD160().ComputeHash(HashValue(parsed).ToSpan()));
+		ki = GetMyKeyInfoByScriptHash(scriptId);
+		uint8_t byHashType = uint8_t(hashType);
+		MemoryStream ms;
+		ScriptWriter(ms) << Opcode::OP_CHECKSIG;			//!!!?
+		CBoolKeeper witnessKeeper(Hasher.m_bWitness, true);
+		HashValue hash = Hasher.HashForSig(ms);
+		txIn.Witness.push_back(StackValue(SignHash(hash) + Span(&byHashType, 1)));
+		txIn.Witness.push_back(StackValue(ki.PubKey.Data));
+		txIn.Witness.push_back(StackValue(ms));
+	} break;
 	default:
-		Throw(E_FAIL);
+		Throw(E_NOTIMPL);
 	}
 	txIn.put_Script(msSig);
 

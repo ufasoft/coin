@@ -45,14 +45,14 @@ struct SMessageHeader {
 class CoinEng;
 
 ENUM_CLASS(InventoryType) {
-	MSG_TX 						= 1,
-	MSG_BLOCK 					= 2,
-	MSG_FILTERED_BLOCK 			= 3,
-    MSG_CMPCT_BLOCK 			= 4,
-    MSG_WITNESS_FLAG 			= 1 << 30,
-    MSG_WITNESS_BLOCK 			= MSG_BLOCK 			| MSG_WITNESS_FLAG,
-    MSG_WITNESS_TX 				= MSG_TX 				| MSG_WITNESS_FLAG,
-    MSG_FILTERED_WITNESS_BLOCK 	= MSG_FILTERED_BLOCK 	| MSG_WITNESS_FLAG,
+	MSG_TX 						= 1
+	, MSG_BLOCK 				= 2
+	, MSG_FILTERED_BLOCK 		= 3
+	, MSG_CMPCT_BLOCK 			= 4
+	, MSG_WITNESS_FLAG 			= 1 << 30
+	, MSG_WITNESS_BLOCK 		= MSG_BLOCK 			| MSG_WITNESS_FLAG
+	, MSG_WITNESS_TX 			= MSG_TX 				| MSG_WITNESS_FLAG
+	, MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK 	| MSG_WITNESS_FLAG
 } END_ENUM_CLASS(InventoryType);
 
 class Inventory : public CPersistent, public CPrintable {
@@ -142,12 +142,12 @@ private:
 class VersionMessage : public CoinMessage {
 	typedef CoinMessage base;
 public:
+	PeerInfoBase RemotePeerInfo, LocalPeerInfo;
 	uint64_t Nonce, Services;
+	mutable DateTime RemoteTimestamp;
 	String UserAgent;
 	uint32_t ProtocolVer;
 	int32_t LastReceivedBlock;
-	mutable DateTime RemoteTimestamp;
-	PeerInfoBase RemotePeerInfo, LocalPeerInfo;
 	bool RelayTxes;
 
 	VersionMessage();

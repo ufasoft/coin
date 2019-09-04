@@ -70,7 +70,7 @@ void ChainParams::Init() {
 	MinTxOutAmount = 0;
 	MaxPossibleTarget = Target(0x1D7FFFFF);
 	InitTarget = MaxPossibleTarget;
-	CoinbaseMaturity = 100;
+	CoinbaseMaturity = COINBASE_MATURITY;
 	MaxBlockWeight = MAX_BLOCK_WEIGHT;
 	PowOfDifficultyToHalfSubsidy = 1;
 	PayToScriptHashHeight = numeric_limits<int>::max();
@@ -433,7 +433,7 @@ void ChainParams::LoadFromXmlAttributes(IXmlAttributeCollection& xml) {
 		InitTarget = Target(Convert::ToUInt32(a, 16));
 
 	ProtocolMagic = Convert::ToUInt32(xml.GetAttribute("ProtocolMagicHex"), 16);
-	DiskMagic = (a = xml.GetAttribute("DiskMagicHex")).empty() ? ProtocolMagic : Convert::ToUInt32(a, 16);		
+	DiskMagic = (a = xml.GetAttribute("DiskMagicHex")).empty() ? ProtocolMagic : Convert::ToUInt32(a, 16);
 
 	if (!(a = xml.GetAttribute("ProtocolVersion")).empty())
 		ProtocolVersion = Convert::ToUInt32(a);

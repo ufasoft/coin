@@ -502,6 +502,8 @@ SignatureHasher::SignatureHasher(const TxObj& txoTo)
 }
 
 void SignatureHasher::CalcWitnessCache() {
+	if (m_hashPrevOuts)
+		return;
 	CoinEng& eng = Eng();
 	MemoryStream msPO, msSeq, msOut;
 	BinaryWriter wrPO(msPO), wrSeq(msSeq), wrOut(msOut);
@@ -595,7 +597,7 @@ bool SignatureHasher::VerifyWitnessProgram(Vm& vm, uint8_t witnessVer, RCSpan wi
 			if (a.size() > MAX_SCRIPT_ELEMENT_SIZE)
 				Throw(CoinErr::SCRIPT_ERR_PUSH_SIZE);
 
-		m_bWitness = true;
+		CBoolKeeper witnessKeeper(m_bWitness, true);
 		bool r = vm.Eval(scriptPubKey);
 		if (r) {
 			if (vm.Stack.size() != 1)

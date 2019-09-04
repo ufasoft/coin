@@ -27,6 +27,7 @@ namespace Coin {
         public event RoutedEventHandler Send;
 
         IWallet m_Wallet;
+        decimal Fee;
 
         public IWallet Wallet {
             get { return m_Wallet; }
@@ -44,7 +45,7 @@ namespace Coin {
             decimal amount;
             if (decimal.TryParse(textAmount.Text, out amount)) {
                 try {
-                    labelFee.Content = Wallet.CalcFee(amount).ToString();
+                    labelFee.Content = (Fee = Wallet.CalcFee(amount)).ToString();
                     buttonSend.IsEnabled = true;
                 } catch (Exception ex) {
                     labelFee.Content = ex.Message;
@@ -71,7 +72,7 @@ namespace Coin {
                     var prov = new NumberFormatInfo();
                     prov.NumberDecimalSeparator = ".";
                     decimal amount = Convert.ToDecimal(textAmount.Text.Replace(',', '.'), prov);
-                    Wallet.SendTo(amount, address, comment);
+                    Wallet.SendTo(amount, address, comment, Fee);
                 } finally {
                     Cursor = prevCursor;
                 }

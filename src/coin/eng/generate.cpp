@@ -75,9 +75,7 @@ typedef list<COrphan> COrhpans;
 
 void WalletBase::ReserveGenKey() {
 	EXT_LOCK (m_eng->Mtx) {
-		pair<CanonicalPubKey, HashValue160> pp = GetReservedPublicKey();
-		m_genPubKey = pp.first;
-		m_genHash160 = pp.second;
+		m_genKeyInfo = m_eng->m_cdb.GenerateNewAddress(g_conf.GetAddressType(), nullptr);
 	}
 }
 
@@ -87,15 +85,7 @@ Tx WalletBase::CreateCoinbaseTx() {
 	tx.m_pimpl->m_txIns.resize(1);
 	tx.m_pimpl->m_bLoadedIns = true;
 	tx.TxOuts().resize(1);
-
-	MemoryStream ms;
-	ScriptWriter wr(ms);
-//!!!?	if (m_genPubKey.Data.Size != 0)
-//!!!?		wr << m_genPubKey.Data << OP_CHECKSIG;
-//!!!?	else
-		wr << Opcode::OP_DUP << Opcode::OP_HASH160 << HashValue160(m_genHash160) << Opcode::OP_EQUALVERIFY << Opcode::OP_CHECKSIG;
-
-		tx.TxOuts()[0].m_scriptPubKey = ms.AsSpan();
+	tx.TxOuts()[0].m_scriptPubKey = m_genKeyInfo->ToAddress()->ToScriptPubKey();
 	return tx;
 }
 
@@ -406,7 +396,7 @@ void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 				link.Send(m);
 			}
 		}
-		m_wallet.m_peng->m_cdb.RemovePubHash160FromReserved(m_wallet.m_genHash160);
+		m_wallet.m_peng->m_cdb.RemoveKeyInfoFromReserved(m_wallet.m_genKeyInfo);
 		m_wallet.ReserveGenKey();
 		block.Process();
 	}

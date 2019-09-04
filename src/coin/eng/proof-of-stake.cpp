@@ -42,7 +42,7 @@ int64_t PosTxObj::GetCoinAge() const {
 				if (Timestamp < dtPrev)
 					Throw(CoinErr::TimestampViolation);
 				if (eng.GetBlockByHeight(txPrev.Height).get_Timestamp()+TimeSpan::FromDays(30) <= Timestamp)
-					centSecond += BigInteger(txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value) * duration_cast<seconds>(Timestamp-dtPrev).count() / (eng.ChainParams.CoinValue/100);
+					centSecond += BigInteger(txPrev.TxOuts()[txIn.PrevOutPoint.Index].Value) * duration_cast<seconds>(Timestamp-dtPrev).count() / (eng.ChainParams.CoinValue / 100);
 			}
 			m_coinAge = explicit_cast<int64_t>(centSecond / (100 * 24*60*60));
 		}
@@ -483,4 +483,3 @@ int64_t PosEng::GetProofOfStakeReward(int64_t coinAge, const Target& target, con
 }
 
 } // Coin::
-

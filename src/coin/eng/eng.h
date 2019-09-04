@@ -223,10 +223,10 @@ public:
 	float Speed;
 	observer_ptr<IIWalletEvents> m_iiWalletEvents;
 #if UCFG_COIN_GENERATE
+	KeyInfo m_genKeyInfo;
+
 	mutex MtxMiner;
 	unique_ptr<BitcoinMiner> Miner;
-	CanonicalPubKey m_genPubKey;
-	HashValue160 m_genHash160;
 #endif
 
 	WalletBase(CoinEng & eng) : m_eng(&eng), Speed(0) {}
@@ -236,7 +236,6 @@ public:
 	CoinEng& get_Eng() { return *m_eng; }
 	DEFPROP_GET(CoinEng&, Eng);
 
-	virtual pair<CanonicalPubKey, HashValue160> GetReservedPublicKey() { Throw(E_NOTIMPL); }
 	virtual void AddRecipient(const Address& a) { Throw(E_NOTIMPL); }
 
 #if UCFG_COIN_GENERATE
@@ -330,8 +329,7 @@ public:
 	KeyInfo FindReservedKey(AddressType type = AddressType::P2SH);
 	void TopUpPool();
 	KeyInfo GenerateNewAddress(AddressType type, RCString comment);
-	void RemovePubKeyFromReserved(const CanonicalPubKey& pubKey);
-	void RemovePubHash160FromReserved(const HashValue160& hash160);
+	void RemoveKeyInfoFromReserved(const KeyInfo& keyInfo);
 
 	bool get_WalletDatabaseExists();
 	DEFPROP_GET(bool, WalletDatabaseExists);
@@ -636,11 +634,16 @@ class CoinConf : public Ext::Inet::P2P::P2PConf {
 public:
 	int64_t MinTxFee, MinRelayTxFee;	// Fee rate per KB (1000 bytes)
 	String RpcUser, RpcPassword;
+	String AddressType, ChangeType;
 	int RpcPort, RpcThreads;
 	int KeyPool;
 	bool Checkpoints, Server, AcceptNonStdTxn, Testnet;
 
 	CoinConf();
+	Coin::AddressType GetAddressType() { return ToAddressType(AddressType); }
+	Coin::AddressType GetChangeType() { return ChangeType.empty() ? GetAddressType() : ToAddressType(ChangeType); }
+private:
+	static Coin::AddressType ToAddressType(RCString s);
 };
 
 extern CoinConf g_conf;

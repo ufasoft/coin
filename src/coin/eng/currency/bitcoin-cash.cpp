@@ -224,7 +224,7 @@ protected:
 
 	void PatchSigHasher(SignatureHasher& sigHasher) override {
 		base::PatchSigHasher(sigHasher);
-		if (sigHasher.m_txoTo.Height >= m_heightUAHF && !sigHasher.m_hashPrevOuts)
+		if (sigHasher.m_txoTo.Height >= m_heightUAHF)
 			sigHasher.CalcWitnessCache();
 	}
 

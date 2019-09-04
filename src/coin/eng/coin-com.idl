@@ -69,7 +69,7 @@ library CointEng {
 	    [id(8)] HRESULT Rescan();
 	    [id(9)] HRESULT GetAndResetStateChangedFlag([out,retval] VARIANT_BOOL *r);
 	    [id(10)] HRESULT CalcFee([in] DECIMAL amount, [out,retval] DECIMAL *r);
-	    [id(11)] HRESULT SendTo(DECIMAL amount, BSTR addr, BSTR comment);
+	    [id(11)] HRESULT SendTo(DECIMAL amount, BSTR addr, BSTR comment, DECIMAL fee);
 		[id(12), propget] HRESULT LastBlock([out,retval] int *r);
 		[id(13), propget] HRESULT Enabled([out,retval] VARIANT_BOOL *r);
 		[id(13), propput] HRESULT Enabled([in] VARIANT_BOOL v);

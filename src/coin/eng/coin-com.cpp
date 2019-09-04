@@ -222,12 +222,12 @@ public:
 		*r = ToDecimal(m_wallet.Balance);
 	} METHOD_END
 
-	HRESULT __stdcall SendTo(DECIMAL amount, BSTR addr, BSTR comment)
+	HRESULT __stdcall SendTo(DECIMAL amount, BSTR addr, BSTR comment, DECIMAL fee)
 	METHOD_BEGIN {
 		CCoinEngThreadKeeper engKeeper(&m_wallet.Eng, nullptr, true);
 		if (amount.sign || amount.Lo64==0)
 			Throw(E_INVALIDARG);
-		m_wallet.SendTo(make_decimal64(amount.Lo64, -amount.scale), addr, comment);
+		m_wallet.SendTo(make_decimal64(amount.Lo64, -amount.scale), addr, comment, make_decimal64(fee.Lo64, -fee.scale));
 	} METHOD_END
 
 	HRESULT __stdcall GenerateNewAddress(EAddressType type, BSTR comment, IAddress** r)
@@ -447,7 +447,7 @@ public:
 					break;
 				}
 				if (ptr<CompactThread> t = m_wallet.CompactThread) {
-					os << "Compacting Database  " << int64_t(t->m_ai)*100/t->m_count << "%";
+					os << "Compacting Database  " << int64_t(t->m_ai) * 100 / t->m_count << "%";
 					break;
 				}
 

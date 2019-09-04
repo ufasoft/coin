@@ -139,7 +139,7 @@ public:
 	bool ReadTxHashes;
 
 	DbReader(const Stream& stm, CoinEng* eng = 0)
-		: base(stm)
+		: base(stm, true)
 		, Eng(eng)
 		, NOut(-1)
 		, BlockchainDb(true)
@@ -407,8 +407,8 @@ private:
 class SignatureHasher {
 public:
 	HashValue m_hashPrevOuts, m_hashSequence, m_hashOuts;
-	const TxObj& m_txoTo;
 	uint64_t m_amount;
+	const TxObj& m_txoTo;
 	uint32_t NIn;
 	SigHashType HashType;
 	bool m_bWitness;
@@ -523,6 +523,33 @@ private:
 	friend COIN_EXPORT const DbReader& operator>>(const DbReader& rd, Tx& tx);
 };
 
+class Penny : public TxOut {
+	typedef Penny class_type;
+public:
+	Coin::OutPoint OutPoint;
+	CBool IsSpent;
+
+	Penny() {
+		Value = 0;
+	}
+
+	bool operator==(const Penny& v) const {
+		return OutPoint == v.OutPoint && Value == v.Value;
+	}
+
+	int64_t get_Debit() const;
+	DEFPROP_GET(int64_t, Debit);
+
+	bool get_IsFromMe() const { return Debit > 0; }
+	DEFPROP_GET(bool, IsFromMe);
+
+	size_t GetHashCode() const {
+		return hash<Coin::OutPoint>()(OutPoint);
+	}
+};
+
+EXT_DEF_HASH_NS(Coin, Penny);
+
 class Signer {
 public:
 	SignatureHasher Hasher;
@@ -536,7 +563,7 @@ public:
 	{}
 
 	Blob SignHash(const HashValue& hash);
-	void Sign(const KeyInfo& randomKey, RCSpan pkScript, uint32_t nIn, SigHashType hashType = SigHashType::SIGHASH_ALL, Span scriptPrereq = Span());
+	void Sign(const KeyInfo& randomKey, const Penny& penny, uint32_t nIn, SigHashType hashType = SigHashType::SIGHASH_ALL, Span scriptPrereq = Span());
 protected:
 	virtual KeyInfo GetMyKeyInfo(const HashValue160& hash160) = 0;
 	virtual KeyInfo GetMyKeyInfoByScriptHash(const HashValue160& hash160) = 0;

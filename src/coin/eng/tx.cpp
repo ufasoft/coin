@@ -475,7 +475,10 @@ void TxObj::Read(const ProtocolReader& rd) {
 	Ver = rd.ReadUInt32();
 	ReadPrefix(rd);
 	CoinSerialized::Read(rd, m_txIns);
-	if (m_txIns.empty() && rd.WitnessAware) {
+	if (!m_txIns.empty() || !rd.WitnessAware) {
+		m_bLoadedIns = true;
+		CoinSerialized::Read(rd, TxOuts);
+	} else {
 		uint8_t flag = rd.ReadByte();
 		if (!flag)
 			throw PeerMisbehavingException(10);
@@ -488,9 +491,6 @@ void TxObj::Read(const ProtocolReader& rd) {
 				for (auto& chunk : txIn.Witness)
 					chunk = CoinSerialized::ReadBlob(rd);
 			}
-	} else {
-		m_bLoadedIns = true;
-		CoinSerialized::Read(rd, TxOuts);
 	}
 	if (m_txIns.empty() || TxOuts.empty())
 		throw PeerMisbehavingException(10);
@@ -897,9 +897,7 @@ void Tx::ConnectInputs(CoinsView& view, int32_t height, int& nBlockSigOps, int64
 					if (!txPrev)
 						txPrev = FromDb(op.TxHash);
 				}
-				if (op.Index >= txPrev.TxOuts().size())
-					Throw(E_FAIL);
-				const TxOut& txOut = txPrev.TxOuts()[op.Index];
+				const TxOut& txOut = txPrev.TxOuts().at(op.Index);
 
 				if (txPrev->IsCoinBase())
 					eng.CheckCoinbasedTxPrev(height, txPrev.Height);
@@ -962,18 +960,28 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 	CoinEng& eng = Eng();
 
 	if (!wr.BlockchainDb) {
-		wr.Write7BitEncoded(tx.m_pimpl->Ver);
-		tx.m_pimpl->WritePrefix(wr);
+		wr.Write7BitEncoded(tx->Ver);
+		tx->WritePrefix(wr);
+		auto hasWitness = tx->HasWitness();
+		if (hasWitness)
+			(ProtocolWriter&)wr << uint8_t(0) << uint8_t(1);
 
 		const vector<TxIn>& txIns = tx.TxIns();
 		size_t nIns = txIns.size();
 		wr.WriteSize(nIns);
-		for (size_t i = 0; i < nIns; ++i)
-			txIns[i].Write(wr);
+		for (auto& txIn : txIns)
+			txIn.Write(wr);
 
 		Write(wr, tx.TxOuts());
+		if (hasWitness)
+			for (auto& txIn : txIns) {
+				CoinSerialized::WriteCompactSize(wr, txIn.Witness.size());
+				for (auto& chunk : txIn.Witness)
+					CoinSerialized::WriteSpan(wr, chunk);
+			}
+
 		wr.Write7BitEncoded(tx.LockBlock);
-		tx.m_pimpl->WriteSuffix(wr);
+		tx->WriteSuffix(wr);
 	} else {
 #if UCFG_COIN_USE_NORMAL_MODE
 		uint64_t v = uint64_t(tx.m_pimpl->Ver) << 2;
@@ -982,7 +990,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		if (tx.LockBlock)
 			v |= 2;
 		wr.Write7BitEncoded(v);
-		tx.m_pimpl->WritePrefix(wr);
+		tx->WritePrefix(wr);
 		if (tx.LockBlock)
 			wr.Write7BitEncoded(tx.LockBlock);
 		tx.m_pimpl->WriteSuffix(wr);
@@ -1042,22 +1050,36 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 
 	if (!rd.BlockchainDb) {
 		v = rd.Read7BitEncoded();
-		tx.m_pimpl->Ver = (uint32_t)v;
-		tx.m_pimpl->ReadPrefix(rd);
-		Read(rd, tx.m_pimpl->m_txIns);
-		Read(rd, tx.m_pimpl->TxOuts);
-		tx.m_pimpl->m_bLoadedIns = true;
-		tx.m_pimpl->LockBlock = (uint32_t)rd.Read7BitEncoded();
-		tx.m_pimpl->ReadSuffix(rd);
+		tx->Ver = (uint32_t)v;
+		tx->ReadPrefix(rd);
+		Read(rd, tx->m_txIns);
+		if (!tx->m_txIns.empty())
+			Read(rd, tx->TxOuts);
+		else {
+			uint8_t flag = rd.ReadByte();
+			if (!flag)
+				Throw(CoinErr::InconsistentDatabase);
+			Read(rd, tx->m_txIns);
+			Read(rd, tx->TxOuts);
+			if (flag & 1)
+				for (auto& txIn : tx->m_txIns) {
+					txIn.Witness.resize(CoinSerialized::ReadCompactSize(rd));
+					for (auto& chunk : txIn.Witness)
+						chunk = CoinSerialized::ReadBlob(rd);
+				}
+		}
+		tx->m_bLoadedIns = true;
+		tx->LockBlock = (uint32_t)rd.Read7BitEncoded();
+		tx->ReadSuffix(rd);
 	} else {
 #if UCFG_COIN_USE_NORMAL_MODE
 		v = rd.Read7BitEncoded();
-		tx.m_pimpl->Ver = (uint32_t)(v >> 2);
-		tx.m_pimpl->ReadPrefix(rd);
-		tx.m_pimpl->m_bIsCoinBase = v & 1;
+		tx->Ver = (uint32_t)(v >> 2);
+		tx->ReadPrefix(rd);
+		tx->m_bIsCoinBase = v & 1;
 		if (v & 2)
 			tx.LockBlock = (uint32_t)rd.Read7BitEncoded();
-		tx.m_pimpl->ReadSuffix(rd);
+		tx->ReadSuffix(rd);
 
 #if UCFG_COIN_TXES_IN_BLOCKTABLE
 		for (int i = 0; i < rd.NOut; ++i) {
@@ -1094,7 +1116,7 @@ const DbReader& operator>>(const DbReader& rd, Tx& tx) {
 #endif // UCFG_COIN_USE_NORMAL_MODE
 	}
 	if (Tx::LocktimeTypeOf(tx.LockBlock) == Tx::LocktimeType::Timestamp)
-		tx.m_pimpl->LockTimestamp = DateTime::from_time_t(tx.LockBlock);
+		tx->LockTimestamp = DateTime::from_time_t(tx.LockBlock);
 	return rd;
 }
 

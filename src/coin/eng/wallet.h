@@ -23,7 +23,7 @@ public:
 
 	DateTime Timestamp;
 	Address To;
-	CanonicalPubKey ChangePubKey;
+	KeyInfo ChangeKeyInfo;
 	int64_t Amount;				// negative for Debits in COM transactions
 	vector<Tx> PrevTxes;
 	String Comment;
@@ -31,7 +31,6 @@ public:
 
 	WalletTx()
 		: To(Eng())
-//		: Confirmations(0)
 	{}
 
 	explicit WalletTx(const Tx& tx);
@@ -51,34 +50,6 @@ DbWriter& operator<<(DbWriter& wr, const WalletTx& wtx);
 const DbReader& operator>>(const DbReader& rd, WalletTx& wtx);
 
 
-class Penny {
-	typedef Penny class_type;
-public:
-	Coin::OutPoint OutPoint;
-	uint64_t Value;
-	Blob PkScript;
-	CBool IsSpent;
-
-	Penny()
-		: Value(0)
-	{}
-
-	bool operator==(const Penny& v) const {
-		return OutPoint == v.OutPoint && Value == v.Value;
-	}
-
-	int64_t get_Debit() const;
-	DEFPROP_GET(int64_t, Debit);
-
-	bool get_IsFromMe() const { return Debit > 0; }
-	DEFPROP_GET(bool, IsFromMe);
-
-	size_t GetHashCode() const {
-		return hash<Coin::OutPoint>()(OutPoint);
-	}
-};
-
-EXT_DEF_HASH_NS(Coin, Penny);
 
 
 /*!!!
@@ -177,11 +148,11 @@ public:
 
 	void SetAddressComment(const Address& addr, RCString comment);
 	decimal64 CalcFee(const decimal64& amount);
-	void SendTo(const decimal64& decAmount, RCString saddr, RCString comment);
+	void SendTo(const decimal64& decAmount, RCString saddr, RCString comment, const decimal64& decFee);
 	void Rescan();
 	void Close();
 //!!!	CngKey GetKey(const HashValue160& keyHash);
-	pair<WalletTx, decimal64> CreateTransaction(const KeyInfo& randomKey, const vector<pair<Address, int64_t>>& vSend);															// returns Fee
+	pair<WalletTx, decimal64> CreateTransaction(const KeyInfo& randomKey, const vector<pair<Address, int64_t>>& vSend, int64_t initialFee = 0);		// returns Fee
 	void Relay(const WalletTx& wtx);
 	int64_t Add(WalletTx& wtx, bool bPending);
 	void Commit(WalletTx& wtx);
@@ -198,8 +169,6 @@ public:
 			m_iiWalletEvents->OnStateChanged();
 	}
 protected:
-	pair<CanonicalPubKey, HashValue160> GetReservedPublicKey() override;
-
 	void OnProcessBlock(const Block& block) override;
 	void OnProcessTx(const Tx& tx) override;
 	void OnEraseTx(const HashValue& hashTx) override;
@@ -221,7 +190,7 @@ private:
 //!!!R	void SaveBlockords();
 	WalletTx GetTx(const HashValue& hashTx);
 	bool SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConfTheirs, pair<unordered_set<Penny>, uint64_t>& pp);
-	pair<unordered_set<Penny>, uint64_t> SelectCoins(uint64_t amount, uint64_t fee);			// <returns Pennies, RequiredFee>
+	pair<vector<Penny>, uint64_t> SelectCoins(uint64_t amount, uint64_t fee);			// <returns Pennies, RequiredFee>
 	bool ProcessTx(const Tx& tx);
 	void SetBestBlockHash(const HashValue& hash);
 	void ReacceptWalletTxes();

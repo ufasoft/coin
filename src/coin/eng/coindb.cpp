@@ -211,18 +211,11 @@ KeyInfo CoinDb::GenerateNewAddress(AddressType type, RCString comment) {
 	}
 }
 
-void CoinDb::RemovePubKeyFromReserved(const CanonicalPubKey& pubKey) {
+void CoinDb::RemoveKeyInfoFromReserved(const KeyInfo& keyInfo) {
 	EXT_LOCK (MtxDb) {
-		SqliteCommand("UPDATE privkeys SET reserved=0 WHERE pubkey=?", m_dbWallet)
-			.Bind(1, pubKey.ToCompressed())
+		SqliteCommand("UPDATE privkeys SET reserved=0 WHERE id=?", m_dbWallet)
+			.Bind(1, keyInfo->KeyRowId)
 			.ExecuteNonQuery();
-	}
-}
-
-void CoinDb::RemovePubHash160FromReserved(const HashValue160& hash160) {
-	EXT_LOCK (MtxDb) {
-		ASSERT(Hash160ToKey.count(hash160));
-		RemovePubKeyFromReserved(Hash160ToKey[hash160].PubKey);
 	}
 }
 

@@ -100,7 +100,7 @@ vector<int64_t> SqliteBlockChainDb::GetTxesByPubKey(const HashValue160& pubkey) 
 		if (dr.Read()) {
 			CMemReadStream stm(dr.GetBytes(0));
 			BinaryReader rd(stm);
-			for (int i=0; !stm.Eof(); ++i)
+			for (int i = 0; !stm.Eof(); ++i)
 				r.push_back(rd.ReadInt64());
 		}
 	}

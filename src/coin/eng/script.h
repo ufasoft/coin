@@ -148,7 +148,7 @@ public:
 	unique_ptr<ScriptReader> m_rd;
 	int m_pc;
 	int m_posCodeHash;
-	CBool WitnessSig;
+	CBool WitnessSig;	//!!!? never assigned
 	//	Coin::Script Script;
 
 	Vm(SignatureHasher* signatureHasher = nullptr) : base(signatureHasher) {

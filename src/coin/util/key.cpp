@@ -41,12 +41,13 @@ Address KeyInfoBase::ToAddress() const {
 	case AddressType::P2SH:
 		hash160 = Hash160(ToPubScript());
 		break;
-	case AddressType::P2WPKH_IN_P2SH: {
-		uint8_t bufP2WPKH_P2SH[22] = { 00, 20 };
-		memcpy(bufP2WPKH_P2SH + 2, hash160.data(), 20);
-		hash160 = Hash160(bufP2WPKH_P2SH);
-		typ = AddressType::P2SH;
-	} break;
+	case AddressType::P2WPKH_IN_P2SH:
+		{
+			uint8_t bufP2WPKH_P2SH[22] = { 00, 20 };
+			memcpy(bufP2WPKH_P2SH + 2, hash160.data(), 20);
+			hash160 = Hash160(bufP2WPKH_P2SH);
+			typ = AddressType::P2SH;
+		} break;
 	}
 	return Address(*HasherEng::GetCurrent(), typ, hash160, 0, Comment);
 }

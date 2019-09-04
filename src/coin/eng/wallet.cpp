@@ -5,16 +5,8 @@
 
 #include <el/ext.h>
 
-
 #include "wallet.h"
 #include "script.h"
-
-#ifdef C_DEBUG//!!!D
-#	include <el/xml.h>
-	namespace Coin {
-#		include "../blockexplorer/xml-write.cpp"
-	}
-#endif
 
 namespace Coin {
 
@@ -96,7 +88,9 @@ bool WalletTx::IsConfirmed(Wallet& wallet) const {
 String WalletTx::GetComment() const {
 	String s = m_pimpl->GetComment();
 	String r = s.empty() ? String() : s;
-	return Comment.empty() ? r : r + ". " + Comment;
+	return Comment.empty() ? r
+		: r.empty() ? Comment
+		: r + ". " + Comment;
 }
 
 int64_t Penny::get_Debit() const {
@@ -119,7 +113,6 @@ KeyInfo WalletSigner::GetMyKeyInfoByScriptHash(const HashValue160& hash160) {
 Blob WalletSigner::GetMyRedeemScript(const HashValue160& hash160) {
 	return m_wallet.m_eng->m_cdb.GetMyRedeemScript(hash160);
 }
-
 
 bool Wallet::IsToMe(const Tx& tx) {
 	CoinDb& cdb = m_eng->m_cdb;
@@ -214,8 +207,8 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 		TRC(2, txHash << boolalpha << ", IsFromMe: " << bIsFromMe << ", IsToMe: " << bIsToMe);
 		const auto& txOuts = wtx.TxOuts();
 		if (bIsFromMe) {
-//!!!?			SqliteCommand cmdCoin("UPDATE coins SET spent=1 WHERE txid=? AND nout=?", m_eng->m_cdb.m_dbWallet);
-			SqliteCommand cmdCoin("DELETE FROM coins WHERE txid=? AND nout=?", m_eng->m_cdb.m_dbWallet);
+//!!!?			SqliteCommand cmdCoin("UPDATE coins SET spent=1 WHERE txid=? AND nout=?", cdb.m_dbWallet);
+			SqliteCommand cmdCoin("DELETE FROM coins WHERE txid=? AND nout=?", cdb.m_dbWallet);
 			EXT_FOR (const TxIn& txIn, wtx.TxIns()) {
 				cmdCoin
 					.Bind(1, GetTxId(txIn.PrevOutPoint.TxHash))
@@ -244,8 +237,8 @@ void Wallet::ProcessMyTx(WalletTx& wtx, bool bPending) {
 			for (int i = 0; i < txOuts.size(); ++i) {
 				const TxOut& txOut = txOuts[i];
 				if (KeyInfo ki = cdb.FindMine(txOut.get_ScriptPubKey())) {
-					if (!m_eng->m_cdb.CmdFindCoin.Bind(1, txid).Bind(2, i).ExecuteReader().Read()) {
-						m_eng->m_cdb.CmdInsertCoin
+					if (!cdb.CmdFindCoin.Bind(1, txid).Bind(2, i).ExecuteReader().Read()) {
+						cdb.CmdInsertCoin
 							.Bind(1, txid)
 							.Bind(2, i)
 							.Bind(3, txOut.Value)
@@ -567,7 +560,7 @@ void Wallet::ReacceptWalletTxes() {
 
 void Wallet::SetNextResendTime(const DateTime& dt) {
 	m_dtNextResend = dt + seconds(Ext::Random().Next(SECONDS_RESEND_PERIODICITY));
-#ifdef X_DEBUG//!!!D
+#ifdef _DEBUG//!!!D
 	m_dtNextResend = dt + seconds(10);
 #endif
 	TRC(2, "next resend at " << m_dtNextResend.ToLocalTime());
@@ -576,7 +569,7 @@ void Wallet::SetNextResendTime(const DateTime& dt) {
 void Wallet::Start() {
 	if (m_bLoaded)
 		return;
-	CCoinEngThreadKeeper engKeeper(m_eng);
+	CCoinEngThreadKeeper engKeeper(m_eng, nullptr, true);
 	m_eng->Load();
 
 	bool bIsInitialBlockDownload = m_eng->IsInitialBlockDownload();
@@ -659,7 +652,7 @@ vector<Address> Wallet::get_Recipients() {
 			a->Type = typ;			// override for Bech32
 			a->Comment = dr.GetString(2);
 			r.push_back(a);
-		}			
+		}
 	}
 	return r;
 }
@@ -777,14 +770,6 @@ void Wallet::put_MiningEnabled(bool b) {
 #endif
 }
 
-pair<CanonicalPubKey, HashValue160> Wallet::GetReservedPublicKey() {
-	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		KeyInfo ki = m_eng->m_cdb.FindReservedKey();
-		const CanonicalPubKey& pubKey = ki ? ki.PubKey : m_eng->m_cdb.Hash160ToKey.begin()->second.PubKey;
-		return make_pair(pubKey, pubKey.Hash160);
-	}
-}
-
 bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConfTheirs, pair<unordered_set<Penny>, uint64_t>& pp) {
 	pp.first.clear();
 	pp.second = 0;
@@ -798,14 +783,14 @@ bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConf
 			coin.OutPoint.TxHash = HashValue(dr.GetBytes(0));
 			coin.OutPoint.Index = dr.GetInt32(1);
 			coin.Value = dr.GetInt64(2);
-			coin.PkScript = dr.GetBytes(3);
+			coin.m_scriptPubKey = dr.GetBytes(3);
 			coins.push_back(coin);
 		}
 	}
 
 	Penny coinBestLarger;
 	int64_t totalLower = 0;
-	for (int i=coins.size(); i--;) {
+	for (int i = coins.size(); i--;) {
 		Penny& coin = coins[i];
 		WalletTx wtx = GetTx(coin.OutPoint.TxHash);
 		int depth = wtx.DepthInMainChain;
@@ -827,7 +812,7 @@ bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConf
 		pp.second = coinBestLarger.Value;
 		return true;
 	}
-	for (int i=coins.size(); i--;) {
+	for (int i = coins.size(); i--;) {
 		Penny& coin = coins[i];
 		pp.first.insert(coin);
 		pp.second += coin.Value;
@@ -838,16 +823,16 @@ bool Wallet::SelectCoins(uint64_t amount, uint64_t fee, int nConfMine, int nConf
 	return true;
 }
 
-pair<unordered_set<Penny>, uint64_t> Wallet::SelectCoins(uint64_t amount, uint64_t fee) {
+pair<vector<Penny>, uint64_t> Wallet::SelectCoins(uint64_t amount, uint64_t fee) {
 	pair<unordered_set<Penny>, uint64_t> r;
 	if (SelectCoins(amount, fee, 1, 6, r) ||
 		SelectCoins(amount, fee, 1, 1, r) ||
 		SelectCoins(amount, fee, 0, 1, r))
-		return r;
+		return make_pair(vector<Penny>(r.first.begin(), r.first.end()), r.second);
 	Throw(CoinErr::InsufficientAmount);
 }
 
-pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, const vector<pair<Address, int64_t>>& vSend) {
+pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, const vector<pair<Address, int64_t>>& vSend, int64_t initialFee) {
 	if (vSend.empty())
 		Throw(errc::invalid_argument);
 	int64_t nVal = 0;
@@ -855,31 +840,32 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 		m_eng->CheckMoneyRange(nVal += vSend[i].second);
 
 	EXT_LOCK (Mtx) {
-		for (int64_t fee = 0;;) {
+		KeyInfo changeKeyInfo(nullptr);
+		for (int64_t fee = initialFee;;) {
 			WalletTx tx;
 			tx.EnsureCreate(*m_eng);
 			tx.m_bFromMe = true;
+			auto& txOuts = tx.TxOuts();
 
 			int64_t nTotal = nVal + fee;
 			for (int i = 0; i < vSend.size(); ++i) {
 				TxOut txOut(vSend[i].second, vSend[i].first->ToScriptPubKey());
 				txOut.CheckForDust();
-				tx.TxOuts().push_back(txOut);
+				txOuts.push_back(txOut);
 			}
 
-			pair<unordered_set<Penny>, uint64_t> ppCoins = SelectCoins(nTotal, 0);
+			pair<vector<Penny>, uint64_t> ppCoins = SelectCoins(nTotal, 0);
 			double priority = 0;
-			EXT_FOR (const Penny& penny, ppCoins.first) {
+			tx->m_txIns.resize(ppCoins.first.size());
+			for (int i = 0; i < ppCoins.first.size(); ++i) {
+				auto& penny = ppCoins.first[i];
 				priority += double(penny.Value) * GetTx(penny.OutPoint.TxHash).DepthInMainChain;
-
-				TxIn txIn;
-				txIn.PrevOutPoint = penny.OutPoint;
-				tx->m_txIns.push_back(txIn);
+				tx->m_txIns[i].PrevOutPoint = penny.OutPoint;
 			}
 			tx->m_bLoadedIns = true;
 			int64_t nChange = ppCoins.second - nVal - fee;
 
-			if (fee < m_eng->ChainParams.MinTxFee && nChange > 0 && nChange < m_eng->ChainParams.CoinValue/100) {
+			if (fee < m_eng->ChainParams.MinTxFee && nChange > 0 && nChange < m_eng->ChainParams.CoinValue / 100) {
                 int64_t nMoveToFee = std::min(nChange, m_eng->ChainParams.MinTxFee - fee);
                 nChange -= nMoveToFee;
                 fee += nMoveToFee;
@@ -888,18 +874,20 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 				fee += exchange(nChange, 0);
 
 			if (nChange > 0) {
-				tx.ChangePubKey = GetReservedPublicKey().first;
-				const Address& a = vSend[0].first;
-				bool isAddress = a.Type == AddressType::P2PKH || a.Type == AddressType::P2SH;
-				Blob scriptChange = isAddress ? Address(*m_eng, AddressType::P2PKH, tx.ChangePubKey.Hash160)->ToScriptPubKey() : Script::BlobFromPubKey(tx.ChangePubKey);	//!!!?
-				tx.TxOuts().insert(tx.TxOuts().begin() + Ext::Random().Next(tx.TxOuts().size()), TxOut(nChange, scriptChange));
+				if (!changeKeyInfo)
+					changeKeyInfo = randomKey ? randomKey : m_eng->m_cdb.GenerateNewAddress(g_conf.GetChangeType(), nullptr);	 //!!!TODO: consider ChangeType for RandomKey
+				tx.ChangeKeyInfo = changeKeyInfo;
+				Blob scriptChange = tx.ChangeKeyInfo->ToAddress()->ToScriptPubKey();
+				int randomPlace = Ext::Random().Next(txOuts.size() + 1);
+#ifdef _DEBUG//!!!D
+				randomPlace = 0;
+#endif
+				txOuts.insert(txOuts.begin() + randomPlace, TxOut(nChange, scriptChange));
 			}
 
 			WalletSigner signer(_self, tx);
-			int nIn = 0;
-			EXT_FOR (const Penny& penny, ppCoins.first) {
-				signer.Sign(randomKey, penny.PkScript, nIn++);
-			}
+			for (int i = 0; i < ppCoins.first.size(); ++i)
+				signer.Sign(randomKey, ppCoins.first[i], i);
 
 			m_eng->CheckForDust(tx);
 
@@ -916,6 +904,8 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 				tx.Timestamp = Clock::now();
 				return pair<WalletTx, decimal64>(tx, dfee);
 			}
+			if (initialFee)
+				Throw(CoinErr::TxFeeIsLow);
 			fee = minFee;
 		}
 	}
@@ -949,8 +939,8 @@ void Wallet::Relay(const WalletTx& wtx) {
 }
 
 void Wallet::Commit(WalletTx& wtx) {
-	if (wtx.ChangePubKey.Data.size() > 0)
-		m_eng->m_cdb.RemovePubKeyFromReserved(wtx.ChangePubKey);
+	if (wtx.ChangeKeyInfo)
+		m_eng->m_cdb.RemoveKeyInfoFromReserved(wtx.ChangeKeyInfo);
 	ProcessMyTx(wtx, true);
 	Relay(wtx);
 }
@@ -959,10 +949,10 @@ void Wallet::ResendWalletTxes(const DateTime& now) {
 	if (EXT_LOCKED(m_eng->MtxPeers, m_eng->Links.empty()))
 		return;
 	if (now < m_dtNextResend)
-		return;	
+		return;
 	SetNextResendTime(now);
 	if (m_dtLastResend >= m_eng->Caches.DtBestReceived)
-		return;	
+		return;
 	m_dtLastResend = now;
 	EXT_LOCK (m_eng->Mtx) {
 		EXT_LOCK (m_eng->m_cdb.MtxDb) {
@@ -970,7 +960,6 @@ void Wallet::ResendWalletTxes(const DateTime& now) {
 				WalletTx wtx;
 				wtx.LoadFromDb(dr);
 				if (!wtx->IsCoinBase()) {
-
 #ifdef X_DEBUG//!!!D
 					{
 						XmlTextWriter x("c:\\work\\coin\\tx.log");
@@ -979,12 +968,7 @@ void Wallet::ResendWalletTxes(const DateTime& now) {
 					}
 					int64_t minFee = wtx.GetMinFee();
 					minFee = wtx.GetMinFee();
-					minFee = wtx.GetMinFee();
 					wtx.Check();
-#endif
-
-#ifdef X_DEBUG//!!!D
-
 					TRC(1, "Tx: " << Hash(wtx));
 					EXT_FOR (const TxIn& txIn, wtx.TxIns) {
 						TRC(1, "TxIn: " << txIn.PrevOutPoint.TxHash);
@@ -1010,7 +994,7 @@ void Wallet::OnPeriodic(const DateTime& now) {
 void Wallet::OnPeriodicForLink(Link& link) {
 }
 
-void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment) {
+void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment, const decimal64& decFee) {
 	TRC(0, decAmount << " " << m_eng->ChainParams.Symbol << " to " << saddr << " " << comment);
 
 	if (decAmount > Balance)
@@ -1018,9 +1002,8 @@ void Wallet::SendTo(const decimal64& decAmount, RCString saddr, RCString comment
 	int64_t amount = decimal_to_long_long(decAmount * m_eng->ChainParams.CoinValue);
 	if (0 == amount)
 		Throw(errc::invalid_argument);
-
 	vector<pair<Address, int64_t>> vSend(1, make_pair(Address(*m_eng, saddr), amount));
-	pair<WalletTx, decimal64> pp = CreateTransaction(nullptr, vSend);
+	pair<WalletTx, decimal64> pp = CreateTransaction(nullptr, vSend, decimal_to_long_long(decFee));
 	pp.first.Comment = comment;
 	t_features.PayToScriptHash = true;
 
@@ -1036,7 +1019,7 @@ decimal64 Wallet::CalcFee(const decimal64& amount) {
 		return make_decimal64((long long)m_eng->ChainParams.MinTxFee, - m_eng->ChainParams.Log10CoinValue());
 	if (amount > Balance)
 		Throw(CoinErr::InsufficientAmount);
-	Address addr(*m_eng, AddressType::P2PKH, GetReservedPublicKey().second); //!!!?
+	Address addr = m_eng->m_cdb.GenerateNewAddress(g_conf.GetAddressType(), nullptr)->ToAddress();
 	vector<pair<Address, int64_t>> vSend(1, make_pair(addr, decimal_to_long_long(amount * m_eng->ChainParams.CoinValue)));
 	KeyInfo randomKey;
 	Rng rng;
