@@ -537,7 +537,7 @@ void Inventory::Print(ostream& os) const {
 }
 
 GetBlocksMessage::GetBlocksMessage(const HashValue& hashLast, const HashValue& hashStop)
-	:	base("getblocks")
+	: base("getblocks")
 {
 	Set(hashLast, hashStop);
 }
@@ -917,7 +917,7 @@ void CoinEng::RemoveVerNonce(Link& link) {
 JumpAction CoinEng::TryJumpToBlockchain(int sym, Link *link) {
 	String symbol = Convert::MulticharToString(sym);
 	if (symbol == ChainParams.Symbol)
-		return JumpAction::Continue;	
+		return JumpAction::Continue;
 	TRC(2, symbol);
 	if (!link)
 		return JumpAction::Break;

@@ -182,7 +182,6 @@ namespace Coin {
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e) {
-            MenuDBMode.IsEnabled = false;       //!!! Until testing of Lite mode
             MenuModeFull.Tag = EEngMode.Bootstrap;
             MenuModeLite.Tag = EEngMode.Lite;
 
@@ -626,11 +625,9 @@ namespace Coin {
             ContextMenu menu = (ContextMenu)sender;
             var wf = SelectedWallet();
             menu.DataContext = wf;
-/*
             MenuDBMode.IsEnabled = wf != null;
             if (MenuDBMode.IsEnabled)
                 SetMenuDBMode();
-*/
         }
 
         private void menuMining_Checked(object sender, RoutedEventArgs e) {
@@ -674,17 +671,22 @@ namespace Coin {
 
 
 
-        public Uri IconUri { get { return new Uri("images/" + Regex.Replace(Wallet.CurrencyName, @"-testnet\d?", "") + ".ico", UriKind.Relative); } }
-        public string CurrencySymbol { get { return Wallet.CurrencySymbol; } }
-        public string Balance { get { return Wallet.Balance.ToString("0.########"); } }
-        public string BlockHeight =>  Wallet.LastBlock.ToString("n0", CultureInfo.InvariantCulture);
-        public string State { get { return Wallet.State; } }
-        public int Peers { get { return Wallet.Peers; } }
-        public bool MiningEnabled { get { return Wallet.MiningEnabled; } set { Wallet.MiningEnabled = value; } }
-        public bool MiningAllowed { get { return Wallet.MiningAllowed; } }
+        public Uri IconUri => new Uri("images/" + Regex.Replace(Wallet.CurrencyName, @"-testnet\d?", "") + ".ico", UriKind.Relative);
+        public string CurrencySymbol => Wallet.CurrencySymbol;
+        public string Balance => Wallet.Balance.ToString("0.########");
+        public string BlockHeight => Wallet.LastBlock.ToString("n0", CultureInfo.InvariantCulture);
+        public string State => Wallet.State;
+        public int Peers => Wallet.Peers;
+        public bool MiningEnabled { get => Wallet.MiningEnabled;  set => Wallet.MiningEnabled = value; }
+        public bool MiningAllowed => Wallet.MiningAllowed;
 
-        public bool LiteModeEnabled { get { return Wallet.Mode == EEngMode.Lite; } set { Wallet.Mode = value ? EEngMode.Lite : (Wallet.CurrencySymbol=="BTC" ? EEngMode.Bootstrap : EEngMode.Normal); } }
-        public bool LiteModeAllowed { get { return Wallet.LiteModeAllowed; } }
+        public bool LiteModeEnabled {
+            get => Wallet.Mode == EEngMode.Lite;
+            set {
+                Wallet.Mode = value ? EEngMode.Lite : (Wallet.CurrencySymbol == "BTC" ? EEngMode.Bootstrap : EEngMode.Normal);
+            }
+        }
+        public bool LiteModeAllowed => Wallet.LiteModeAllowed;
 
         public bool CheckForChanges() {
             bool r = Wallet.GetAndResetStateChangedFlag();
@@ -707,9 +709,7 @@ namespace Coin {
             _handle = handle;
         }
 
-        public IntPtr Handle {
-            get { return _handle; }
-        }
+        public IntPtr Handle => _handle;
     }
 
     public class MyImageConverter : IValueConverter {

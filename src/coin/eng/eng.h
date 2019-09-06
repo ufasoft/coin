@@ -51,11 +51,11 @@ class GetDataMessage;
 class Link;
 
 extern const Version
-VER_BLOCKS_TABLE_IS_HASHTABLE,
-VER_PUBKEY_RECOVER,
-VER_HEADERS,
-DB_VER_COMPACT_UTXO,
-DB_VER_LATEST;
+	VER_BLOCKS_TABLE_IS_HASHTABLE,
+	VER_PUBKEY_RECOVER,
+	VER_HEADERS,
+	DB_VER_COMPACT_UTXO,
+	DB_VER_LATEST;
 
 struct QueuedBlockItem {
 	HashValue HashBlock;
@@ -137,7 +137,7 @@ public:
 	int CoinbaseMaturity;
 	int AnnualPercentageRate;
 	int TargetInterval;
-	
+
 	Target MaxTarget, InitTarget;
 	HashValue HashValueMaxTarget;		// function of MaxTarget
 	Target MaxPossibleTarget;
@@ -293,7 +293,6 @@ public:
 	recursive_mutex MtxDb;
 
 	path DbWalletFilePath, DbPeersFilePath;
-	String FilenameSuffix;
 	SqliteConnection m_dbWallet;
 	SqliteCommand CmdAddNewKey;
 	SqliteCommand m_cmdIsFromMe, CmdGetBalance, CmdRecipients, CmdGetTxId, CmdGetTx, CmdGetTxes, CmdPendingTxes, CmdSetBestBlockHash, CmdFindCoin, CmdInsertCoin;

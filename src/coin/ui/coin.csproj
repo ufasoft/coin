@@ -11,7 +11,7 @@
     <AssemblyName>Coin</AssemblyName>
     <Product>Coin</Product>
     <Description>Multi-cryptocurrency client.&#10; Bitcoin, Litecoin, etc.</Description>
-    <Version>1.198</Version>
+    <Version>1.19.8</Version>
     <Copyright>Copyright © Ufasoft 2011-2019</Copyright>
     <ApplicationIcon>..\images\coin.ico</ApplicationIcon>
     <OutputPath>$(OUT)\$(DirSuffix)\</OutputPath>

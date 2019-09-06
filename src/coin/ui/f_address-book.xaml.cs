@@ -1,6 +1,6 @@
 ﻿/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
-# 		See LICENSE for licensing information                                                                                         #
+#       See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
 
 using System;
@@ -19,52 +19,49 @@ using GuiComp;
 using Interop.coineng;
 
 namespace Coin {
-	public partial class FormAddressBook : Window {
+    public partial class FormAddressBook : Window {
 
-		public FormAddressBook(WalletForms wf) {
-			WalletForms = wf;
-			InitializeComponent();
+        public FormAddressBook(WalletForms wf) {
+            WalletForms = wf;
+            InitializeComponent();
 
-		}
+        }
 
-		WalletForms WalletForms { get; set; }
+        WalletForms WalletForms { get; set; }
 
-		IWallet Wallet {
-			get { return WalletForms.Wallet; }
-		}
+        IWallet Wallet => WalletForms.Wallet;
 
-
-		ListViewSortHelper LvMyAddressesSortHelper = new ListViewSortHelper();
+        ListViewSortHelper LvMyAddressesSortHelper = new ListViewSortHelper();
 
 
-		private void Window_Loaded(object sender, RoutedEventArgs e) {
+        private void Window_Loaded(object sender, RoutedEventArgs e) {
             lvMyAddresses.Wallet = Wallet;
-			lvMyAddresses.UpdateMyAddresses();
+            lvMyAddresses.UpdateMyAddresses();
 
-			lvRecipients.Wallet = Wallet;
-			lvRecipients.UpdateRecipients();
-		}
+            lvRecipients.Wallet = Wallet;
+            lvRecipients.UpdateRecipients();
+        }
 
-		Address GetMySelectedAddress() {
-			return (Address)lvMyAddresses.SelectedItem;
-		}
+        Address GetMySelectedAddress() {
+            return (Address)lvMyAddresses.SelectedItem;
+        }
 
 
-		private void FormAddressBook_Closed(object sender, EventArgs e) {
-			WalletForms.FormAddressBook = null;
-		}
+        private void FormAddressBook_Closed(object sender, EventArgs e) {
+            WalletForms.FormAddressBook = null;
+        }
 
-		private void OnSendToRecipient(object sender, IWallet wallet, string address, decimal? amount, string comment) {
-			var dlg = new FormSendMoney();
-			var c = dlg.CtlSend;
-			c.textAddress.Text = address;
-			c.textComment.Text = comment;
-			c.Wallet = wallet;
-			if (amount.HasValue)
-				c.textAmount.Text = amount.ToString();
-			Dialog.ShowDialog(dlg, this);
-		}
-	}
+        private void OnSendToRecipient(object sender, IWallet wallet, string address, decimal? amount, string comment) {
+            var dlg = new FormSendMoney();
+            var c = dlg.CtlSend;
+            c.textAddress.Text = address;
+            c.textComment.Text = comment;
+            c.Wallet = wallet;
+            if (amount.HasValue)
+                c.textAmount.Text = amount.ToString();
+            Dialog.ShowDialog(dlg, this);
+        }
+    }
 
 
 }

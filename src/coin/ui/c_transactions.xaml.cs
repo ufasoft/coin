@@ -30,16 +30,14 @@ namespace Coin {
         WalletForms m_walletForms;
 
         public WalletForms WalletForms {
-            get { return m_walletForms; }
+            get => m_walletForms;
             set {
                 m_walletForms = value;
                 //  Title = WalletForms.Wallet.CurrencyName + " Transactions";
             }
         }
 
-        IWallet Wallet {
-            get { return WalletForms.Wallet; }
-        }
+        IWallet Wallet => WalletForms.Wallet;
 
         public ObservableCollection<Tx> Transactions = new ObservableCollection<Tx>();
 

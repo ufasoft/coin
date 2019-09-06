@@ -1004,10 +1004,13 @@ CoinEngApp::CoinEngApp() {
 	TRC(0, "Starting");
 #endif
 	auto pathExampleConf = appDataDir / (UCFG_COIN_CONF_FILENAME ".example");
-	if (!exists(pathExampleConf)) {
+	ostringstream osExample;
+	osExample << "# Example Configuration file, you may rename it to " << UCFG_COIN_CONF_FILENAME << ", uncomment some options and edit them\n\n";
+	g_conf.SaveSample(osExample);
+	String sExample = osExample.str();
+	if (!exists(pathExampleConf) || file_size(pathExampleConf) != sExample.length()) {
 		ofstream ofs(pathExampleConf);
-		ofs << "# Example Configuration file, you may rename it to " << UCFG_COIN_CONF_FILENAME << ", uncomment some options and edit them\n\n";
-		g_conf.SaveSample(ofs);
+		ofs << sExample;
 	}
 	if (ifstream ifs = ifstream(appDataDir / UCFG_COIN_CONF_FILENAME))
 		g_conf.Load(ifs);
@@ -1037,7 +1040,7 @@ Version CoinEngApp::get_ProductVersion() {
 CoinEngApp theApp;
 
 void SetUserVersion(SqliteConnection& db, const Version& ver) {
-	Version v = ver == Version() ? theApp.ProductVersion : ver;
+	Version v = ver == Version() ? DB_VER_LATEST : ver;
 	db.ExecuteNonQuery(EXT_STR("PRAGMA user_version = " << ((v.Major << 16) | v.Minor)));
 }
 
@@ -1066,17 +1069,14 @@ path CoinEng::GetBootstrapPath() {
 }
 
 path CoinEng::VGetDbFilePath() {
-	path r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Name);
-	if (!m_cdb.FilenameSuffix.empty())
-		r += m_cdb.FilenameSuffix.c_str();
-	else {
-		switch (Mode) {
-		case EngMode::Lite: r += ".spv"; break;
-		case EngMode::BlockParser: r += ".blocks"; break;
-		case EngMode::BlockExplorer: r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + ".explorer"); break;
-		case EngMode::Bootstrap: r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + ".bootstrap-index"); break;
-		}
+	String suffix = ".normal";
+	switch (Mode) {
+	case EngMode::Lite: suffix = ".spv"; break;
+	case EngMode::BlockParser: suffix = ".blocks"; break;
+	case EngMode::BlockExplorer: suffix = ".explorer"; break;
+	case EngMode::Bootstrap: suffix = ".bootstrap-index"; break;
 	}
+	path r = AfxGetCApp()->get_AppDataDir() / ToPath(ChainParams.Symbol) / ToPath(ChainParams.Symbol + suffix);
 	return r;
 }
 
@@ -1400,15 +1400,12 @@ void IBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend, int32_t heightC
 }
 
 Version CheckUserVersion(SqliteConnection& db) {
-	Version ver = theApp.ProductVersion;
-	SqliteCommand cmd("PRAGMA user_version", db);
-	int dbver = (int)cmd.ExecuteInt64Scalar();
+	int dbver = (int)SqliteCommand("PRAGMA user_version", db).ExecuteInt64Scalar();
 	Version dver = Version(dbver >> 16, dbver & 0xFFFF);
-	if (dver > ver && (dver.Major != ver.Major || dver.Minor / 10 != ver.Minor / 10)) { // Versions [mj.x0 .. mj.x9] are DB-compatible
-		db.Close();
-		throw VersionException(dver);
-	}
-	return dver;
+	if (dver.Major <= DB_VER_LATEST.Major)	// Version mj.x is compatible with mj.y
+		return dver;
+	db.Close();
+	throw VersionException(dver);
 }
 
 CEngStateDescription::CEngStateDescription(CoinEng& eng, RCString s)

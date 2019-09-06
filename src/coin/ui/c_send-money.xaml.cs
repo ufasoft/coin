@@ -30,7 +30,7 @@ namespace Coin {
         decimal Fee;
 
         public IWallet Wallet {
-            get { return m_Wallet; }
+            get => m_Wallet;
             set {
                 m_Wallet = value;
                 labelCurrencySymbol.Content = m_Wallet != null ? m_Wallet.CurrencySymbol : "";

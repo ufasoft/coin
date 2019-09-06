@@ -9,12 +9,12 @@
    				<ColumnDefinition Width="Auto" SharedSizeGroup="buttons" />
        		</Grid.ColumnDefinitions>
 		</Grid>
-		<Label Content="Label" Height="28" Margin="0,12,28,0" Name="labelProductName" VerticalAlignment="Top" HorizontalAlignment="Right" Width="90" />
+		<Label Content="Label" Height="28" Margin="0,12,28,0" Name="labelProductName" VerticalAlignment="Top" HorizontalAlignment="Right" Width="130" />
 		<Label Content="Label" Height="28" Margin="159,46,28,0" Name="labelVersion" VerticalAlignment="Top" />
 		<Label Content="Label" Height="28" Margin="159,80,49,0" Name="labelCopyright" VerticalAlignment="Top" />
-		<Label Content="Label" Height="28" Margin="159,12,0,0" Name="labelCompanyName" VerticalAlignment="Top" HorizontalAlignment="Left" Width="108" />
+		<Label Content="Label" Height="28" Margin="159,12,0,0" Name="labelCompanyName" VerticalAlignment="Top" HorizontalAlignment="Left" Width="100" />
 		<TextBlock Width="202" Height="155" HorizontalAlignment="Left" Margin="159,114,0,0" Name="textBlockDescription" Text="TextBlock" VerticalAlignment="Top"  />
 		<Button Content="Ok" IsCancel="true" IsDefault="true" Margin="177,302,193,12" Padding="7,3.5" />
-		<Image Height="133" HorizontalAlignment="Left" Name="Image" x:FieldModifier="public"  Stretch="Fill" VerticalAlignment="Top" Width="139" />
+		<Image Height="133" HorizontalAlignment="Left" Name="Image" x:FieldModifier="public"  Stretch="Fill" VerticalAlignment="Top" Width="139" Margin="10,10,0,0" />
 	</Grid>
 </Window>

@@ -1,11 +1,3 @@
-/*######     Copyright (c) 1997-2012 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com #####
-# This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published #
-# by the Free Software Foundation; either version 3, or (at your option) any later version. This program is distributed in the hope that #
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. #
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this #
-# program; If not, see <http://www.gnu.org/licenses/>                                                                                    #
-########################################################################################################################################*/
-
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,8 +9,7 @@ using HDC = System.IntPtr;
 using LONG = System.Int32;
 using DWORD = System.UInt32;
 
-namespace Win32
-{
+namespace Win32 {
 
 [Flags]
 public enum StateSystem : int
@@ -117,8 +108,7 @@ public enum OBJID : uint
 		OBJID_NATIVEOM = 0xFFFFFFF0
 }
 
-public enum WM : int
-{
+public enum WM : int {
 	WM_ACTIVATE = 0x6,
 	WM_ACTIVATEAPP = 0x1C,
 	WM_ASKCBFORMATNAME = 0x30C,
@@ -284,9 +274,12 @@ public enum WM : int
 	WM_WININICHANGE = 0x1A
 }
 
-public partial class Api
-{
-	
+public enum SW : int {
+    SW_SHOWNORMAL = 1,
+    SW_SHOWMINIMIZED = 2
+}
+
+public partial class Api {	
 
 	[DllImport("user32")]
 	public static extern int SetScrollInfo(HWND hwnd, ScrollBarSelect n, ref SCROLLINFO lpcScrollInfo, bool redraw);
@@ -312,8 +305,13 @@ public partial class Api
 	[DllImport("user32")]
 	public static extern bool SetForegroundWindow(HWND hWnd);
 
-	public static void Win32Check(bool b)
-	{
+    [DllImport("user32", SetLastError = true)]
+    public static extern bool SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT lpwndpl);
+
+    [DllImport("user32", SetLastError = true)]
+    public static extern bool GetWindowPlacement(IntPtr hWnd, out WINDOWPLACEMENT lpwndpl);
+
+	public static void Win32Check(bool b) {
         int err = Marshal.GetLastWin32Error();
 		if (!b)
 			throw new Win32Exception();

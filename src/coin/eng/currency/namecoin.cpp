@@ -30,7 +30,7 @@ public:
 	DbTable m_tableDomains;
 
 	NamecoinDbliteDb()
-		:	m_tableDomains("domains", 0, TableType::HashTable)
+		: m_tableDomains("domains", 0, TableType::HashTable)
 	{
 	}
 protected:
@@ -316,7 +316,7 @@ static int GetRelativeDepth(const Tx& tx, const Tx& txPrev, int maxDepth) {
 static int64_t GetNameNetFee(const Tx& tx) {
 	int64_t r = 0;
 	EXT_FOR (const TxOut& txOut, tx.TxOuts()) {
-		if (txOut.get_ScriptPubKey().Size == 1 && txOut.get_ScriptPubKey()[0] == OP_RETURN)
+		if (txOut.get_ScriptPubKey().size() == 1 && txOut.get_ScriptPubKey()[0] == OP_RETURN)
 			r += txOut.Value;
 	}
 	return r;
@@ -376,7 +376,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				int hPrev = NamecoinDb().GetNameHeight(dt.Args[0], heightExpired);
 				if (hPrev>=0 && hPrev > heightExpired)
 					Throw(CoinErr::NAME_ExpirationError);
-				if (Mode!=EngMode::Lite && Mode!=EngMode::BlockParser) {
+				if (Mode != EngMode::Lite && Mode != EngMode::BlockParser) {
 					int depth = GetRelativeDepth(tx, vTxPrev[dtPrev.NOut], MIN_FIRSTUPDATE_DEPTH);
 					if (depth >= 0 && depth < MIN_FIRSTUPDATE_DEPTH)
 						Throw(CoinErr::NAME_ExpirationError);
