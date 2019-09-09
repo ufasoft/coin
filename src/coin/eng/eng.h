@@ -672,6 +672,7 @@ public:
 
 	typedef unordered_map<HashValue, BlocksInFlightList::iterator> CMapBlocksInFlight;
 	CMapBlocksInFlight MapBlocksInFlight;
+	//----
 
 	std::exception_ptr CriticalException;
 

@@ -70,8 +70,10 @@ bool CoinEng::MarkBlockAsReceived(const HashValue& hashBlock) {
 	EXT_LOCK(Mtx) {
 		auto it = MapBlocksInFlight.find(hashBlock);
 		if (it != MapBlocksInFlight.end()) {
-			it->second->Link.BlocksInFlight.erase(it->second);
-			it->second->Link.DtStallingSince = DateTime();
+			BlocksInFlightList::iterator itInFlight = it->second;
+			Coin::Link& link = itInFlight->Link;
+			link.DtStallingSince = DateTime();
+			link.BlocksInFlight.erase(itInFlight);
 			MapBlocksInFlight.erase(it);
 			return true;
 		}
@@ -167,7 +169,9 @@ void InvMessage::Process(Link& link) {
 					hashLastInvBlock = inv.HashValue;
 
 					if (bCloseToBeSync && link.BlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-						eng.MarkBlockAsInFlight(*m, link, inv);
+						EXT_LOCK(eng.Mtx) {
+							eng.MarkBlockAsInFlight(*m, link, inv);
+						}
 					}
 				}
 			} else {
