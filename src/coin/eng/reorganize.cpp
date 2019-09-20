@@ -45,7 +45,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 	TRC(1, "");
 
 	BlockHeader prevBlock = header;
-	Block curBest = BestBlock(),
+	Block curBest = Db->FindBlock(BestBlock().Height),
 		forkBlock = curBest;
 	vector<BlockHeader> vConnect;
 	vector<ptr<BlockObj>> vDisconnect;

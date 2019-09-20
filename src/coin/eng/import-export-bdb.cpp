@@ -153,7 +153,7 @@ void Wallet::ExportWalletToBdb(const path& filepath) {
 			int64_t nPool = 0;
 			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();) {
 				KeyInfo ki = Eng.m_cdb.Hash160ToKey[Hash160(CanonicalPubKey::FromCompressed(dr.GetBytes(0)).Data)];
-				w.Write(make_pair(string("key"), Span(ki.PubKey.Data)), ki.m_pimpl->ToPrivateKeyDER());
+				w.Write(make_pair(string("key"), Span(ki.PubKey.Data)), ki->ToPrivateKeyDER());
 
 				if (dr.GetInt32(1)) {
 					KeyPool pool = { ki->Timestamp, ki.PubKey };

@@ -150,6 +150,7 @@ void CoinDb::TopUpPool() {
 			keyInfo->Reserved = true;
 			AddNewKey(keyInfo);
 		}
+		UpdateFilter();
 	}
 }
 
@@ -352,20 +353,25 @@ void CoinDb::SavePeers(int idPeersNet, const vector<ptr<Peer>>& peers) {
 	}
 }
 
-/*!!!R void CoinDb::OnIpDetected(const IPAddress& ip) {
-	EXT_LOCK (MtxDb) {
-		TRC(1, ip);
-		LocalIp4 = ip;
-	}
-	AddLocal(ip);
-}*/
-
 bool CoinDb::get_WalletDatabaseExists() {
 	return exists(DbWalletFilePath);
 }
 
 bool CoinDb::get_PeersDatabaseExists() {
 	return exists(DbPeersFilePath);
+}
+
+void CoinDb::UpdateFilter() {
+	Filter = new CoinFilter(Hash160ToKey.size() * 2, 0.0000001, Ext::Random().Next(), CoinFilter::BLOOM_UPDATE_ALL);
+	DtEarliestKey = Clock::now();
+	for (auto& kv : Hash160ToKey) {
+		Filter->Insert(kv.first);
+		Filter->Insert(kv.second.PubKey.Data);
+		DtEarliestKey = (min)(DtEarliestKey, kv.second->Timestamp);
+	}
+	for (auto& kv : P2SHToKey)
+		Filter->Insert(kv.first);
+	ASSERT(IsFilterValid(Filter));
 }
 
 void CoinDb::LoadKeys(RCString password) {
@@ -393,7 +399,7 @@ void CoinDb::LoadKeys(RCString password) {
 			if (buf.size() < 2)
 				Throw(E_FAIL);
 			switch (buf[0]) {
-			case 0: ki.m_pimpl->SetPrivData(PrivateKey(buf.subspan(1), ki.PubKey.IsCompressed()));
+			case 0: ki->SetPrivData(PrivateKey(buf.subspan(1), ki.PubKey.IsCompressed()));
 				break;
 			case 'A':
 			case 'B':
@@ -402,7 +408,7 @@ void CoinDb::LoadKeys(RCString password) {
 				if (password == nullptr) {
 					m_masterPassword = nullptr;
 					m_cachedMasterKey = make_pair(Blob(), Blob());
-					ki.m_pimpl->SetKeyFromPubKey();
+					ki->SetKeyFromPubKey();
 				} else {
 // try { //!!!T
 					try {
@@ -414,8 +420,8 @@ void CoinDb::LoadKeys(RCString password) {
 						Blob ptext = pAes->Decrypt(buf.subspan(1));
 						if (ptext.size() < 5)
 							Throw(CoinErr::InconsistentDatabase);
-						ki.m_pimpl->SetPrivData(PrivateKey(Span(ptext.constData(), ptext.size() - 4), ki.PubKey.IsCompressed()));
-						if (!Equal(Crc32().ComputeHash(ki.m_pimpl->get_PrivKey()), Blob(ptext.constData() + ptext.size() - 4, 4)))
+						ki->SetPrivData(PrivateKey(Span(ptext.constData(), ptext.size() - 4), ki.PubKey.IsCompressed()));
+						if (!Equal(Crc32().ComputeHash(ki->get_PrivKey()), Blob(ptext.constData() + ptext.size() - 4, 4)))
 							Throw(ExtErr::LogonFailure);
 					} catch (OpenSslException&) {
 						Throw(ExtErr::LogonFailure);
@@ -466,12 +472,8 @@ void CoinDb::LoadKeys(RCString password) {
 			}
 		}
 #endif
+		UpdateFilter();
 
-		Filter = new CoinFilter(Hash160ToKey.size() * 2, 0.0000001, Ext::Random().Next(), CoinFilter::BLOOM_UPDATE_ALL);
-		EXT_FOR (const CoinDb::CHash160ToKey::value_type& kv, Hash160ToKey) {
-			Filter->Insert(kv.first);
-			Filter->Insert(kv.second.PubKey.Data);
-		}
 #ifdef X_DEBUG//!!!D
 		EXT_FOR (const CoinDb::CHash160MyKey::value_type& kv, Hash160ToKey) {
 			ASSERT(Filter->Contains(kv.first) && Filter->Contains(kv.second.PubKey.Data));
@@ -480,6 +482,20 @@ void CoinDb::LoadKeys(RCString password) {
 	}
 	if (!NeedPassword)
 		TopUpPool();
+}
+
+bool CoinDb::IsFilterValid(CoinFilter* filter) {
+	if (!filter)
+		return false;
+	EXT_LOCK(MtxDb) {
+		for (auto& kv : Hash160ToKey)
+			if (!filter->Contains(kv.first))
+				return false;
+		for (auto& kv : P2SHToKey)
+			if (!filter->Contains(kv.first))
+				return false;
+	}
+	return true;
 }
 
 KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
@@ -523,7 +539,7 @@ KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
 					return nullptr;
 			}
 			hashval hv = RIPEMD160().ComputeHash(parsed.Data());
-			parsed.m_pimpl->Data = AddressObj::CData(hv.data(), hv.size());
+			parsed->Data = AddressObj::CData(hv.data(), hv.size());
 		}
 		break;
 	case AddressType::P2SH:
@@ -545,13 +561,13 @@ KeyInfo CoinDb::FindMine(RCSpan scriptPubKey, ScriptContext context) {
 		if (context == ScriptContext::Top)
 			return nullptr;
 		if (context != ScriptContext::P2SH)
-			for (auto& key : parsed.m_pimpl->Datas)
+			for (auto& key : parsed->Datas)
 				if (key.size() != 33)
 					return 0;
 		KeyInfo ki(nullptr);	//!!!TODO we return the last key, mut must return all set or bool value.
 		hash160 = Hash160(parsed.Data());
 		EXT_LOCK(MtxDb) {
-			for (auto& key : parsed.m_pimpl->Datas) {
+			for (auto& key : parsed->Datas) {
 				CoinDb::CHash160ToKey::iterator it = Hash160ToKey.find(Hash160(key));
 				if (it == Hash160ToKey.end())
 					return nullptr;

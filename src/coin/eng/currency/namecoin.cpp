@@ -281,7 +281,7 @@ DecodedTx DecodeNameTx(const Tx& tx) {
 }
 
 void NamecoinEng::OnCheck(const Tx& tx) {
-	if (tx.m_pimpl->Ver != NAMECOIN_TX_VERSION)
+	if (tx->Ver != NAMECOIN_TX_VERSION)
 		return;
 	DecodedTx dt = DecodeNameTx(tx);
 	if (dt.Args[0].Size > MAX_NAME_LENGTH)
@@ -349,7 +349,7 @@ void NamecoinEng::OnConnectInputs(const Tx& tx, const vector<Tx>& vTxPrev, bool 
 				}
 			}
 		}
-		if (tx.m_pimpl->Ver != NAMECOIN_TX_VERSION) {
+		if (tx->Ver != NAMECOIN_TX_VERSION) {
 			if (bFound)
 				Throw(CoinErr::NAME_NameCoinTransactionWithInvalidVersion);
 			return;
@@ -420,7 +420,7 @@ void NamecoinEng::OnConnectBlock(const Block& block) {
 }
 
 void NamecoinEng::OnDisconnectInputs(const Tx& tx) {
-	if (tx.m_pimpl->Ver != NAMECOIN_TX_VERSION)
+	if (tx->Ver != NAMECOIN_TX_VERSION)
 		return;
 
 	DecodedTx dt = DecodeNameTx(tx);

@@ -266,6 +266,7 @@ public:
 };
 
 class ReducedBlockHash {
+	Span m_buf;
 public:
 	ReducedBlockHash(const HashValue& hash)
 		: m_buf(hash.ToSpan())
@@ -276,8 +277,6 @@ public:
 
     const uint8_t *data() const { return m_buf.data(); }
     size_t size() const { return m_buf.size(); }
-private:
-	Span m_buf;
 };
 
 COIN_UTIL_EXPORT HashValue Hash(RCSpan mb);
@@ -324,7 +323,7 @@ public:
 class ProtocolReader : public BinaryReader {
     typedef BinaryReader base;
 public:
-    CBool WitnessAware;
+    CBool WitnessAware, MayBeHeader;
 
     explicit ProtocolReader(const Stream& stm, bool witnessAware = false)
 		: base(stm)
@@ -339,6 +338,8 @@ struct ShortTxId {
 
 class CoinSerialized {
 public:
+	static const uint32_t MAX_SIZE = 32 * 1024 * 1024;
+
 	uint32_t Ver;
 
 	CoinSerialized()
@@ -384,7 +385,7 @@ public:
     template <class T>
     static void ReadEl(const ProtocolReader& rd, T& v) { v.Read(rd); }
 
-	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = INT32_MAX) {
+	template <class T> static void Read(const ProtocolReader& rd, vector<T>& ar, size_t maxSize = MAX_SIZE) {
         uint32_t size = ReadCompactSize(rd);
         if (size > maxSize)
             Throw(ExtErr::Protocol_Violation);
@@ -608,11 +609,11 @@ public:
 	Span Data() const { return m_pimpl->Data; }
 
 	bool operator==(const Address& a) const {
-		return m_pimpl->Type == a.m_pimpl->Type && Equal(m_pimpl->Data, a.m_pimpl->Data);
+		return m_pimpl->Type == a->Type && Equal(m_pimpl->Data, a->Data);
 	}
 
 	bool operator<(const Address& a) const {
-		return m_pimpl->Type < a.m_pimpl->Type || (m_pimpl->Type == a.m_pimpl->Type && memcmp(m_pimpl->Data.data(), a.m_pimpl->Data.data(), m_pimpl->Data.size()) < 0); //!!!TODO: use WitnessVer & maybe Comment
+		return m_pimpl->Type < a->Type || (m_pimpl->Type == a->Type && memcmp(m_pimpl->Data.data(), a->Data.data(), m_pimpl->Data.size()) < 0); //!!!TODO: use WitnessVer & maybe Comment
 	}
 };
 

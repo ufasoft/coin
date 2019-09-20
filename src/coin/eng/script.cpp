@@ -468,7 +468,7 @@ Address TxOut::CheckStandardType(RCSpan scriptPubKey) {
 			if (!instr.IsSmallPositiveOpcode())
 				return Address(eng, AddressType::NonStandard, Span());
 			Address r(eng, AddressType::MultiSig, Span());
-			r.m_pimpl->RequiredSigs = DecodeOp(instr.OriginalOpcode);
+			r->RequiredSigs = DecodeOp(instr.OriginalOpcode);
 
 			while (true) {
 				if (!GetInstr(stm, instr) || instr.Opcode != Opcode::OP_PUSHDATA1)
@@ -478,11 +478,11 @@ Address TxOut::CheckStandardType(RCSpan scriptPubKey) {
 				CanonicalPubKey pubkey(instr.Value);
 				if (!pubkey.IsValid())
 					break;
-				r.m_pimpl->Datas.push_back(instr.Value);
+				r->Datas.push_back(instr.Value);
 			}
 			if (instr.IsSmallPositiveOpcode()
-					&& DecodeOp(instr.OriginalOpcode) == r.m_pimpl->Datas.size()
-					&& r.m_pimpl->Datas.size() >= r.m_pimpl->RequiredSigs
+					&& DecodeOp(instr.OriginalOpcode) == r->Datas.size()
+					&& r->Datas.size() >= r->RequiredSigs
 					&& GetInstr(stm, instr)
 					&& instr.Opcode == Opcode::OP_CHECKMULTISIG
 					&& !GetInstr(stm, instr))

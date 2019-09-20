@@ -104,8 +104,8 @@ public:
 
 	typedef unordered_map<OutPoint, TxOut> COutPointToTxOut;
 	COutPointToTxOut OutPointToTxOut;
-	ptr<Coin::RescanThread> RescanThread;
-	ptr<Coin::CompactThread> CompactThread;
+	ptr<RescanThread> ThreadRescan;
+	ptr<CompactThread> ThreadCompact;
 	vector<ptr<Alert>> Alerts;
 	ptr<CoinEng> m_peng;
 

@@ -365,7 +365,7 @@ public:
 		CoinEng& eng = Eng();
 		EXT_LOCK (MtxSqlite) {
 			if (eng.BestBlock() && !eng.JournalModeDelete) {
-				TimeSpan span = Clock::now()-eng.BestBlock().Timestamp;
+				TimeSpan span = Clock::now() - eng.BestBlock().Timestamp;
 				if (!eng.InWalJournalMode && span > TimeSpan::FromDays(7)) {
 					eng.InWalJournalMode = true;
 					m_db.ExecuteNonQuery("PRAGMA journal_mode=wal");

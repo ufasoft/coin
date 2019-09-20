@@ -37,16 +37,16 @@ Block SqliteBlockChainDb::LoadBlock(DbDataReader& sr) {
 
 	BlockHashValue hash = sr.GetBytes(1);
 	Block r;
-	r.m_pimpl->Height = sr.GetInt32(0);
+	r->Height = sr.GetInt32(0);
 
 	CMemReadStream ms(sr.GetBytes(2));
-	r.m_pimpl->Read(DbReader(ms, &eng));
-	r.m_pimpl->m_hash = hash;
+	r->Read(DbReader(ms, &eng));
+	r->m_hash = hash;
 
-	r.m_pimpl->m_txHashesOutNums = Coin::TxHashesOutNums(sr.GetBytes(3));
+	r->m_txHashesOutNums = Coin::TxHashesOutNums(sr.GetBytes(3));
 
 	if (r.Height > 0)
-		r.m_pimpl->PrevBlockHash = BlockHashValue(m_cmdFindBlockByOrd.Bind(1, r.Height-1).ExecuteVector().GetBytes(1));
+		r->PrevBlockHash = BlockHashValue(m_cmdFindBlockByOrd.Bind(1, r.Height-1).ExecuteVector().GetBytes(1));
 
 //!!!	ASSERT(Hash(r) == hash);
 	

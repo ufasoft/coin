@@ -16,7 +16,7 @@ TxPool::TxPool(CoinEng& eng)
 
 TxInfo::TxInfo(const class Tx& tx, uint32_t serializationSize)
 	: Tx(tx)
-	, FeeRatePerKB(tx.Fee * 1000 / serializationSize)
+	, FeeRatePerKB(serializationSize ? tx.Fee * 1000 / serializationSize : INT_MAX)
 {
 }
 
@@ -170,7 +170,7 @@ void TxMessage::Process(Link& link) {
 	if (eng.Mode == EngMode::Lite) {
 		auto it = find(link.m_curMatchedHashes.begin(), link.m_curMatchedHashes.end(), hash);
 		if (it != link.m_curMatchedHashes.end()) {
-			link.m_curMerkleBlock.m_pimpl->m_txes.push_back(Tx);
+			link.m_curMerkleBlock->m_txes.push_back(Tx);
 			link.m_curMatchedHashes.erase(it);
 			if (link.m_curMatchedHashes.empty()) {
 				Block block = exchange(link.m_curMerkleBlock, Block(nullptr));

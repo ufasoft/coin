@@ -24,14 +24,17 @@ class MessageClassFactoryBase {
 public:
 	static unordered_map<String, MFN_CreateMessage> s_map;
 
-	MessageClassFactoryBase(const char *name, MFN_CreateMessage mfn) {
-		s_map.insert(make_pair(String(name), mfn));
-	}
+	MessageClassFactoryBase(const char* name, MFN_CreateMessage mfn);
 
 //!!!	virtual CoinMessage *CreateObject() { return new CoinMessage; }
 };
 
 unordered_map<String, MFN_CreateMessage> MessageClassFactoryBase::s_map;
+
+MessageClassFactoryBase::MessageClassFactoryBase(const char* name, MFN_CreateMessage mfn) {
+	s_map.insert(make_pair(String(name), mfn));
+}
+
 
 /*!!!
 template <class T>
@@ -269,7 +272,7 @@ void CoinMessage::ProcessMsg(P2P::Link& link) {
 VersionMessage::VersionMessage()
 	: base("version")
 	, ProtocolVer(Eng().ChainParams.ProtocolVersion)
-	, Services(0)
+	, Services(NodeServices::NODE_WITNESS | NodeServices::NODE_BLOOM)
 	, LastReceivedBlock(-1)
 	, RelayTxes(true)
 {
@@ -277,7 +280,7 @@ VersionMessage::VersionMessage()
 	if (eng.Mode == EngMode::Lite)
 		RelayTxes = !eng.Filter;
 	else
-		Services |= NodeServices::NODE_NETWORK | NodeServices::NODE_WITNESS;
+		Services |= NodeServices::NODE_NETWORK;
 }
 
 void VersionMessage::Write(ProtocolWriter& wr) const {
@@ -415,7 +418,7 @@ void BlockObj::ReadHeaderInMessage(const ProtocolReader& rd) {
 void HeadersMessage::Write(ProtocolWriter& wr) const {
 	CoinSerialized::WriteCompactSize(wr, Headers.size());
 	EXT_FOR (const BlockHeader& header, Headers) {
-		header.m_pimpl->WriteHeaderInMessage(wr);
+		header->WriteHeaderInMessage(wr);
 	}
 }
 
@@ -840,7 +843,7 @@ vector<Tx> MerkleBlockMessage::Init(const Coin::Block& block, CoinFilter& filter
 }
 
 void MerkleBlockMessage::Write(ProtocolWriter& wr) const {
-	Block.m_pimpl->WriteHeader(wr);
+	Block->WriteHeader(wr);
 	wr << uint32_t(PartialMT.NItems);
 	CoinSerialized::Write(wr, PartialMT.Items);
 	vector<uint8_t> v;
@@ -849,8 +852,8 @@ void MerkleBlockMessage::Write(ProtocolWriter& wr) const {
 }
 
 void MerkleBlockMessage::Read(const ProtocolReader& rd) {
-	Block.m_pimpl->ReadHeader(rd, false, 0);
-	Block.m_pimpl->m_bTxesLoaded = true;
+	Block->ReadHeader(rd, false, 0);
+	Block->m_bTxesLoaded = true;
 	PartialMT.NItems = rd.ReadUInt32();
 	CoinSerialized::Read(rd, PartialMT.Items);
 	Blob blob = CoinSerialized::ReadBlob(rd);

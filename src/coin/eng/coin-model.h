@@ -118,12 +118,11 @@ public:
 	observer_ptr<const Block> PCurBlock;
 	observer_ptr<CConnectJob> ConnectJob;
 	bool BlockchainDb;
-	bool ForHeader;
 
 	DbWriter(Stream& stm)
 		: base(stm)
 		, BlockchainDb(true)
-		, ForHeader(false) {
+	{
 	}
 };
 
@@ -135,7 +134,7 @@ public:
 	observer_ptr<const Block> PCurBlock;
 	int NOut;
 	bool BlockchainDb;
-	bool ForHeader;
+	bool ForHeader; //!!!O Remove in 2020
 	bool ReadTxHashes;
 
 	DbReader(const Stream& stm, CoinEng* eng = 0)
@@ -626,7 +625,10 @@ public:
 DbWriter& operator<<(DbWriter& wr, const CTxes& txes);
 COIN_EXPORT const DbReader& operator>>(const DbReader& rd, CTxes& txes);
 
-ENUM_CLASS(ProofOf){Work, Stake} END_ENUM_CLASS(ProofOf);
+ENUM_CLASS(ProofOf){
+	Work
+	, Stake
+} END_ENUM_CLASS(ProofOf);
 
 class COIN_CLASS BlockObj : public BlockBase {
 	typedef BlockBase base;
@@ -641,22 +643,25 @@ public:
 	TxHashesOutNums m_txHashesOutNums;
 	mutable uint64_t OffsetInBootstrap;
 
-	mutable optional<Coin::HashValue> m_hash;
+	mutable Coin::HashValue m_hash;
+	mutable volatile bool m_bHashCalculated;
 	mutable volatile bool m_bTxesLoaded;
 
 	BlockObj()
 		: OffsetInBootstrap(0)
+		, m_pMtx(0)
 		, m_bTxesLoaded(false)
-		, m_pMtx(0) {
+		, m_bHashCalculated(false)
+	{
 	}
 
 	~BlockObj();
-	virtual Coin::HashValue Hash() const;
+	virtual const Coin::HashValue& Hash() const;
 	virtual Coin::HashValue PowHash() const;
 	Coin::HashValue MerkleRoot(bool bSave = true) const override;
 
-	virtual void Write(DbWriter& wr) const;
-	virtual void Read(const DbReader& rd);
+//!!!R	virtual void Write(DbWriter& wr) const;
+	virtual void Read(const DbReader& rd);	//!!!O Remove in 2020
 
 	Target get_DifficultyTarget() const {
 		return Target(DifficultyTargetBits);
@@ -688,15 +693,7 @@ public:
 
 protected:
 	BlockObj(BlockObj& bo);
-
-	mutex& Mtx() const {
-		if (!m_pMtx) {
-			auto pMtx = new mutex;
-			if (Interlocked::CompareExchange(m_pMtx, pMtx, (mutex*)0) != 0)
-				delete pMtx;
-		}
-		return *m_pMtx;
-	}
+	mutex& Mtx() const;
 
 	virtual BlockObj* Clone() {
 		return new BlockObj(*this);
@@ -704,14 +701,11 @@ protected:
 	virtual void Write(ProtocolWriter& wr) const;
 	virtual void Read(const ProtocolReader& rd);
 	virtual void CheckPow(const Target& target);
-	virtual void CheckSignature() {
-	}
+	virtual void CheckSignature() {}
 	virtual void Check(bool bCheckMerkleRoot);
 	virtual void CheckCoinbaseTx(int64_t nFees);
 	int GetBlockHeightFromCoinbase() const;
-	virtual void ComputeAttributes() {
-	}
-
+	virtual void ComputeAttributes() {}
 private:
 	friend class Block;
 	friend class BlockHeader;
@@ -764,10 +758,10 @@ public:
 	}
 	DEFPROP_GET(HashValue, MerkleRoot);
 
-	HashValue get_PrevBlockHash() const {
+	const HashValue& get_PrevBlockHash() const {
 		return m_pimpl->PrevBlockHash;
 	}
-	DEFPROP_GET(HashValue, PrevBlockHash);
+	DEFPROP_GET(const HashValue&, PrevBlockHash);
 
 	uint32_t get_Nonce() const {
 		return m_pimpl->Nonce;
@@ -836,16 +830,13 @@ public:
 
 	void Add(const Tx& tx) {
 		m_pimpl->m_merkleRoot.reset();
-		m_pimpl->m_hash.reset();
+		m_pimpl->m_bHashCalculated = false;
 		m_pimpl->m_bTxesLoaded = true;
 		m_pimpl->m_txes.push_back(tx);
 	}
 
 	Tx& GetFirstTxRef() {
 		return m_pimpl->m_txes[0];
-	}
-	void CheckPow(const Target& target) const {
-		return m_pimpl->CheckPow(target);
 	}
 
 	Block GetOrphanRoot() const;
@@ -867,7 +858,7 @@ protected:
 	friend class MerkleBlockMessage;
 };
 
-inline HashValue Hash(const BlockHeader& block) {
+inline const HashValue& Hash(const BlockHeader& block) {
 	return block->Hash();
 }
 
@@ -948,8 +939,6 @@ class ChainCaches {
 public:
 	mutex Mtx;
 
-	//!!!R	unordered_map<HashValue, Block> HashToAlternativeChain;		//!!! can grow to huge size
-
 	LruMap<HashValue, Block> HashToBlockCache;
 
 	typedef LruMap<uint32_t, HashValue> CHeightToHashCache;
@@ -970,13 +959,13 @@ public:
 	CCachePkIdToPubKey m_cachePkIdToPubKey;
 	bool PubkeyCacheEnabled;
 
-	BlockHeader m_bestHeader;
-	Block m_bestBlock;
+	BlockHeader m_bestHeader, m_bestBlock;
 
 	typedef list<SpentTx> CCacheSpentTxes;
 	CCacheSpentTxes m_cacheSpentTxes; // used for fast Reorganize()
 
 	ChainCaches();
+	void Add(const SpentTx& stx);
 
 	friend class CoinEng;
 };
@@ -1036,8 +1025,10 @@ struct TxFeeTuple{
 
 class CFutureTxMap : public ITxMap {
 	CoinEng& m_eng;
-	unordered_map<HashValue, shared_future<TxFeeTuple>> m_map;
+
 	mutable mutex m_mtx;
+	unordered_map<HashValue, shared_future<TxFeeTuple>> m_map;
+	//----
 public:
 	CFutureTxMap(CoinEng& eng) : m_eng(eng) {}
 	const Tx& Get(const HashValue& hash) const override;
@@ -1109,8 +1100,6 @@ public:
 	CoinEng& Eng;
 
 	EnabledFeatures Features;
-	int32_t Height;
-	//!!!?R	CFutureTxMap TxMap;
 	TxoMap TxoMap;
 	int64_t Fee;
 	Target DifficultyTarget;
@@ -1130,6 +1119,7 @@ public:
 	unordered_set<int64_t> InsertedIds;
 
 	int MaxSigOps;
+	int32_t Height;
 	mutable atomic<int> aSigOps;
 	mutable volatile bool Failed;
 

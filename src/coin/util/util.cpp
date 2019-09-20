@@ -263,7 +263,7 @@ uint64_t CoinSerialized::ReadCompactSize64(const BinaryReader& rd) {
 
 uint32_t CoinSerialized::ReadCompactSize(const BinaryReader& rd) {
 	uint64_t size = ReadCompactSize64(rd);
-	if (size > 50000000)	//!!!
+	if (size > MAX_SIZE)
 		Throw(ExtErr::Protocol_Violation);
 	return (uint32_t)size;
 }

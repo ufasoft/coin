@@ -45,7 +45,7 @@ void BootstrapDbThread::Execute() {
 			Block block;
 			block.Read(rd);
 			Eng.NextOffsetInBootstrap = stm.Position;
-			block.m_pimpl->OffsetInBootstrap = pos;
+			block->OffsetInBootstrap = pos;
 			block.Process(nullptr);
 			if (stm.Position != pos + size)
 				Throw(CoinErr::InvalidBootstrapFile);
@@ -81,10 +81,10 @@ void CoinEng::ExportToBootstrapDat(const path& pathBoostrap) {
 		Block block = GetBlockByHeight(i);
 //!!!?		block.LoadToMemory();
 //!!!?		EXT_FOR (const Tx& tx, block.Txes) {
-//!!!?			//			tx.m_pimpl->m_nBytesOfHash = 0;
+//!!!?			//			tx->m_nBytesOfHash = 0;
 //!!!?		}
-//!!!?		block.m_pimpl->m_hash.reset();
-//!!!?block.m_pimpl->m_txHashesOutNums.clear();
+//!!!?		block->m_hash.reset();
+//!!!?block->m_txHashesOutNums.clear();
 
 		block.Write(ProtocolWriter(ms).Ref());
 		wr << uint32_t(ms.Position);

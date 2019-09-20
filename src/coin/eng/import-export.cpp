@@ -128,7 +128,7 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 			case 'key': {
 				++nKey;
 				KeyInfo ki;
-				ki.m_pimpl->FromDER(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val))), CoinSerialized::ReadBlob(rd));
+				ki->FromDER(CoinSerialized::ReadBlob(BinaryReader(CMemReadStream(val))), CoinSerialized::ReadBlob(rd));
 				if (setPrivKeys.insert(ki.PrivKey).second)
 					myKeys.push_back(ki);
 			} break;
@@ -139,7 +139,7 @@ void CoinDb::ImportDat(const path& filepath, RCString password) {
 				KeyInfo ki;
 				ki->Timestamp = DateTime::from_time_t(wkey.nTimeCreated);
 				Blob pubkey = CoinSerialized::ReadBlob(rd);
-				ki.m_pimpl->SetPrivData(PrivateKey(wkey.vchPrivKey, pubkey.size() == 33));
+				ki->SetPrivData(PrivateKey(wkey.vchPrivKey, pubkey.size() == 33));
 				if (!Equal(ki.PubKey.Data, pubkey))
 					Throw(E_FAIL);
 

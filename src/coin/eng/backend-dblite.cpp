@@ -34,6 +34,16 @@ const Version
 	DB_VER_COMPACT_UTXO(1, 1),
 	DB_VER_LATEST = DB_VER_COMPACT_UTXO;
 
+#define COIN_DEF_DB_KEY(name) const Span KEY_##name((const uint8_t*)#name, strlen(#name));
+
+COIN_DEF_DB_KEY(MaxHeight);
+COIN_DEF_DB_KEY(MaxHeaderHeight);
+COIN_DEF_DB_KEY(BootstrapOffset);
+COIN_DEF_DB_KEY(LastPrunedHeight);
+COIN_DEF_DB_KEY(Filter);
+
+
+
 //
 //template class CThreadTxRef<DbReadTransaction>;
 
@@ -66,7 +76,7 @@ DbTxRef::DbTxRef(DbStorage& env) {
 DbliteBlockChainDb::DbliteBlockChainDb(CoinEng& eng)
 	: Eng(eng)
 	//	, m_tableBlocks("blocks", BLOCKID_SIZE, TableType::HashTable, HashType::Identity)
-	, m_tableBlocks("blocks", BLOCKID_SIZE, TableType::BTree) // ordered					//!!!T
+	, m_tableBlocks("blocks", BLOCKID_SIZE, TableType::HashTable)
 	, m_tableHashToBlock("hash_blocks", 0, TableType::HashTable)
 	, m_tableTxes("txes", TXID_SIZE, TableType::HashTable, HashType::Identity)
 	, m_tablePubkeys("pubkeys", PUBKEYID_SIZE, TableType::HashTable, HashType::Identity)
@@ -126,18 +136,10 @@ ITransactionable& DbliteBlockChainDb::GetSavepointObject() {
 	return *(new SavepointTransaction(_self));
 }
 
-#define COIN_DEF_DB_KEY(name) const Span KEY_##name((const uint8_t*)#name, strlen(#name));
-
-COIN_DEF_DB_KEY(MaxHeight);
-COIN_DEF_DB_KEY(MaxHeaderHeight);
-COIN_DEF_DB_KEY(BootstrapOffset);
-COIN_DEF_DB_KEY(LastPrunedHeight);
-
-
 int DbliteBlockChainDb::GetMaxHeight() {
 	DbReadTxRef dbt(m_db);
 	if (m_db.UserVersion < VER_BLOCKS_TABLE_IS_HASHTABLE) {
-		DbCursor c(dbt, m_tableBlocks);
+		DbCursor c(dbt, m_tableBlocks);		//!!!O Remove in 2020
 		if (c.Seek(CursorPos::Last))
 			return BlockKey(c.Key);
 	} else {
@@ -354,9 +356,11 @@ bool DbliteBlockChainDb::Open(const path& p) {
 
 		DbReadTxRef dbt(m_db);
 		BlockOffsets.resize(GetMaxHeight() + 1);
-		size_t i = 0;
-		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext() && i < BlockOffsets.size();)
-			BlockOffsets[i++] = *(uint64_t*)c.get_Data().data();
+		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext();) {
+			int height = BlockKey(c.get_Key());
+			if (height < BlockOffsets.size())
+				BlockOffsets.at(height) = *(uint64_t*)c.get_Data().data();
+		}
 	}
 	if (TryToConvert(p))
 		return false;
@@ -455,16 +459,24 @@ HashValue DbliteBlockChainDb::ReadPrevBlockHash(DbReadTransaction& dbt, int heig
 		Throw(CoinErr::InconsistentDatabase);
 	Stream& msPrev = c.DataStream;
 	BinaryReader rdDb(msPrev);
-	if (bFromBlock && Eng.Mode == EngMode::Bootstrap) {
-		PositionOwningFileStream stmFile(m_fileBootstrap, rdDb.ReadUInt64());
-		BlockHeader header(Eng.CreateBlockObj());
-		header.m_pimpl->ReadHeader(ProtocolReader(stmFile), false, 0);
-		return Hash(header);
-	} else {
-		Blob blob;
-		rdDb >> blob;
-		return BlockHashValue(blob);
+	if (bFromBlock) {
+		switch (Eng.Mode) {
+		case EngMode::Bootstrap: {
+			PositionOwningFileStream stmFile(m_fileBootstrap, rdDb.ReadUInt64());
+			BlockHeader header(Eng.CreateBlockObj());
+			header->ReadHeader(ProtocolReader(stmFile), false, 0);
+			return Hash(header);
+		}
+		case EngMode::Lite: {
+			BlockHeader header(Eng.CreateBlockObj());
+			header->ReadHeader(ProtocolReader(msPrev), false, 0);
+			return Hash(header);
+		}
+		}
 	}
+	Blob blob;
+	rdDb >> blob;
+	return BlockHashValue(blob);
 }
 
 Blob DbliteBlockChainDb::ReadBlob(uint64_t offset, uint32_t size) {
@@ -482,32 +494,47 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& 
 	Block r;
 	r->Height = height;
 	BinaryReader rdDb(stmBlocks);
-	if (Eng.Mode == EngMode::Bootstrap) {
-		uint64_t off = rdDb.ReadUInt64();
-		PositionOwningFileStream stmFile(m_fileBootstrap, off);
-		BufferedStream stm(stmFile);
-		ProtocolReader rd(stm, true);
-		if (bFullRead)
-			r.Read(rd);
-		else
+	switch (Eng.Mode) {
+	case EngMode::Bootstrap: {
+		if (!bFullRead && stmBlocks.Length > 8) {
+			ProtocolReader rd(stmBlocks);
 			r->ReadHeader(rd, false, 0);
-		r->OffsetInBootstrap = off;
-		r->ReadDbSuffix(rdDb);
-	} else {
+		} else {
+			uint64_t off = rdDb.ReadUInt64();
+			PositionOwningFileStream stmFile(m_fileBootstrap, off);
+			BufferedStream stm(stmFile);
+			ProtocolReader rd(stm, true);
+			if (bFullRead)
+				r.Read(rd);
+			else
+				r->ReadHeader(rd, false, 0);
+			r->OffsetInBootstrap = off;
+			r->ReadDbSuffix(rdDb);
+		}
+	} break;
+	case EngMode::Lite: {
+		ProtocolReader rd(stmBlocks, true);
+		rd.MayBeHeader = true;
+		r.Read(rd);
+	} break;
+	default: {
 		Blob blob;
 		rdDb >> blob;
 		BlockHashValue hash(blob);
-
 		rdDb >> blob;
 		CMemReadStream ms(blob);
-		r->Read(DbReader(ms, &Eng));
+		DbReader rd(ms, &Eng);
+		r->Read(rd);
 		r->m_hash = hash;
 
-		rdDb >> blob;
-		r->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
+		if (bFullRead) {
+			rdDb >> blob;
+			r->m_txHashesOutNums = Coin::TxHashesOutNums(blob);
+		}
 		r->PrevBlockHash = ReadPrevBlockHash(dbt, r.Height);
 
 		//!!!	ASSERT(Hash(r) == hash);
+	}
 	}
 	return r;
 }
@@ -520,8 +547,11 @@ bool DbliteBlockChainDb::HaveHeader(const HashValue& hash) {
 BlockHeader DbliteBlockChainDb::LoadHeader(DbReadTransaction& dbt, int height, Stream& stmBlocks, int hMaxBlock) {
 	if (hMaxBlock == -2)
 		hMaxBlock = GetMaxHeight();
-	if (height <= hMaxBlock)
+	auto len = (int)stmBlocks.Length;
+	if (height <= hMaxBlock || !Between(len, 9, 79))
 		return LoadBlock(dbt, height, stmBlocks, false);
+
+	//!!!Obsolete code, can be removed after Bootstrap files will download full blocks (in 2020)
 	BlockHeader r(Eng.CreateBlockObj());
 	r->Height = height;
 	DbReader rd(stmBlocks);
@@ -696,25 +726,6 @@ pair<OutPoint, TxOut> DbliteBlockChainDb::GetOutPointTxOut(int height, int idxOu
 	tx.EnsureCreate(Eng);
 	DbReader(CMemReadStream(blob), &Eng) >> tx;
 	return make_pair(outPoint, tx.TxOuts()[outPoint.Index]);
-}
-
-void DbliteBlockChainDb::InsertHeader(const BlockHeader& header) {
-	int32_t height = header.Height;
-	ASSERT(height < 0xFFFFFF);
-	HashValue hash = Hash(header);
-	BlockKey blockKey(height);
-	MemoryStream msB;
-	DbWriter wrT(msB);
-	wrT.ForHeader = true;
-	DbTxRef dbt(m_db);
-	wrT << Span(ReducedBlockHash(hash));
-	header->Write(wrT);
-	m_tableBlocks.Put(dbt, blockKey, Span(msB), true);
-	m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
-	int32_t h = htole(height);
-	m_tableProperties.Put(dbt, KEY_MaxHeaderHeight, Span((const uint8_t*)&h, sizeof h));
-
-	dbt.CommitIfLocal();
 }
 
 void DbliteBlockChainDb::TxData::Read(BinaryReader& rd, CoinEng& eng) {
@@ -1143,12 +1154,7 @@ void DbliteBlockChainDb::UpdateCoins(const OutPoint& op, bool bSpend, int32_t he
 			if (Eng.Mode == EngMode::Bootstrap || UCFG_COIN_TXES_IN_BLOCKTABLE) {
 				uint32_t txOffset = Eng.Mode == EngMode::Bootstrap ? txData.TxOffset : GetLeUInt32(txData.Data.constData());
 				SpentTx stx = { op.TxHash, txData.Height, txOffset, txData.N };
-				auto& caches = Eng.Caches;
-				EXT_LOCK(caches.Mtx) {
-					caches.m_cacheSpentTxes.push_front(stx);
-					if (caches.m_cacheSpentTxes.size() > MAX_LAST_SPENT_TXES)
-						caches.m_cacheSpentTxes.pop_back();
-				}
+				Eng.Caches.Add(stx);
 			}
 			txData.LastSpendHeight = heightCur;
 			//-		txDatas.Items.erase(txDatas.Items.begin() + txDatas.Index);  // Don't remove fully spent TxDatas because Reorganize may need them
@@ -1292,6 +1298,25 @@ void DbliteBlockChainDb::SpendInputs(const Tx& tx) {
 	}
 }
 
+void DbliteBlockChainDb::InsertHeader(const BlockHeader& header, bool bUpdateMaxHeight) {
+	int32_t height = header.Height;
+	ASSERT(height < 0xFFFFFF);
+	HashValue hash = Hash(header);
+	BlockKey blockKey(height);
+	MemoryStream msB;
+	ProtocolWriter wrT(msB);
+	header->WriteHeader(wrT);
+	DbTxRef dbt(m_db);
+	m_tableBlocks.Put(dbt, blockKey, Span(msB), true);
+	m_tableHashToBlock.Put(dbt, ReducedBlockHash(hash), blockKey, true);
+	int32_t h = htole(height);
+	m_tableProperties.Put(dbt, KEY_MaxHeaderHeight, Span((const uint8_t*)& h, sizeof h));
+	if (bUpdateMaxHeight)
+		m_tableProperties.Put(dbt, KEY_MaxHeight, Span((const uint8_t*)& h, sizeof h));
+
+	dbt.CommitIfLocal();
+}
+
 void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 	const CTxes& txes = block.Txes;
 	vector<uint32_t> txOffsets(txes.size());
@@ -1306,6 +1331,20 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 	Coin::TxHashesOutNums txHashOutNums;
 
 	switch (Eng.Mode) {
+	case EngMode::Lite: {
+#ifdef _DEBUG //!!!D
+		DbTxRef _dbt(m_db);
+		DbCursor _c(_dbt, m_tableProperties);
+		if (_c.SeekToKey(KEY_MaxHeight)) {
+			auto prevHe = (int)GetLeUInt32(_c.get_Data().data());
+			if (height != prevHe + 1) {
+				Throw(E_FAIL);
+			}
+		}
+#endif
+		ProtocolWriter wr(msB);
+		block.Write(wr);	
+	} break;
 	case EngMode::Bootstrap: {
 		MemoryStream ms(MAX_BLOCK_SIZE + 8);
 		ProtocolWriter wr(ms);
@@ -1363,14 +1402,6 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 
 			dw << tx;
 			tx.WriteTxIns(dw);
-			/*!!!R
-				MemoryStream msTxIns;
-				DbWriter wrIns(msTxIns);
-				wrIns.PCurBlock.reset(&block);
-				wrIns.ConnectJob.reset(&job);
-				wrIns.PTxHashesOutNums.reset(&txHashOutNums);
-				*/
-
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 			txOffsets[i] = uint32_t(msB.Position);
 			wrT << Span(msTx);
@@ -1457,6 +1488,29 @@ void DbliteBlockChainDb::UpdatePubkey(int64_t id, RCSpan pk) {
 	dbt.CommitIfLocal();
 }
 
+ptr<CoinFilter> DbliteBlockChainDb::GetFilter() {
+	DbReadTxRef dbt(m_db);
+	DbCursor c(dbt, m_tableProperties);
+	if (!c.Get(KEY_Filter))
+		return nullptr;
+	ptr<CoinFilter> r = new CoinFilter;
+	r->Read(BinaryReader(c.DataStream));
+	return r;
+}
+
+void DbliteBlockChainDb::SetFilter(CoinFilter* filter) {
+	DbTxRef dbt(m_db);
+	if (!filter)
+		m_tableProperties.Delete(dbt, KEY_Filter);
+	else {
+		MemoryStream ms;
+		filter->Write(BinaryWriter(ms));
+		m_tableProperties.Put(dbt, KEY_Filter, ms);
+	}
+}
+
+
 } // namespace Coin
+
 
 #endif // UCFG_COIN_COINCHAIN_BACKEND == COIN_BACKEND_DBLITE

@@ -101,8 +101,8 @@ public:
 	CInvertorySetToSend InvertorySetToSend;
 	//---- Under Mtx
 
-	Block m_curMerkleBlock;
-	vector<HashValue> m_curMatchedHashes;
+	Block m_curMerkleBlock;						// accessed in Link thread
+	vector<HashValue> m_curMatchedHashes;		// accessed in Link thread
 
 	//-- locked by Eng.Mtx
 	BlocksInFlightList BlocksInFlight;
@@ -448,7 +448,6 @@ class AlertMessage : public CoinMessage {
 public:
 	Blob Payload;
 	Blob Signature;
-
 	ptr<Coin::Alert> Alert;
 
 	AlertMessage()

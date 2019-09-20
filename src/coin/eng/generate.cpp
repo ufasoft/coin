@@ -82,8 +82,8 @@ void WalletBase::ReserveGenKey() {
 Tx WalletBase::CreateCoinbaseTx() {
 	Tx tx;
 	tx.EnsureCreate(get_Eng());
-	tx.m_pimpl->m_txIns.resize(1);
-	tx.m_pimpl->m_bLoadedIns = true;
+	tx->m_txIns.resize(1);
+	tx->m_bLoadedIns = true;
 	tx.TxOuts().resize(1);
 	tx.TxOuts()[0].m_scriptPubKey = m_genKeyInfo->ToAddress()->ToScriptPubKey();
 	return tx;
@@ -134,10 +134,10 @@ Block WalletBase::CreateNewBlock() {
 		}
 #endif // UCFG_COIN_GENERATE_TXES_FROM_POOL
 
-		Block bestBlock = m_eng->BestBlock();
+		BlockHeader bestBlock = m_eng->BestBlock();
 		block->PrevBlockHash = Hash(bestBlock);
 		block.GetFirstTxRef().TxOuts()[0].Value = m_eng->GetSubsidy(bestBlock.Height + 1, block->PrevBlockHash) + nFees;
-		block->Height = bestBlock.Height+1;
+		block->Height = bestBlock.Height + 1;
 		block->Timestamp = m_eng->GetTimestampForNextBlock();
 		block->DifficultyTargetBits = m_eng->GetNextTarget(bestBlock, block).m_value;
 		block->Nonce = 0;
@@ -275,7 +275,7 @@ void EmbeddedMiner::SetUniqueExtraNonce(Block& block, CoinEng& eng) {
 		tx->m_nBytesOfHash = 0;
 	} while (eng.HaveTxInDb(Hash(block.GetFirstTxRef())));
 	block->m_merkleRoot.reset();
-	block->m_hash.reset();
+	block->m_bHashCalculated = false;
 }
 
 void EmbeddedMiner::SetSpeedCPD(float speed, float cpd) {
@@ -385,17 +385,12 @@ void EmbeddedMiner::SubmitResult(WebClient*& curWebClient, const BitcoinWorkData
 	}
 	block->Timestamp = DateTime::from_time_t(letoh(pd[17]));
 	block->Nonce = letoh(pd[19]);
-	block->m_hash.reset();
+	block->m_bHashCalculated = false;
 	TRC(0, "Hash of Found Block: " << Hash(block));
 	CCoinEngThreadKeeper engKeeper(m_wallet.m_eng);
 	ptr<BlockMessage> m = new BlockMessage(block);
 	EXT_LOCK (m_wallet.m_eng->Mtx) {
-		EXT_LOCK (m_wallet.m_eng->MtxPeers) {
-			for (auto it = begin(wb->m_eng->Links); it != end(wb->m_eng->Links); ++it) {			// early broadcast found Block
-				Link& link = static_cast<Link&>(**it);
-				link.Send(m);
-			}
-		}
+		m_wallet.m_eng->Broadcast(m.get());
 		m_wallet.m_peng->m_cdb.RemoveKeyInfoFromReserved(m_wallet.m_genKeyInfo);
 		m_wallet.ReserveGenKey();
 		block.Process();

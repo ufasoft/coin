@@ -192,7 +192,7 @@ public:
 	void InsertSpentTxOffsets(const unordered_map<HashValue, SpentTx>& spentTxOffsets) override;
 
 	void InsertBlock(const Block& block, CConnectJob& job) override;
-	void InsertHeader(const BlockHeader& header) override;
+	void InsertHeader(const BlockHeader& header, bool bUpdateMaxHeight) override;
 
 	vector<bool> GetCoinsByTxHash(const HashValue& hash) override;
 	void SaveCoinsByTxHash(const HashValue& hash, const vector<bool>& vec) override;
@@ -206,6 +206,9 @@ public:
 	Blob FindPubkey(int64_t id) override;
 	void InsertPubkey(int64_t id, RCSpan pk) override;
 	void UpdatePubkey(int64_t id, RCSpan pk) override;
+
+	ptr<CoinFilter> GetFilter() override;
+	void SetFilter(CoinFilter* filter) override;
 
 	void BeginTransaction() override {
 //		ASSERT(!m_dbt.get());

@@ -155,4 +155,12 @@ ChainCaches::ChainCaches()
 	, OrphanBlocks(BLOCK_DOWNLOAD_WINDOW) {
 }
 
+void ChainCaches::Add(const SpentTx& stx) {
+	EXT_LOCK(Mtx) {
+		m_cacheSpentTxes.push_front(stx);
+		if (m_cacheSpentTxes.size() > MAX_LAST_SPENT_TXES)
+			m_cacheSpentTxes.pop_back();
+	}
+}
+
 } // namespace Coin

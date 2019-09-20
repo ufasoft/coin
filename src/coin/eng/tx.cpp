@@ -808,7 +808,7 @@ int64_t Tx::get_Fee() const {
 
 int Tx::get_DepthInMainChain() const {
 	CoinEng& eng = Eng();
-	Block bestBlock = eng.BestBlock();
+	BlockHeader bestBlock = eng.BestBlock();
 	return Height >= 0 && bestBlock ? bestBlock.Height - Height + 1 : 0;
 }
 
@@ -984,7 +984,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		tx->WriteSuffix(wr);
 	} else {
 #if UCFG_COIN_USE_NORMAL_MODE
-		uint64_t v = uint64_t(tx.m_pimpl->Ver) << 2;
+		uint64_t v = uint64_t(tx->Ver) << 2;
 		if (tx.IsCoinBase())
 			v |= 1;
 		if (tx.LockBlock)
@@ -993,7 +993,7 @@ DbWriter& operator<<(DbWriter& wr, const Tx& tx) {
 		tx->WritePrefix(wr);
 		if (tx.LockBlock)
 			wr.Write7BitEncoded(tx.LockBlock);
-		tx.m_pimpl->WriteSuffix(wr);
+		tx->WriteSuffix(wr);
 
 		auto& txOuts = tx.TxOuts();
 		for (int i = 0; i < txOuts.size(); ++i) {

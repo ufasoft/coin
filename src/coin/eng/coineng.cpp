@@ -328,7 +328,7 @@ Block CoinEng::GetBlockByHeight(uint32_t height) {
 
 #ifdef X_DEBUG //!!!D
 	HashValue h1 = Hash(block);
-	block.m_pimpl->m_hash.reset();
+	block->m_hash.reset();
 	ASSERT(h1 == Hash(block));
 #endif
 
@@ -639,7 +639,7 @@ void CoinEng::SetBestHeader(const BlockHeader& bh) {
 	EXT_LOCKED(Caches.Mtx, Caches.m_bestHeader = bh);
 }
 
-Block CoinEng::BestBlock() {
+BlockHeader CoinEng::BestBlock() {
 	EXT_LOCK(Caches.Mtx) {
 		return Caches.m_bestBlock;
 	}
@@ -647,6 +647,14 @@ Block CoinEng::BestBlock() {
 
 int CoinEng::BestBlockHeight() {
 	return EXT_LOCKED(Caches.Mtx, Caches.m_bestBlock.SafeHeight);
+}
+
+void CoinEng::SetBestBlock(const BlockHeader& b) {
+	EXT_LOCK(Caches.Mtx) {
+		Caches.m_bestBlock = b;
+		if (b.SafeHeight > Caches.m_bestHeader.SafeHeight)
+			Caches.m_bestHeader = b;
+	}
 }
 
 void CoinEng::SetBestBlock(const Block& b) {
@@ -672,7 +680,7 @@ void CoinEng::put_Mode(EngMode mode) {
 	if (bRunned)
 		Stop();
 	SetBestHeader(nullptr);
-	SetBestBlock(nullptr);
+	SetBestBlock(Block(nullptr));
 	m_mode = mode;
 	Filter = nullptr;
 	m_dbFilePath = "";
@@ -688,7 +696,7 @@ void CoinEng::PurgeDatabase() {
 		Stop();
 	Db->Close(false);
 	SetBestHeader(nullptr);
-	SetBestBlock(nullptr);
+	SetBestBlock(Block(nullptr));
 	filesystem::remove(GetDbFilePath());
 	Filter = nullptr;
 	if (bRunned) {
@@ -955,6 +963,15 @@ void CoinEng::Push(const TxInfo& txInfo) {
 	}
 }
 
+void CoinEng::Broadcast(CoinMessage* m) {
+	EXT_LOCK(MtxPeers) {
+		for (auto& pLinkBase : Links) {			// early broadcast found Block
+			Link& link = static_cast<Link&>(*pLinkBase);
+			link.Send(m);
+		}
+	}
+}
+
 bool CoinEng::IsFromMe(const Tx& tx) {
 	return Events.IsFromMe(tx);
 }
@@ -1208,10 +1225,26 @@ void CoinEng::Start() {
 	if (Runned)
 		return;
 
-	EXT_LOCKED(m_cdb.MtxDb, Filter = Mode == EngMode::Lite ? m_cdb.Filter : nullptr);
+	EXT_LOCK(m_cdb.MtxDb) {
+		if (Mode != EngMode::Lite)
+			Filter = nullptr;
+		else {
+			Filter = Db->GetFilter();
+			if (!m_cdb.IsFilterValid(Filter)) {
+				PurgeDatabase();
+				Load();
+				CoinEngTransactionScope scopeBlockSavepoint(_self);
+				Db->SetFilter(m_cdb.Filter);
+			}
+		}
+		m_cdb.Events += this;
+	}
 
 	Net::Start();
-	EXT_LOCKED(m_cdb.MtxNets, m_cdb.m_nets.push_back(this));
+	EXT_LOCK(m_cdb.MtxNets) {
+		m_cdb.m_nets.push_back(this);
+		m_cdb.Events += this;
+	}
 	m_cdb.Start();
 
 	TryStartBootstrap();
@@ -1219,6 +1252,19 @@ void CoinEng::Start() {
 
 	if (g_conf.Connect.empty())	   // Don't use seeds when we have "connect=" option
 		AddSeeds();
+}
+
+void CoinEng::OnFilterChanged() {		// under m_cdb.MtxDb
+	if (Mode != EngMode::Lite)
+		return;
+	ptr<FilterLoadMessage> m;
+	if (Mode == EngMode::Lite) {
+		CoinEngTransactionScope scopeBlockSavepoint(_self);
+		Db->SetFilter(Filter = m_cdb.Filter);
+		m = new FilterLoadMessage(Filter.get());
+	}
+	if (m)
+		Broadcast(m);
 }
 
 void CoinEng::SignalStop() {
@@ -1232,6 +1278,7 @@ void CoinEng::Stop() {
 	if (Runned)
 		SignalStop();
 	EXT_LOCK(m_cdb.MtxNets) {
+		m_cdb.Events -= this;
 		Ext::Remove(m_cdb.m_nets, this);
 	}
 #if UCFG_COIN_USE_IRC
@@ -1272,15 +1319,19 @@ void GetDataMessage::Process(Link& link) {
 			}
 
 			if (Block block = eng.Tree.FindBlock(inv.HashValue)) {
-				//		ASSERT(EXT_LOCKED(eng.Mtx, (block.m_pimpl->m_hash.reset(), Hash(block)==inv.HashValue)));
+				//		ASSERT(EXT_LOCKED(eng.Mtx, (block->m_hash.reset(), Hash(block)==inv.HashValue)));
 
-				if (inv.Type == InventoryType::MSG_BLOCK || inv.Type == InventoryType::MSG_WITNESS_BLOCK) {
+				switch (inv.Type) {
+				case InventoryType::MSG_BLOCK:
+				case InventoryType::MSG_WITNESS_BLOCK: {
 					TRC(2, "Block Message sending");
 
 					ptr<BlockMessage> m = new BlockMessage(block);
 					m->WitnessAware = bool(inv.Type & InventoryType::MSG_WITNESS_FLAG);
 					link.Send(m);
-				} else {
+				} break;
+				case InventoryType::MSG_FILTERED_BLOCK:
+				case InventoryType::MSG_FILTERED_WITNESS_BLOCK: {
 					ptr<MerkleBlockMessage> mbm;
 					vector<Tx> matchedTxes = EXT_LOCKED(link.MtxFilter, link.Filter ? (mbm = new MerkleBlockMessage)->Init(block, *link.Filter) : vector<Tx>());
 					if (mbm) {
@@ -1290,10 +1341,10 @@ void GetDataMessage::Process(Link& link) {
 								if (link.KnownInvertorySet.count(Inventory(InventoryType::MSG_TX, Hash(matchedTxes[i]))))
 									matchedTxes.erase(matchedTxes.begin() + i);
 						}
-						EXT_FOR(const Tx& tx, matchedTxes) {
+						for (auto& tx : matchedTxes)
 							link.Send(new TxMessage(tx));
-						}
 					}
+				} break;
 				}
 
 				if (inv.HashValue == link.HashContinue) {

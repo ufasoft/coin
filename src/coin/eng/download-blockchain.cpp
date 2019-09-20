@@ -52,7 +52,7 @@ bool CoinEng::AlreadyHave(const Inventory& inv) {
 bool CoinEng::IsInitialBlockDownload() {
 	if (UpgradingDatabaseHeight)
 		return true;
-	Block bestBlock = BestBlock();
+	BlockHeader bestBlock = BestBlock();
 	if (!bestBlock || bestBlock.Height < ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD)
 		return true;
 	DateTime now = Clock::now();
@@ -84,8 +84,10 @@ bool CoinEng::MarkBlockAsReceived(const HashValue& hashBlock) {
 void CoinEng::MarkBlockAsInFlight(GetDataMessage& mGetData, Link& link, const Inventory& inv) {
 	MarkBlockAsReceived(inv.HashValue);
 	MapBlocksInFlight[inv.HashValue] = link.BlocksInFlight.insert(link.BlocksInFlight.end(), QueuedBlockItem(link, inv.HashValue, Clock::now()));
-	InventoryType invType = (Mode == EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : inv.Type)
-		| (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
+
+	InventoryType invType = Mode == EngMode::Lite
+		? invType = InventoryType::MSG_FILTERED_BLOCK		// MSG_FILTERED_WITNESS_BLOCK is not used
+		: inv.Type| (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
 	mGetData.Invs.push_back(Inventory(invType, inv.HashValue));
 }
 
@@ -126,11 +128,14 @@ void InvMessage::Process(Link& link) {
 	if (!eng.BestBlock()) {
 		TRC(1, "Requesting for block " << eng.ChainParams.Genesis);
 
-		m->Invs.push_back(Inventory(InventoryType::MSG_BLOCK | (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0), eng.ChainParams.Genesis));
+		InventoryType invType = eng.Mode == EngMode::Lite
+			? invType = InventoryType::MSG_FILTERED_BLOCK		// MSG_FILTERED_WITNESS_BLOCK is not used
+			: InventoryType::MSG_BLOCK | (link.HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
+		m->Invs.push_back(Inventory(invType, eng.ChainParams.Genesis));
 	}
 
 	bool bCloseToBeSync = false;
-	if (Block bestBlock = eng.BestBlock())
+	if (BlockHeader bestBlock = eng.BestBlock())
 		bCloseToBeSync = Timestamp < bestBlock.Timestamp + eng.ChainParams.BlockSpan * 20;
 
 	HashValue hashLastInvBlock;
@@ -230,7 +235,7 @@ void Link::RequestHeaders() {
 	CoinEng& eng = static_cast<CoinEng&>(*Net);
 
 	if (!IsSyncStarted && !IsClient && !eng.UpgradingDatabaseHeight) {
-		if (Block bestBlock = eng.BestBlock()) {
+		if (BlockHeader bestBlock = eng.BestBlock()) {
 			bool bFetch = IsPreferredDownload || (0 == eng.aPreferredDownloadPeers && !IsOneShot);
 			IsSyncStarted = eng.aSyncStartedPeers.load() == 0 && bFetch || bestBlock.Timestamp > Clock::now() - TimeSpan::FromHours(24);
 			if (IsSyncStarted) {
@@ -244,8 +249,9 @@ void Link::RequestHeaders() {
 				Send(new GetHeadersMessage(hashBest));
 			}
 		} else {
-			InventoryType invType = (eng.Mode == EngMode::Lite ? InventoryType::MSG_FILTERED_BLOCK : InventoryType::MSG_BLOCK)
-				| (HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
+			InventoryType invType = eng.Mode == EngMode::Lite
+				? invType = InventoryType::MSG_FILTERED_BLOCK		// MSG_FILTERED_WITNESS_BLOCK is not used
+				: InventoryType::MSG_BLOCK | (HasWitness ? InventoryType::MSG_WITNESS_FLAG : (InventoryType)0);
 			ptr<GetDataMessage> m = new GetDataMessage;
 			m->Invs.push_back(Inventory(invType, eng.ChainParams.Genesis));
 			Send(m);
@@ -348,16 +354,16 @@ void BlockMessage::ProcessContent(Link& link, bool bRequested) {
 
 void BlockMessage::Process(Link& link) {
 	CoinEng& eng = Eng();
-	bool bRequested = eng.MarkBlockAsReceived(Hash(Block));
+	const HashValue& hash = Hash(Block);
+	bool bRequested = eng.MarkBlockAsReceived(hash);
 
-	HashValue hash = Hash(Block);
 	EXT_LOCKED(link.Mtx, link.KnownInvertorySet.insert(Inventory(InventoryType::MSG_BLOCK, hash)));
 	if (eng.UpgradingDatabaseHeight)
 		return;
 	ProcessContent(link, bRequested);
 
-	if (eng.Mode != EngMode::Lite) { // for LiteMode we wait until txes are downloaded
-		if (EXT_LOCKED(eng.Mtx, link.BlocksInFlight.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER/2))
+	if (eng.Mode != EngMode::Lite || !link.m_curMerkleBlock) { // for LiteMode we wait until txes are downloaded
+		if (EXT_LOCKED(eng.Mtx, link.BlocksInFlight.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER / 2))
 			link.RequestBlocks();
 	}
 

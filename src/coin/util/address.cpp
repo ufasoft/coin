@@ -61,7 +61,7 @@ AddressObj::AddressObj(HasherEng& hasher, RCString s, RCString comment)
 }
 
 Address& Address::operator=(const Address& a) {
-	if (&m_pimpl->Hasher != &a.m_pimpl->Hasher)
+	if (&m_pimpl->Hasher != &a->Hasher)
 		Throw(errc::invalid_argument);
 	m_pimpl = new AddressObj(*a.m_pimpl);
  	return *this;

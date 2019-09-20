@@ -446,12 +446,12 @@ public:
 					}
 					break;
 				}
-				if (ptr<CompactThread> t = m_wallet.CompactThread) {
+				if (ptr<CompactThread> t = m_wallet.ThreadCompact) {
 					os << "Compacting Database  " << int64_t(t->m_ai) * 100 / t->m_count << "%";
 					break;
 				}
 
-				if (Block bestBlock = m_wallet.Eng.BestBlock()) {
+				if (BlockHeader bestBlock = m_wallet.Eng.BestBlock()) {
 					BlockHeader bestHeader = m_wallet.Eng.BestHeader();
 					os.imbue(s_localeCommaSeparated);
 					if (bestBlock.Height < bestHeader.Height)
@@ -470,7 +470,7 @@ public:
 						os << bestBlock.Timestamp.ToLocalTime();
 				}
 
-				if (ptr<RescanThread> rt = m_wallet.RescanThread) {
+				if (ptr<RescanThread> rt = m_wallet.ThreadRescan) {
 					os << ", Rescanning block " << m_wallet.CurrentHeight;
 				}
 				if (m_wallet.MiningEnabled) {
@@ -553,7 +553,7 @@ public:
 		uint8_t ver = blob.constData()[0];
 		if (ver == 0x80) {
 			KeyInfo ki;
-			ki.m_pimpl->SetPrivData(PrivateKey(Span(blob.constData() + 1, 32), blob.size() == 34));
+			ki->SetPrivData(PrivateKey(Span(blob.constData() + 1, 32), blob.size() == 34));
 			ki->Comment = "Imported";
 			EXT_LOCK(eng.m_cdb.MtxDb) {
 				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
@@ -561,7 +561,7 @@ public:
 			}
 		} else if (ver == 1 && blob.constData()[1] == 0x42) {
 			KeyInfo ki;
-			ki.m_pimpl->FromBIP38(ssKey, password);
+			ki->FromBIP38(ssKey, password);
 			ki->Comment = "Imported";
 			EXT_LOCK(eng.m_cdb.MtxDb) {
 				if (!eng.m_cdb.Hash160ToKey.count(ki.PubKey.Hash160))
@@ -839,7 +839,7 @@ METHOD_BEGIN {
 HRESULT TransactionCom::get_Confirmations(int *r)
 METHOD_BEGIN {
 	*r = 0;
-	Block bestBlock = m_wallet.m_wallet.Eng.BestBlock();
+	BlockHeader bestBlock = m_wallet.m_wallet.Eng.BestBlock();
 	if (m_wtx.Height >= 0 && bestBlock)
 		*r = bestBlock.Height - m_wtx.Height + 1;
 } METHOD_END

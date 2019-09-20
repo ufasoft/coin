@@ -27,14 +27,14 @@ CTxes::CTxes(const CTxes& txes)												// Cloning ctor
 	:	base(txes.size())
 {
 	for (int i = 0; i < size(); ++i)
-		_self[i].m_pimpl = txes[i].m_pimpl->Clone();
+		_self[i].m_pimpl = txes[i]->Clone();
 }
 
 pair<int, int> CTxes::StartingTxOutIdx(const HashValue& hashTx) const {
 	pair<int, int> r(-1, -1);
-	for (int i=0, n=0; i<size(); ++i) {
+	for (int i = 0, n = 0; i < size(); ++i) {
 		const Tx& tx = _self[i];
-		if (tx.m_pimpl->m_hash == hashTx)
+		if (tx->m_hash == hashTx)
 			return make_pair(i, n);
 		n += tx.TxOuts().size();
 	}
@@ -45,7 +45,7 @@ pair<int, OutPoint> CTxes::OutPointByIdx(int idx) const {
 	for (int i=0; i<size(); ++i) {
 		const Tx& tx = _self[i];
 		if (idx < tx.TxOuts().size())
-			return make_pair(i, OutPoint(tx.m_pimpl->m_hash, idx));
+			return make_pair(i, OutPoint(tx->m_hash, idx));
 		idx -= tx.TxOuts().size();
 	}
 	Throw(CoinErr::InconsistentDatabase);
@@ -158,7 +158,7 @@ const CTxes& BlockObj::get_Txes() const {
 				for (int i = 0; i < m_txHashesOutNums.size(); ++i) {
 					Tx& tx = (m_txes[i] = Tx::FromDb(m_txHashesOutNums[i].HashTx));
 					if (tx.Height != Height)								// protection against duplicated txes
-						(tx = Tx(tx.m_pimpl->Clone())).m_pimpl->Height = Height;
+						(tx = Tx(tx->Clone()))->Height = Height;
 				}
 #endif
 				m_bTxesLoaded = true;
@@ -270,8 +270,8 @@ HashValue BlockObj::MerkleRoot(bool bSave) const {
 	return m_merkleRoot.value();
 }
 
-HashValue BlockObj::Hash() const {
-	if (!m_hash) {
+const HashValue& BlockObj::Hash() const {
+	if (!m_bHashCalculated) {
 		BlockHeaderBinary header = {
 			htole(Ver),
 			{ 0 },
@@ -297,8 +297,9 @@ HashValue BlockObj::Hash() const {
 		default:
 			m_hash = Coin::Hash(hdata);
 		}
+		m_bHashCalculated = true;
 	}
-	return m_hash.value();
+	return m_hash;
 }
 
 HashValue BlockObj::PowHash() const {
@@ -321,6 +322,15 @@ BlockObj::BlockObj(BlockObj& bo)
 	, m_txes(bo.m_txes)
 	, m_pMtx(0)
 	, m_merkleTree(bo.m_merkleTree) {
+}
+
+mutex& BlockObj::Mtx() const {
+	if (!m_pMtx) {
+		auto pMtx = new mutex;
+		if (Interlocked::CompareExchange(m_pMtx, pMtx, (mutex*)0) != 0)
+			delete pMtx;
+	}
+	return *m_pMtx;
 }
 
 void BlockObj::WriteHeader(ProtocolWriter& wr) const {
@@ -348,10 +358,8 @@ void BlockObj::ReadHeader(const ProtocolReader& rd, bool bParent, const HashValu
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
 
-	if (!bParent && eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW)) {
-		(AuxPow = new Coin::AuxPow)->Read(rd);
-	} else
-		AuxPow = nullptr;
+	if (AuxPow = !bParent && eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW) ? new Coin::AuxPow : nullptr)
+		AuxPow->Read(rd);
 }
 
 void BlockObj::Write(ProtocolWriter& wr) const {
@@ -361,41 +369,30 @@ void BlockObj::Write(ProtocolWriter& wr) const {
 }
 
 void BlockObj::Read(const ProtocolReader& rd) {
-#ifdef X_DEBUG//!!!D
-	int64_t pos = rd.BaseStream.Position;
-#endif
-
 	ReadHeader(rd, false, 0);
-	CoinSerialized::Read(rd, m_txes);
-	m_bTxesLoaded = true;
-	for (int i = 0; i < m_txes.size(); ++i) {
-		Tx& tx = m_txes[i];
-		tx.Height = Height;				// Valid only when Height already set
-//!!!!R		tx.m_pimpl->N = i;
+	if (!rd.MayBeHeader || !rd.BaseStream.Eof()) {
+		CoinSerialized::Read(rd, m_txes);
+		for (auto& tx : m_txes)
+			tx.Height = Height;				// Valid only when Height already set
 	}
-//!!!R	m_bMerkleCalculated = true;
-	m_hash.reset();
-#ifdef X_DEBUG//!!!D
-	int64_t len = rd.BaseStream.Position-pos;
-	rd.BaseStream.Position = pos;
-	Blob br(0, (size_t)len);
-	rd.BaseStream.ReadBuffer(br.data(), (size_t)len);
-	Binary = br;
-#endif
+	m_bTxesLoaded = true;
+	m_bHashCalculated = false;
 }
 
+/*!!!R
 void BlockObj::Write(DbWriter& wr) const {
 	CoinEng& eng = Eng();
 
 	CoinSerialized::WriteCompactSize(wr, Ver);
 	wr << (uint32_t)to_time_t(Timestamp) << get_DifficultyTarget() << Nonce;
-	if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::BlockParser || wr.ForHeader)
+	if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::BlockParser)
 		wr << MerkleRoot();
 	if (eng.Mode != EngMode::BlockParser) {
 		if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 			AuxPow->Write(wr);
 	}
 }
+*/
 
 void BlockObj::Read(const DbReader& rd) {
 	CoinEng& eng = Eng();
@@ -404,13 +401,13 @@ void BlockObj::Read(const DbReader& rd) {
 	Timestamp = DateTime::from_time_t(rd.ReadUInt32());
 	DifficultyTargetBits = rd.ReadUInt32();
 	Nonce = rd.ReadUInt32();
-	if (eng.Mode==EngMode::Lite || eng.Mode==EngMode::BlockParser || rd.ForHeader) {
+	if (eng.Mode == EngMode::Lite || eng.Mode == EngMode::BlockParser || rd.ForHeader) {
 		HashValue merkleRoot;
 		rd >> merkleRoot;
 		m_merkleRoot = merkleRoot;
 	} else
 		m_merkleRoot.reset();
-	if (eng.Mode!=EngMode::BlockParser) {
+	if (eng.Mode != EngMode::BlockParser) {
 		if (eng.ChainParams.AuxPowEnabled && (Ver & BLOCK_VERSION_AUXPOW))
 			(AuxPow = new Coin::AuxPow)->Read(rd);
 	}
@@ -545,7 +542,7 @@ void BlockObj::CheckHeader() {
 				Throw(CoinErr::BlockDoesNotHaveOurChainId);
 			if (AuxPow) {
 				AuxPow->Check(Block(this));
-				AuxPow->ParentBlock.CheckPow(DifficultyTarget);
+				AuxPow->ParentBlock->CheckPow(DifficultyTarget);
 			}
 		} else if (AuxPow)
 			Throw(CoinErr::AUXPOW_NotAllowed);
@@ -681,7 +678,7 @@ static TxFeeTuple RunConnectAsync(const CConnectJob *pjob, TxObj *to, bool bVeri
 		if ((job.aSigOps += tx.SigOpCost(job.TxoMap)) > job.MaxSigOps)
 			Throw(CoinErr::TxTooManySigOps);
 		SignatureHasher sigHasher(*tx.m_pimpl);
-		if (bVerifySignature && tx.m_pimpl->HasWitness())
+		if (bVerifySignature && tx->HasWitness())
 			sigHasher.CalcWitnessCache();
 		job.Eng.PatchSigHasher(sigHasher);
 
@@ -733,7 +730,7 @@ void CConnectJob::AsynchCheckAll(const vector<Tx>& txes) {
 		HashValue hashTx = Hash(tx);
 		if (!tx.IsCoinBase()) {
 			if (tx.IsCoinStake())
-				tx.m_pimpl->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
+				tx->GetCoinAge();		// cache CoinAge, which can't be calculated in Pooled Thread
 			ptr<ConnectTask> task(new ConnectTask);
 			auto& txIns = tx.TxIns();
 			for (size_t nIn = 0; nIn < txIns.size(); ++nIn) {
@@ -878,18 +875,23 @@ void CConnectJob::Calculate() {
 
 void BlockHeader::Connect() const {
 	CoinEng& eng = Eng();
-	HashValue hashBlock = Hash(_self);
+	const HashValue& hashBlock = Hash(_self);
 #if UCFG_TRC
 	if (!(Height & 0x1FF)) {
 		TRC(4, Height << "/" << hashBlock);
 	}
 #endif
 
+	bool bUpdateMaxHeight;
 	{
 		CoinEngTransactionScope scopeBlockSavepoint(eng);
-		eng.Db->InsertHeader(_self);
+		bUpdateMaxHeight = eng.Mode == EngMode::Lite && Timestamp < EXT_LOCKED(eng.m_cdb.MtxDb, eng.m_cdb.DtEarliestKey);
+		eng.Db->InsertHeader(_self, bUpdateMaxHeight);
 	}
-	eng.SetBestHeader(_self);
+	if (bUpdateMaxHeight)
+		eng.SetBestBlock(_self);
+	else
+		eng.SetBestHeader(_self);
 	eng.Tree.RemovePersistentBlock(hashBlock);
 	UpdateLastCheckpointed();
 }
@@ -956,7 +958,7 @@ void Block::ContextualCheck(const BlockHeader& blockPrev) {
     }
     if (!bHaveWitness)
         for (auto& tx : txes)
-            if (tx.m_pimpl->HasWitness())
+            if (tx->HasWitness())
                 Throw(CoinErr::UnexpectedWitness);
 
     if (Weight() > eng.ChainParams.MaxBlockWeight)
@@ -1032,14 +1034,15 @@ void Block::Connect() const {
 				if (it->second.Update) {
 					int64_t id = CIdPk(it->first);
 					eng.Caches.m_cachePkIdToPubKey.erase(id);													// faster than call CanonicalPubKey::FromCompressed()
-/*!!!R 				ChainCaches::CCachePkIdToPubKey::iterator j = eng.Caches.m_cachePkIdToPubKey.find(id);
-					if (j != eng.Caches.m_cachePkIdToPubKey.end())
-						j->second.first.PubKey = CanonicalPubKey::FromCompressed(it->second.PubKey);					*/
 				}
 			}
 		}
 
-		if (eng.Mode != EngMode::Lite) {
+		switch (eng.Mode) {
+		case EngMode::Lite:
+			eng.Db->InsertBlock(_self, job);
+			break;
+		default:
 			EXT_FOR (const Tx& tx, txes) {
 				if (!tx->IsCoinBase()) {
 					vector<Txo> vTxo;
@@ -1052,12 +1055,10 @@ void Block::Connect() const {
 					eng.OnConnectInputs(tx, vTxo, true, false);
 				}
 			}
+			if (Height > 0)
+				m_pimpl->CheckCoinbaseTx(nFees);
+			eng.Db->InsertBlock(_self, job);
 		}
-
-		if (Height > 0)
-			m_pimpl->CheckCoinbaseTx(nFees);
-
-		eng.Db->InsertBlock(_self, job);
 
 		eng.OnConnectBlock(_self);
 		eng.Caches.DtBestReceived = Clock::now();
@@ -1230,7 +1231,7 @@ void Block::Accept(Link *link) {
 	CoinEng& eng = Eng();
 
 	int height = 0;
-	HashValue hashPrev = PrevBlockHash;
+	const HashValue& hashPrev = PrevBlockHash;
 	if (!hashPrev)
 		m_pimpl->Height = height = 0;
 	else {
@@ -1248,16 +1249,17 @@ void Block::Accept(Link *link) {
 		}
 
         m_pimpl->Height = height = blockPrev.Height + 1;
-        ContextualCheck(blockPrev);
+		if (eng.Mode != EngMode::Lite)
+			ContextualCheck(blockPrev);
 	}
 
-	HashValue hash = Hash(_self);
+	const HashValue& hash = Hash(_self);
 	m_pimpl->ComputeAttributes();
 
 	EXT_LOCK (eng.Mtx) {
 		if (!eng.Runned)
 			Throw(ExtErr::ThreadInterrupted);
-		Block blockBest = eng.BestBlock();
+		BlockHeader blockBest = eng.BestBlock();
 		if (height <= blockBest.SafeHeight && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
 		bool bConnectToMainChain = IsInMainChain();

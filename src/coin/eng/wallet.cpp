@@ -75,7 +75,7 @@ bool WalletTx::IsConfirmed(Wallet& wallet) const {
 	if (!m_bFromMe && !wallet.IsFromMe(_self))
 		return false;
 	EXT_FOR (const Tx& tx, PrevTxes) {
-		if (!tx.m_pimpl->IsFinal())
+		if (!tx->IsFinal())
 			return false;
 		if (tx.DepthInMainChain < 1) {
 			if (!wallet.IsFromMe(tx))
@@ -264,7 +264,7 @@ bool Wallet::ProcessTx(const Tx& tx) {
 }
 
 void Wallet::OnProcessTx(const Tx& tx) {
-	if (!RescanThread)
+	if (!ThreadRescan)
 		ProcessTx(tx);
 }
 
@@ -306,7 +306,7 @@ void Wallet::OnBlockchainChanged() {
 		if (Thread::CurrentThread->m_bStop)
 			return;
 		bool bChanged = false;
-		Block bestBlock = m_eng->BestBlock();
+		BlockHeader bestBlock = m_eng->BestBlock();
 		EXT_LOCK(MtxCurrentHeight) {
 			if (CurrentHeight >= bestBlock.SafeHeight)
 				break;
@@ -394,7 +394,7 @@ void CompactThread::Execute() {
 
 			~ThreadPointerCleaner() {
 				m_pWallet->m_eng->Db->SetProgressHandler(0);
-				m_pWallet->CompactThread = nullptr;
+				m_pWallet->ThreadCompact = nullptr;
 				if (m_pWallet->m_iiWalletEvents)
 					m_pWallet->m_iiWalletEvents->OnStateChanged();
 			}
@@ -430,31 +430,32 @@ void RescanThread::Execute() {
 		DbDataReader *m_pDataReader;
 
 		~ThreadPointerCleaner() {
-			m_pWallet->RescanThread = nullptr;
+			m_pWallet->ThreadRescan = nullptr;
 		}
 	} threadPointerCleaner = { &Wallet }; //!!!R, &cmdRescan, &dr };
-	CCoinEngThreadKeeper engKeeper(Wallet.m_eng);
+	CoinEng& eng = *Wallet.m_eng;
+	CCoinEngThreadKeeper engKeeper(&eng);
 
 	int ord = 0;
-	m_count = Wallet.m_eng->Db->GetMaxHeight()+1;
-	if (Block block = Wallet.m_eng->Db->FindBlock(m_hashFrom))
-		m_count -= (ord = block.Height+1);
+	m_count = eng.Db->GetMaxHeight() + 1;
+	if (Block block = eng.Db->FindBlock(m_hashFrom))
+		m_count -= (ord = block.Height + 1);
 	Wallet.OnSetProgress(0);
 
 CONTINUE_SCAN_LAB:
-	while (Wallet.CurrentHeight < Wallet.m_eng->BestBlockHeight()) {
+	while (Wallet.CurrentHeight < eng.BestBlockHeight()) {
 		if (m_bStop)
 			goto LAB_STOP;
 		Wallet.OnBlockchainChanged();
 //!!!		Wallet.OnSetProgress(float(m_i) / m_count);
 	}
-	if (Block bestBlock = Wallet.m_eng->BestBlock()) {
+	if (BlockHeader bestBlock = eng.BestBlock()) {
 		HashValue hashBest = Hash(bestBlock);
 		if (hashBest == Wallet.BestBlockHash) {
 			Wallet.ProcessPendingTxes();
 		} else {
 			ord = int(ord + m_i);
-			m_count = Wallet.m_eng->BestBlockHeight() - ord + 1;
+			m_count = eng.BestBlockHeight() - ord + 1;
 			goto CONTINUE_SCAN_LAB;
 		}
 	}
@@ -463,32 +464,34 @@ LAB_STOP:
 }
 
 void Wallet::StartRescan(const HashValue& hashFrom) {
-	(RescanThread = new Coin::RescanThread(_self, hashFrom))->Start();
+	(ThreadRescan = new RescanThread(_self, hashFrom))->Start();
 }
 
 void Wallet::StartCompactDatabase() {
-	if (!CompactThread)
-		(CompactThread = new Coin::CompactThread(_self))->Start();
+	if (!ThreadCompact)
+		(ThreadCompact = new CompactThread(_self))->Start();
 }
 
 void Wallet::Rescan() {
-	if (RescanThread)
+	if (ThreadRescan)
 		return;
 
 	if (m_eng->Mode == EngMode::Lite) {
-		m_eng->PurgeDatabase();
-	} else if (m_eng->IsInitialBlockDownload())
+		// m_eng->PurgeDatabase();
+	}
+	if (m_eng->IsInitialBlockDownload())
 		Throw(CoinErr::RescanIsDisabledDuringInitialDownload);
 
+	CoinDb& cdb = m_eng->m_cdb;
 	EXT_LOCK (Mtx) {
-		EXT_LOCK (m_eng->m_cdb.MtxDb) {
-			TransactionScope dbtx(m_eng->m_cdb.m_dbWallet);
+		EXT_LOCK (cdb.MtxDb) {
+			TransactionScope dbtx(cdb.m_dbWallet);
 
-			SqliteCommand(EXT_STR("DELETE FROM coins WHERE txid IN (SELECT id FROM mytxes WHERE netid=" << m_dbNetId << ")"), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-			SqliteCommand(EXT_STR("DELETE FROM usertxes WHERE txid IN (SELECT id FROM mytxes WHERE netid=" << m_dbNetId << ")"), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-			SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-1 WHERE blockord>-15 AND netid=" << m_dbNetId), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
+			SqliteCommand(EXT_STR("DELETE FROM coins WHERE txid IN (SELECT id FROM mytxes WHERE netid=" << m_dbNetId << ")"), cdb.m_dbWallet).ExecuteNonQuery();
+			SqliteCommand(EXT_STR("DELETE FROM usertxes WHERE txid IN (SELECT id FROM mytxes WHERE netid=" << m_dbNetId << ")"), cdb.m_dbWallet).ExecuteNonQuery();
+			SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-1 WHERE blockord>-15 AND netid=" << m_dbNetId), cdb.m_dbWallet).ExecuteNonQuery();
 
-			SqliteCommand(EXT_STR("UPDATE nets SET bestblockhash=? WHERE netid=" << m_dbNetId), m_eng->m_cdb.m_dbWallet)
+			SqliteCommand(EXT_STR("UPDATE nets SET bestblockhash=? WHERE netid=" << m_dbNetId), cdb.m_dbWallet)
 				.Bind(1, HashValue::Null().ToSpan())
 				.ExecuteNonQuery();
 			CurrentHeight = -1;
@@ -499,19 +502,20 @@ void Wallet::Rescan() {
 }
 
 void Wallet::CancelPendingTxes() {
-	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		TransactionScope dbtx(m_eng->m_cdb.m_dbWallet);
-		SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-15 WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-		SqliteCommand("DELETE FROM coins WHERE txid IN (SELECT id FROM mytxes WHERE blockord=-15)", m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-		SqliteCommand("DELETE FROM usertxes WHERE txid IN (SELECT id FROM mytxes WHERE blockord=-15)", m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
+	CoinDb& cdb = m_eng->m_cdb;
+	EXT_LOCK (cdb.MtxDb) {
+		TransactionScope dbtx(cdb.m_dbWallet);
+		SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-15 WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId), cdb.m_dbWallet).ExecuteNonQuery();
+		SqliteCommand("DELETE FROM coins WHERE txid IN (SELECT id FROM mytxes WHERE blockord=-15)", cdb.m_dbWallet).ExecuteNonQuery();
+		SqliteCommand("DELETE FROM usertxes WHERE txid IN (SELECT id FROM mytxes WHERE blockord=-15)", cdb.m_dbWallet).ExecuteNonQuery();
 	}
 	Rescan();
 
 	/*!!!
 	EXT_LOCK (m_eng->Mtx) {
-		EXT_LOCK (m_eng->m_cdb.MtxDb) {
+		EXT_LOCK (cdb.MtxDb) {
 			vector<int64_t> txesToDelete;
-			SqliteCommand cmdTx(EXT_STR("SELECT timestamp, data, blockord, comment, fromme, id FROM mytxes WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId << " ORDER BY timestamp"), m_eng->m_cdb.m_dbWallet);
+			SqliteCommand cmdTx(EXT_STR("SELECT timestamp, data, blockord, comment, fromme, id FROM mytxes WHERE blockord<0 AND blockord>-15 AND netid=" << m_dbNetId << " ORDER BY timestamp"), cdb.m_dbWallet);
 			for (DbDataReader dr=cmdTx.ExecuteReader(); dr.Read();) {
 				try {
 					WalletTx wtx;
@@ -525,12 +529,12 @@ void Wallet::CancelPendingTxes() {
 				}
 			}
 			if (!txesToDelete.empty()) {
-				TransactionScope dbtx(m_eng->m_cdb.m_dbWallet);
+				TransactionScope dbtx(cdb.m_dbWallet);
 
 				EXT_FOR (int64_t txid, txesToDelete) {
-					SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-15 WHERE id=" << txid), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-					SqliteCommand(EXT_STR("DELETE FROM coins WHERE txid=" << txid), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
-					SqliteCommand(EXT_STR("DELETE FROM usertxes WHERE txid=" << txid), m_eng->m_cdb.m_dbWallet).ExecuteNonQuery();
+					SqliteCommand(EXT_STR("UPDATE mytxes SET blockord=-15 WHERE id=" << txid), cdb.m_dbWallet).ExecuteNonQuery();
+					SqliteCommand(EXT_STR("DELETE FROM coins WHERE txid=" << txid), cdb.m_dbWallet).ExecuteNonQuery();
+					SqliteCommand(EXT_STR("DELETE FROM usertxes WHERE txid=" << txid), cdb.m_dbWallet).ExecuteNonQuery();
 				}
 			}
 		}
@@ -590,20 +594,13 @@ void Wallet::Start() {
 	if (Block block = m_eng->Db->FindBlock(BestBlockHash))
 		CurrentHeight = block.Height;
 
-#ifdef X_DEBUG//!!!D
-	auto fee = CalcFee(decimal64(0.0003615));
-	String sFee = EXT_STR(fee);
-#endif
-
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		if (m_eng->Mode != EngMode::Lite) {
-			if (!bIsInitialBlockDownload)
-				ReacceptWalletTxes();												//!!!TODO
+		if (!bIsInitialBlockDownload)
+			ReacceptWalletTxes();												//!!!TODO
 
-			if (!RescanThread) {
-				if (CurrentHeight >= 0 && CurrentHeight < m_eng->BestBlockHeight() || BestBlockHash == HashValue::Null())
-					StartRescan(BestBlockHash);
-			}
+		if (!ThreadRescan) {
+			if (CurrentHeight >= 0 && CurrentHeight < m_eng->BestBlockHeight() || BestBlockHash == HashValue::Null())
+				StartRescan(BestBlockHash);
 		}
 	}
 
@@ -928,12 +925,12 @@ void Wallet::Relay(const WalletTx& wtx) {
 
 	EXT_FOR (const Tx& tx, wtx.PrevTxes) {
 		if (!tx->IsCoinBase()) {
-			TxInfo txInfo(tx, tx.GetSerializeSize());
+			TxInfo txInfo(tx, 0);	// avoid calculating rate for my txes
 			m_eng->Relay(txInfo);
 		}
 	}
 	if (!wtx->IsCoinBase()) {
-		TxInfo txInfo(wtx, wtx.GetSerializeSize());
+		TxInfo txInfo(wtx, 0);
 		m_eng->Relay(txInfo);
 	}
 }
@@ -987,7 +984,7 @@ void Wallet::ResendWalletTxes(const DateTime& now) {
 }
 
 void Wallet::OnPeriodic(const DateTime& now) {
-	if (!RescanThread)
+	if (!ThreadRescan)
 		ResendWalletTxes(now);
 }
 
