@@ -43,14 +43,14 @@ struct DbHeader {
 };
 
 ENUM_CLASS(TableType) {
-	BTree 		= 0,
-	HashTable 	= 1
+	BTree 		= 0
+	, HashTable	= 1
 } END_ENUM_CLASS(TableType);
 
 ENUM_CLASS(HashType) {
-	MurmurHash3	= 0,
-	RevIdentity = 1,			// Deprecated
-	Identity = 2,
+	MurmurHash3	= 0
+	, RevIdentity = 1  			// Deprecated
+	, Identity = 2,
 } END_ENUM_CLASS(HashType);
 
 #pragma pack(push, 1)

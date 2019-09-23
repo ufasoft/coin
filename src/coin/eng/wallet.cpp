@@ -46,8 +46,9 @@ void Wallet::Init() {
 WalletTx::WalletTx(const Tx& tx)
 	: base(tx)
 	, To(Eng())
-	, Timestamp(Clock::now())
-{}
+{
+	Timestamp = tx->Timestamp ? tx->Timestamp.value() : Clock::now();
+}
 
 void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
 	Timestamp = DateTime::from_time_t(sr.GetInt32(0));
@@ -55,7 +56,7 @@ void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
 	Coin::DbReader rd(stm, &Eng());
 	rd.BlockchainDb = false;
 	rd >> _self;
-	Height = sr.GetInt32(2);
+	m_pimpl->Height = sr.GetInt32(2);
 	Comment = sr.GetString(3);
 	m_bFromMe = sr.GetInt32(4);
 
@@ -152,9 +153,16 @@ int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 	EXT_LOCKED(m_mtxMyTxHashes, m_myTxHashes.insert(hashTx));
 	int64_t r = GetTxId(hashTx);
 	if (r != -1) {
-		SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
-		cmd.Bind(1, wtx.Height >= 0 ? wtx.Height : (bPending ? -1 : -2));
-		cmd.ExecuteNonQuery();
+		if (wtx.Height >= 0) {
+			SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=?, timestamp=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
+			cmd.Bind(1, wtx.Height)
+				.Bind(2, to_time_t(wtx.Timestamp));
+			cmd.ExecuteNonQuery();
+		} else {
+			SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
+			cmd.Bind(1, bPending ? -1 : -2);
+			cmd.ExecuteNonQuery();
+		}
 	} else {
 		wtx.Timestamp = wtx.Height >= 0 ? m_eng->GetBlockByHeight(wtx.Height).Timestamp : Clock::now();
 		if (wtx->IsCoinBase() && wtx.Comment.empty())
@@ -284,7 +292,7 @@ void Wallet::OnAlert(Alert *alert) {
 		m_iiWalletEvents->OnStateChanged();
 }
 
-void Wallet::OnProcessBlock(const Block& block) {
+void Wallet::OnProcessBlock(const BlockHeader& block) {
 	if (m_iiWalletEvents)
 		m_iiWalletEvents->OnStateChanged();
 }
@@ -302,10 +310,9 @@ void Wallet::ProcessPendingTxes() {
 }
 
 void Wallet::OnBlockchainChanged() {
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < 1; ++i) {		//!!!!?  Why there was `i < 2`
 		if (Thread::CurrentThread->m_bStop)
 			return;
-		bool bChanged = false;
 		BlockHeader bestBlock = m_eng->BestBlock();
 		EXT_LOCK(MtxCurrentHeight) {
 			if (CurrentHeight >= bestBlock.SafeHeight)
@@ -322,17 +329,15 @@ void Wallet::OnBlockchainChanged() {
 		HashValue hash = Hash(block);
 		EXT_LOCK(MtxCurrentHeight) {
 			EXT_LOCK(m_eng->m_cdb.MtxDb) {
-				bool bUpdateWallet = m_eng->Mode == EngMode::Lite;
-				if (!bUpdateWallet) {
-					EXT_FOR(const Tx & tx, block.get_Txes()) {
-						bUpdateWallet |= ProcessTx(tx);
-					}
-				}
-				++CurrentHeight;
+				bool bUpdateWallet = false;
+				for (auto& tx : block.get_Txes())
+					bUpdateWallet |= ProcessTx(tx);
+				CurrentHeight = block.Height;
 				BestBlockHash = hash;
-				if (bUpdateWallet || !(CurrentHeight & 0xFF) || (CurrentHeight == bestBlock.Height && !m_eng->IsInitialBlockDownload()))
-					SetBestBlockHash(hash);
-				bChanged = true;
+				if (bUpdateWallet
+						|| !(CurrentHeight & 0xFF)
+						|| (CurrentHeight == bestBlock.Height && !m_eng->IsInitialBlockDownload()))
+					SetBestBlockHash(hash);			// Updating on every block is expensive during 'Rescan' operation
 			}
 		}
 	}
@@ -435,6 +440,7 @@ void RescanThread::Execute() {
 	} threadPointerCleaner = { &Wallet }; //!!!R, &cmdRescan, &dr };
 	CoinEng& eng = *Wallet.m_eng;
 	CCoinEngThreadKeeper engKeeper(&eng);
+	CBoolKeeper keppRescanning(eng.Rescanning, true);
 
 	int ord = 0;
 	m_count = eng.Db->GetMaxHeight() + 1;
@@ -595,7 +601,7 @@ void Wallet::Start() {
 		CurrentHeight = block.Height;
 
 	EXT_LOCK (m_eng->m_cdb.MtxDb) {
-		if (!bIsInitialBlockDownload)
+		if (!bIsInitialBlockDownload && m_eng->Mode != EngMode::Lite)
 			ReacceptWalletTxes();												//!!!TODO
 
 		if (!ThreadRescan) {

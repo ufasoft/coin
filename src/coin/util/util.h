@@ -403,6 +403,29 @@ struct BlockHeaderBinary {
 		Timestamp, DifficultyTargetBits, Nonce;
 };
 
+class BlockRef {
+public:
+	const HashValue Hash;
+	const int HeightInTrunk;
+
+	BlockRef(int h)
+		: HeightInTrunk(h)
+	{}
+
+	BlockRef(int h, const HashValue& hash)
+		: Hash(hash)
+		, HeightInTrunk(h)
+	{}
+
+	BlockRef(const HashValue& hash)
+		: Hash(hash)
+		, HeightInTrunk(-1)
+	{}
+
+	explicit operator bool() const { return HeightInTrunk >= 0 || Hash; }
+	bool IsInTrunk() const { return HeightInTrunk >= 0; }
+};
+
 class COIN_UTIL_CLASS BlockBase : public InterlockedObject {
 public:
 	HashValue PrevBlockHash;
@@ -412,10 +435,15 @@ public:
 	int32_t Ver;						// Important to be signed
 	uint32_t Height;
 	uint32_t Nonce;
+	CBool IsInTrunk;
 
 	BlockBase()
 		: Ver(4)
 		, Height(uint32_t(-1)) {
+	}
+
+	BlockRef Prev() const {
+		return IsInTrunk ? BlockRef(Height - 1, PrevBlockHash) : BlockRef(PrevBlockHash);
 	}
 
 	virtual void WriteHeader(ProtocolWriter& wr) const;

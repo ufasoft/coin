@@ -169,7 +169,7 @@ public:
 			m_iiWalletEvents->OnStateChanged();
 	}
 protected:
-	void OnProcessBlock(const Block& block) override;
+	void OnProcessBlock(const BlockHeader& block) override;
 	void OnProcessTx(const Tx& tx) override;
 	void OnEraseTx(const HashValue& hashTx) override;
 	void ProcessPendingTxes();

@@ -70,9 +70,9 @@ protected:
 			return base::HashFromTx(tx, n);
 		MemoryStream ms;
 		ScriptWriter(ms) << BigInteger(Height);
-		Tx dtx(tx.m_pimpl->Clone());
-		dtx.m_pimpl->m_txIns.at(0).put_Script(ms);
-		dtx.m_pimpl->m_nBytesOfHash = 0;
+		Tx dtx(tx->Clone());
+		dtx->m_txIns.at(0).put_Script(ms);
+		dtx->m_nBytesOfHash = 0;
 		return Coin::Hash(dtx);
 	}
 
@@ -193,13 +193,13 @@ protected:
 			}
 			return (int64_t)dBaseValue;
 		}
-		
+
 		double dYearsPassed = ( (double)(height-179999) /(60*24*365));							// We need to work out how many years it has been running to calculate estimated electricity price increases and hardware improvements
-		double dKH_Per_Watt = 3.0 * pow(1.50, dYearsPassed);										// moores law type adjustment. Assume 50% better efficiency per year		
+		double dKH_Per_Watt = 3.0 * pow(1.50, dYearsPassed);										// moores law type adjustment. Assume 50% better efficiency per year
 		double dCostPerKiloWattHour = 0.08*pow(1.10,dYearsPassed);								// We start at 8c per kilowatt hour, compound increase it 10% per year
 		double dTotalKWh = ((difficulty*131)/dKH_Per_Watt) / (3600*1000);						// this is the estimated increased cost of electricity per year
 		double dBaseValue = dTotalKWh*dCostPerKiloWattHour;
-		if ((height%2) == 0) {			
+		if ((height%2) == 0) {
 			dBaseValue = (dBaseValue*CPF_PERCENT);												// trust blocks are only worth 5% of normal blocks
 		}
 		return int64_t((std::max(0.0001, dBaseValue) + 0.05)*ChainParams.CoinValue);			// 0.0001 SC is the minimum amount and each block needs at least that to be worth something, also add a minimum amount to cover the existing fee
@@ -210,14 +210,10 @@ protected:
 			base::CheckCoinbasedTxPrev(height, txPrev);
 	}
 
-	int64_t GetMinRelayTxFee() override {
-		return ChainParams.MinTxFee;
-	}
-
 
 	Target GetNextTargetRequired(const Block& blockLast, const Block& block) override {
 		int nTargetTimespan = 12 * 60 * 60;			// 12 hours, but it's really 6 due to trusted blocks not being taken into account
-		TimeSpan targetSpan = TimeSpan::FromSeconds(nTargetTimespan);	
+		TimeSpan targetSpan = TimeSpan::FromSeconds(nTargetTimespan);
 		int64_t nTargetSpacing = 2 * 60;    //2 minute blocks
 		int64_t nInterval = nTargetTimespan / nTargetSpacing;
 		TimeSpan span(0);
@@ -240,7 +236,7 @@ protected:
 				break;
 			span += GetBlockByHeight(h+1).Timestamp - GetBlockByHeight(h).Timestamp;
 		}
-		
+
 		targetSpan = targetSpan /2;					// Limit adjustment step
 		TimeSpan onePercent = targetSpan / 100;        //divide by 2 since each OTHER block shouldnt be counted
 
@@ -265,4 +261,3 @@ protected:
 static CurrencyFactory<SolidcoinEng> s_solidcoin("SolidCoin");
 
 } // Coin::
-

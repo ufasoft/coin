@@ -71,13 +71,12 @@ public:
 	BlockKey(RCSpan cbuf)
 		: m_beH(0)
 	{
-		memcpy((uint8_t*)&m_beH + 1, cbuf.data(), BLOCKID_SIZE);
+		memcpy((uint8_t*)& m_beH + 1, cbuf.data(), BLOCKID_SIZE);
 	}
 
 	operator uint32_t() const { return betoh(m_beH); }
-	operator Span() const { return Span((const uint8_t*)&m_beH + 1, BLOCKID_SIZE); }
+	operator Span() const { return Span((const uint8_t*)& m_beH + 1, BLOCKID_SIZE); }
 };
-
 
 class DbliteBlockChainDb : public IBlockChainDb {
 	typedef IBlockChainDb base;
@@ -115,6 +114,7 @@ public:
 	int FindHeight(const HashValue& hash) override;
 	BlockHeader FindHeader(int height) override;
 	BlockHeader FindHeader(const HashValue& hash) override;
+	BlockHeader FindHeader(const BlockRef& bref) override;
 	optional<pair<uint64_t, uint32_t>> FindBlockOffset(const HashValue& hash) override;
 	Block FindBlock(const HashValue& hash) override;
 	Block FindBlock(int height) override;

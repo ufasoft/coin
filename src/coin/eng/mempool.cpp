@@ -156,6 +156,32 @@ bool TxPool::AddToPool(const Tx& tx, vector<HashValue>& vQueue) {
 	return true;
 }
 
+void TxPool::OnTxMessage(const Tx& tx) {
+	vector<HashValue> vQueue;
+	EXT_LOCK(Mtx) {
+		try {
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxFeeIsLow);				//!!!T
+			DBG_LOCAL_IGNORE_CONDITION(CoinErr::InputsAlreadySpent);
+
+			if (!AddToPool(tx, vQueue))
+				return;
+		} catch (const TxNotFoundException&) {
+			AddOrphan(tx);
+			return;
+		}
+		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);	//!!!T
+		for (int i = 0; i < vQueue.size(); ++i) {
+			HashValue hash = vQueue[i];
+			pair<TxPool::CHashToHash::iterator, TxPool::CHashToHash::iterator> range = m_prevHashToOrphanHash.equal_range(hash);
+			for (TxPool::CHashToHash::iterator j = range.first; j != range.second; ++j)
+				AddToPool(m_hashToOrphan[j->second], vQueue);
+			EraseOrphanTx(hash);
+		}
+	}
+}
+
 void TxMessage::Trace(Link& link, bool bSend) const {
 	if (CTrace::s_nLevel & (1 << TRC_LEVEL_TX_MESSAGE))
 		base::Trace(link, bSend);
@@ -180,30 +206,7 @@ void TxMessage::Process(Link& link) {
 		}
 	}
 
-	vector<HashValue> vQueue;
-
-	EXT_LOCK (eng.TxPool.Mtx) {
-		try {
-			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);
-			DBG_LOCAL_IGNORE_CONDITION(CoinErr::Misbehaving);
-			DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxFeeIsLow);				//!!!T
-			DBG_LOCAL_IGNORE_CONDITION(CoinErr::InputsAlreadySpent);
-
-			if (!eng.TxPool.AddToPool(Tx, vQueue))
-				return;
-		} catch (const TxNotFoundException&) {
-			eng.TxPool.AddOrphan(Tx);
-			return;
-		}
-		DBG_LOCAL_IGNORE_CONDITION(CoinErr::TxNotFound);	//!!!T
-		for (int i = 0; i < vQueue.size(); ++i) {
-			HashValue hash = vQueue[i];
-			pair<TxPool::CHashToHash::iterator, TxPool::CHashToHash::iterator> range = eng.TxPool.m_prevHashToOrphanHash.equal_range(hash);
-			for (TxPool::CHashToHash::iterator j = range.first; j != range.second; ++j)
-				eng.TxPool.AddToPool(eng.TxPool.m_hashToOrphan[j->second], vQueue);
-			eng.TxPool.EraseOrphanTx(hash);
-		}
-	}
+	eng.TxPool.OnTxMessage(Tx);
 }
 
 void MemPoolMessage::Process(Link& link) {

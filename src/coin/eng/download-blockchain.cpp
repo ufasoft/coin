@@ -11,7 +11,7 @@ namespace Coin {
 
 bool CoinEng::HaveAllBlocksUntil(const HashValue& hash) {
 	BlockTreeItem bti = Tree.FindInMap(hash);
-	if (bti && !bti.IsHeaderOnly)
+	if (bti && !bti->IsHeaderOnly())
 		return true;
 	EXT_LOCK(Caches.Mtx) {
 		if (Caches.HashToBlockCache.count(hash))
@@ -26,7 +26,7 @@ bool CoinEng::HaveBlock(const HashValue& hash) {
 			return true;
 	}
 	BlockTreeItem bti = Tree.FindInMap(hash);
-	if (bti && !bti.IsHeaderOnly)
+	if (bti && !bti->IsHeaderOnly())
 		return true;
 	return HaveAllBlocksUntil(hash);
 }
@@ -50,7 +50,7 @@ bool CoinEng::AlreadyHave(const Inventory& inv) {
 }
 
 bool CoinEng::IsInitialBlockDownload() {
-	if (UpgradingDatabaseHeight)
+	if (UpgradingDatabaseHeight || Rescanning)
 		return true;
 	BlockHeader bestBlock = BestBlock();
 	if (!bestBlock || bestBlock.Height < ChainParams.LastCheckpointHeight - INITIAL_BLOCK_THRESHOLD)

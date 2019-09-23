@@ -199,7 +199,7 @@ interface IEngEvents {
 	virtual void OnCreateDatabase() {}
 	virtual void OnCloseDatabase() {}
 	virtual void OnBestBlock(const Block& block) {}
-	virtual void OnProcessBlock(const Block& block) {}
+	virtual void OnProcessBlock(const BlockHeader& block) {}
 	virtual void OnBlockConnectDbtx(const Block& block) {}
 	virtual void OnBeforeCommit() {}
 	virtual void OnProcessTx(const Tx& tx) {}
@@ -452,10 +452,6 @@ class LocatorHashes : public vector<HashValue> {
 
 public:
 	int FindHeightInMainChain(bool bFullBlocks = false) const;
-
-	/*!!!R	int get_DistanceBack() const;
-		DEFPROP_GET(int, DistanceBack);
-		*/
 };
 
 class IBlockChainDb : public InterlockedObject, public ITransactionable {
@@ -483,6 +479,7 @@ public:
 	virtual int FindHeight(const HashValue& hash) = 0;
 	virtual BlockHeader FindHeader(int height) = 0;
 	virtual BlockHeader FindHeader(const HashValue& hash) = 0;
+	virtual BlockHeader FindHeader(const BlockRef& bref) = 0;
 	virtual optional<pair<uint64_t, uint32_t>> FindBlockOffset(const HashValue& hash) = 0;
 	virtual Block FindBlock(const HashValue& hash) = 0;
 	virtual Block FindBlock(int height) = 0;
@@ -569,7 +566,9 @@ public:
 
 	BlockTreeItem FindInMap(const HashValue& hashBlock) const;
 	BlockHeader FindHeader(const HashValue& hashBlock) const;
-	BlockTreeItem GetHeader(const HashValue& hashBlock) const;
+	BlockHeader FindHeader(const BlockRef& bref) const;
+	BlockTreeItem GetHeader(const HashValue& hashBlock) const;	//!!!?R
+	BlockTreeItem GetHeader(const BlockRef& bref) const;
 	Block FindBlock(const HashValue& hashBlock) const;
 	Block GetBlock(const HashValue& hashBlock) const;
 	BlockHeader GetAncestor(const HashValue& hashBlock, int height) const;
@@ -586,7 +585,7 @@ public:
 	void OnCreateDatabase() override;
 	void OnCloseDatabase() override;
 	void OnBestBlock(const Block& block) override;
-	void OnProcessBlock(const Block& block) override;
+	void OnProcessBlock(const BlockHeader& block) override;
 	void OnBlockConnectDbtx(const Block& block) override;
 	void OnBeforeCommit() override;
 	void OnProcessTx(const Tx& tx) override;
@@ -637,6 +636,7 @@ public:
 	void EraseOrphanTx(const HashValue& hash);
 	void AddOrphan(const Tx& tx);
 	bool AddToPool(const Tx& tx, vector<HashValue>& vQueue);
+	void OnTxMessage(const Tx& tx);
 };
 
 class CoinConf : public Ext::Inet::P2P::P2PConf {
@@ -692,6 +692,7 @@ public:
 
 	static const int HEIGHT_BOOTSTRAPING = -2;
 	int UpgradingDatabaseHeight;
+	bool Rescanning;
 
 	mutex m_mtxStates;
 	set<String> m_setStates;

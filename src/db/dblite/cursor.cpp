@@ -98,9 +98,13 @@ void CursorStream::put_Position(uint64_t pos) const {
 
 }
 
+bool CursorStream::Eof() const {
+	return m_pos == m_length;
+}
+
 size_t CursorStream::Read(void *buf, size_t count) const {
 	size_t r = 0;
-	while (m_pos!=m_length && count) {
+	while (m_pos != m_length && count) {
 		size_t size = (min)(count, m_mb.size());
 		memcpy(buf, m_mb.data(), size);
 		buf = (uint8_t*)buf + size;
@@ -304,12 +308,12 @@ DbCursor::DbCursor(DbTransactionBase& tx, DbTable& table) {
 
 
 DbCursor::DbCursor(DbCursor& c) {
-	m_pimpl = c.m_pimpl->Clone();
+	m_pimpl = c->Clone();
 	m_pimpl->Map->Cursors.push_back(*m_pimpl.get());
 }
 
 DbCursor::DbCursor(DbCursor& c, bool bRight, Page& pageSibling) {
-	m_pimpl = c.m_pimpl->Clone();
+	m_pimpl = c->Clone();
 	m_pimpl->Map->Cursors.push_back(*m_pimpl.get());
 	if (BTreeCursor *tc = dynamic_cast<BTreeCursor*>(m_pimpl.get())) {
 		tc->Path[tc->Path.size()-2].Pos += bRight ? 1 : -1;

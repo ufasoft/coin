@@ -136,7 +136,7 @@ bool Target::operator<(const Target& t) const {
 	return BigInteger(_self) < BigInteger(t);
 }
 
-bool BlockHeader::IsInMainChain() const {
+bool BlockHeader::IsInTrunk() const {
 	return Eng().Db->HaveHeader(Hash(_self));
 }
 
@@ -372,8 +372,10 @@ void BlockObj::Read(const ProtocolReader& rd) {
 	ReadHeader(rd, false, 0);
 	if (!rd.MayBeHeader || !rd.BaseStream.Eof()) {
 		CoinSerialized::Read(rd, m_txes);
-		for (auto& tx : m_txes)
-			tx.Height = Height;				// Valid only when Height already set
+		for (auto& tx : m_txes) {
+			tx->Timestamp = Timestamp;
+			tx->Height = Height;				// Valid only when Height already set
+		}
 	}
 	m_bTxesLoaded = true;
 	m_bHashCalculated = false;
@@ -463,7 +465,7 @@ BlockHeader CoinEng::GetFirstHeaderOfInterval(const BlockObj& bo, int nInterval)
 	BlockHeader b = Tree.FindHeader(bo.PrevBlockHash);
 	ASSERT(b.Height >= r);
 	while (b.Height > r)
-		b = b.IsInMainChain() ? Db->FindHeader(r) : b.GetPrevHeader();
+		b = b.IsInTrunk() ? Db->FindHeader(r) : b.GetPrevHeader();
 	return b;
 }
 
@@ -484,7 +486,7 @@ Target CoinEng::GetNextTargetRequired(const BlockHeader& headerLast, const Block
 				return ChainParams.MaxTarget;
 			else {
 				BigInteger maxTarget = ChainParams.MaxTarget;
-				for (BlockHeader prev(headerLast);; prev = Tree.FindHeader(prev.PrevBlockHash)) {
+				for (BlockHeader prev(headerLast);; prev = Tree.FindHeader(prev->Prev())) {
 					if (!prev)
 						Throw(CoinErr::OrphanedChain);
 					Target difficultyTarget = prev->get_DifficultyTarget();
@@ -888,9 +890,10 @@ void BlockHeader::Connect() const {
 		bUpdateMaxHeight = eng.Mode == EngMode::Lite && Timestamp < EXT_LOCKED(eng.m_cdb.MtxDb, eng.m_cdb.DtEarliestKey);
 		eng.Db->InsertHeader(_self, bUpdateMaxHeight);
 	}
-	if (bUpdateMaxHeight)
+	if (bUpdateMaxHeight) {
 		eng.SetBestBlock(_self);
-	else
+		eng.Events.OnProcessBlock(_self);		//!!!? bNotifyWallet
+	} else
 		eng.SetBestHeader(_self);
 	eng.Tree.RemovePersistentBlock(hashBlock);
 	UpdateLastCheckpointed();
@@ -917,7 +920,7 @@ DateTime BlockHeader::GetMedianTimePast() const {
 	vector<DateTime>::iterator beg = ar.end(), end = beg;
 	BlockHeader block = _self;
 	int height = Height;
-	for (int i = height, e = std::max(0, int(height - ar.size() + 1)); block && i >= e; --i, block = eng.Tree.FindHeader(block.PrevBlockHash))
+	for (int i = height, e = std::max(0, int(height - ar.size() + 1)); block && i >= e; --i, block = eng.Tree.FindHeader(block->Prev()))
 		* --beg = block.Timestamp;
 	sort(beg, end);
 	return *(beg + (end - beg) / 2);
@@ -926,17 +929,22 @@ DateTime BlockHeader::GetMedianTimePast() const {
 void Block::ContextualCheck(const BlockHeader& blockPrev) {
     CoinEng& eng = Eng();
     auto height = Height;
-	if (height >= eng.ChainParams.BIP34Height && m_pimpl->Ver >= 2 && height != m_pimpl->GetBlockHeightFromCoinbase())
+	if (eng.Mode != EngMode::Lite
+			&& height >= eng.ChainParams.BIP34Height
+			&& m_pimpl->Ver >= 2 && height != m_pimpl->GetBlockHeightFromCoinbase())
 		Throw(CoinErr::BlockHeightMismatchInCoinbase);
 
     auto mtp = blockPrev.GetMedianTimePast();
     if (Timestamp <= mtp)
         Throw(CoinErr::TooEarlyTimestamp);
 
+	if (eng.Mode == EngMode::Lite)
+		return;
+
     auto lockTimeCutoff = height >= eng.ChainParams.BIP68Height ? mtp : Timestamp;
 	CTxes& txes = m_pimpl->m_txes;
     for (auto& tx : txes) {
-        tx.Height = height;
+        tx->Height = height;
         if (!tx->IsFinal(height, lockTimeCutoff))
             Throw(CoinErr::ContainsNonFinalTx);
     }
@@ -1105,7 +1113,7 @@ void Block::Connect() const {
 }
 
 BlockHeader BlockHeader::GetPrevHeader() const {
-	if (BlockHeader r = Eng().Tree.FindHeader(PrevBlockHash))
+	if (BlockHeader r = Eng().Tree.FindHeader(m_pimpl->Prev()))
 		return r;
 	Throw(CoinErr::OrphanedChain);
 }
@@ -1168,13 +1176,13 @@ bool BlockHeader::HasBestChainWork() const {
 	HashValue hash = Hash(_self);
 	while (!eng.Db->HaveHeader(hash)) {
 		hash = btiRoot.PrevBlockHash;
-		forkWork += eng.ChainParams.MaxTarget / exchange(btiRoot, eng.Tree.GetHeader(btiRoot.PrevBlockHash))->DifficultyTarget;
+		forkWork += eng.ChainParams.MaxTarget / exchange(btiRoot, eng.Tree.GetHeader(btiRoot->Prev()))->DifficultyTarget;
 	}
 
 	HashValue hashB = Hash(bestHeader);
 	for (BlockTreeItem bti = bestHeader; hashB != hash && forkWork > work;) {
 		hashB = bti.PrevBlockHash;
-		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti.PrevBlockHash))->DifficultyTarget;
+		work += eng.ChainParams.MaxTarget / exchange(bti, eng.Tree.GetHeader(bti->Prev()))->DifficultyTarget;
 	}
 
 	return forkWork > work;
@@ -1249,8 +1257,12 @@ void Block::Accept(Link *link) {
 		}
 
         m_pimpl->Height = height = blockPrev.Height + 1;
-		if (eng.Mode != EngMode::Lite)
-			ContextualCheck(blockPrev);
+		for (auto& tx : m_pimpl->m_txes) {
+			tx->Height = height;
+			tx->Timestamp = Timestamp;
+		}
+//!!!?		if (eng.Mode != EngMode::Lite)
+		ContextualCheck(blockPrev);
 	}
 
 	const HashValue& hash = Hash(_self);
@@ -1262,7 +1274,7 @@ void Block::Accept(Link *link) {
 		BlockHeader blockBest = eng.BestBlock();
 		if (height <= blockBest.SafeHeight && eng.HaveBlock(hash))
 			return;		// RaceCondition check, block already accepted by parallel thread.
-		bool bConnectToMainChain = IsInMainChain();
+		bool bConnectToMainChain = IsInTrunk();
 		bool bReorganize = false;
 		if (!bConnectToMainChain) {
 			CheckAgainstCheckpoint();

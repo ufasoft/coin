@@ -133,7 +133,7 @@ uint32_t DeleteEntry(const PagePos& pp, uint8_t keySize) {
 	bool bBranch = pp.Page.IsBranch;
 	int r = DB_EOF_PGNO;
 	if (!bBranch) {
-		pair<Span, uint64_t> qq = e.LocalData(pp.Page.m_pimpl->View->Storage.PageSize, keySize, pd.Header.KeyOffset());
+		pair<Span, uint64_t> qq = e.LocalData(pp.Page->View->Storage.PageSize, keySize, pd.Header.KeyOffset());
 		if (qq.first.size() != qq.second)
 			r = e.FirstBigdataPage();
 	}
@@ -362,7 +362,7 @@ void BTreeCursor::Balance() {
 	Initialized = false;
 	Blob blobDivs(0, Tree->Tx.Storage.PageSize);										// should be in dynamic scope during one nested call of Balance()
 	Tree->BalanceNonRoot(Path[Path.size()-2], Path.back().Page, blobDivs.data());
-	Path.back().Page.m_pimpl->Overflows = 0;
+	Path.back().Page->Overflows = 0;
 	Path.pop_back();
 	Balance();
 }
@@ -414,7 +414,7 @@ EntryDesc PagedMap::GetEntryDesc(const PagePos& pp) {
 	EntryDesc r;
 	r.P = e.P;
 	r.Size = e.Size();
-	uint32_t pageSize = pp.Page.m_pimpl->View->Storage.PageSize;
+	uint32_t pageSize = pp.Page->View->Storage.PageSize;
 	pair<Span, uint64_t> qq = e.LocalData(pageSize, KeySize, pd.Header.KeyOffset());
 	r.LocalData = qq.first;
 	r.DataSize = qq.second;
@@ -605,10 +605,10 @@ void static CopyPage(Page& pageFrom, Page& pageTo, uint8_t keySize) {
 	size_t size = pd[pd.Header.Num].P - (uint8_t*)&pd.Header;
 	MemcpyAligned32(pageTo.Address, pageFrom.Address, size);
 #ifdef X_DEBUG//!!!D
-	memset((uint8_t*)pageTo.Address+size, 0xFE, pageFrom.m_pimpl->Storage.PageSize-size);
+	memset((uint8_t*)pageTo.Address+size, 0xFE, pageFrom->Storage.PageSize-size);
 #endif
 
-	LiteEntry* dEntries = pageTo.m_pimpl->aEntries = (LiteEntry*)Ext::Malloc(sizeof(LiteEntry) * (pd.Header.Num + 1));
+	LiteEntry* dEntries = pageTo->aEntries = (LiteEntry*)Ext::Malloc(sizeof(LiteEntry) * (pd.Header.Num + 1));
 	ssize_t off = (uint8_t*)pageTo.get_Address() - (uint8_t*)pageFrom.get_Address();
 	for (int i = 0, n = pd.Header.Num; i <= n; ++i)
 		dEntries[i].P = pd[i].P + off;

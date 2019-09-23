@@ -107,7 +107,7 @@ void EngEvents::OnBestBlock(const Block& block) {
 		s->OnBestBlock(block);
 }
 
-void EngEvents::OnProcessBlock(const Block& block) {
+void EngEvents::OnProcessBlock(const BlockHeader& block) {
 	for (auto& s : Subscribers)
 		s->OnProcessBlock(block);
 }
@@ -226,6 +226,7 @@ CoinEng::CoinEng(CoinDb& cdb)
 	, m_mode(EngMode::Normal)
 	, AllowFreeTxes(true)
 	, UpgradingDatabaseHeight(0)
+	, Rescanning(false)
 	, OffsetInBootstrap(0)
 	, NextOffsetInBootstrap(0)
 	, aPreferredDownloadPeers(0)

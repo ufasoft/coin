@@ -505,7 +505,7 @@ void GetHeadersMessage::Process(Link& link) {
 	if (!Locators.empty())
 		m->Headers = eng.Db->GetBlockHeaders(Locators, HashStop);
 	else if (BlockHeader header = eng.Tree.FindHeader(HashStop)) {
-		if (header.IsInMainChain())
+		if (header.IsInTrunk())
 			m->Headers.push_back(header);
 	}
 	if (!m->Headers.empty())

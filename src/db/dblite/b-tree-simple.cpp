@@ -154,7 +154,7 @@ void BTree::Split(DbCursor& c, const ConstBuf& k, const ConstBuf& d, UInt32 pgno
 				std::copy(cn.Path.begin(), cn.Path.begin()+ptop+1, c.Path.begin());
 				c.Path[ptop].Pos--;
 			}
-		} 
+		}
 	}
 
 	byte *pPart2 = posNew>=h.Num ? entries[h.Num-1].Upper() : entries[posNew].P;
@@ -199,7 +199,7 @@ void DbCursor::UpdateKey(const ConstBuf& key) {
 	PagePos& pp = Top();
 	PageHeader& h = *(PageHeader*)pp.Page.Address;
 	ASSERT(pp.Pos < h.Num);
-	
+
 	LiteEntry *entries = pp.Page.Entries();
 	ConstBuf oldKey = entries[pp.Pos].Key();
 	if (ssize_t(key.Size - oldKey.Size) <= ssize_t(pp.Page.SizeLeft())) {                       // signed comparison
@@ -294,7 +294,7 @@ void BTree::Merge(DbCursor& cSrc, DbCursor& cDst) {
 		c1.Path.pop_back();
 		c1.UpdateKey(ConstBuf());
 	}
-	
+
 	Page page = cSrc.Path.back().Page;
 	Tx.FreePage(page);
 
@@ -472,7 +472,7 @@ void BTree::AddEntry(const PagePos& pagePos, const ConstBuf& key, const ConstBuf
 		AddEntry(e.P, bIsBranch, key, data, pgno, flags);
 	} else
 		AddEntry(h.Num ? entries[h.Num-1].Upper() : h.Data, bIsBranch, key, data, pgno, flags);
-	++h.Num;	
+	++h.Num;
 	pagePos.Page.ClearEntries();
 
 #ifdef _DEBUG//!!!D
@@ -488,7 +488,7 @@ void BTree::AddCell(const PagePos& pagePos, const ConstBuf& cell, byte *tmp, UIn
 	LiteEntry *entries = page.Entries();
 
 	if (cell.Size > page.SizeLeft()) {
-		IndexedEntryDesc *oe = page.m_pimpl->OverflowEntry = new IndexedEntryDesc;
+		IndexedEntryDesc *oe = page->OverflowEntry = new IndexedEntryDesc;
 		oe->Index = pagePos.Pos;
 		if (tmp) {
 			memcpy(tmp, cell.P, cell.Size);
@@ -504,7 +504,7 @@ void BTree::AddCell(const PagePos& pagePos, const ConstBuf& cell, byte *tmp, UIn
 		memcpy(e.P, cell.P, cell.Size);
 		if (pgno)
 			PutLeUInt32(e.P, pgno);
-		++h.Num;	
+		++h.Num;
 	}
 	page.ClearEntries();
 }

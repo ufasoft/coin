@@ -2,46 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:coin="clr-namespace:Coin"
-        Title="Transactions" Height="281" Width="537"  Closed="FormTransactions_Closed" Loaded="Window_Loaded">
+        Title="Transactions" Height="281" Width="726"  Closed="FormTransactions_Closed" >
 	<Window.Resources>
 		<coin:DateTimeConverter x:Key="dateTimeConverter" />
 	</Window.Resources>
 	<DockPanel>
-    	<ListView Name="lv" MouseDoubleClick="lv_MouseDoubleClick">
-			<ListView.ContextMenu>
-				<ContextMenu >
-					<MenuItem Header="_Info..." Click="OnTxInfo"/>
-					<MenuItem Header="_Edit Comment..." Click="OnEditComment"/>
-				</ContextMenu>
-			</ListView.ContextMenu>
-			<ListView.View>
-                <GridView>
-					<GridViewColumn DisplayMemberBinding="{Binding Timestamp, Converter={StaticResource dateTimeConverter}}" Width="auto">
-                        <GridViewColumnHeader  Tag="Timestamp" Content="Date Time" />
-                    </GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Path=Debit}"  Width="50">
-						<GridViewColumnHeader  Tag="Debit" Content="Debit" />
-					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Path=Credit}"  Width="50">
-						<GridViewColumnHeader Tag="Credit" Content="Credit" />
-					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Path=Fee}"  Width="50">
-						<GridViewColumnHeader Tag="Fee" Content="Fee" />
-					</GridViewColumn>
-					<GridViewColumn  DisplayMemberBinding="{Binding Path=Confirmations}" Width="70">
-						<GridViewColumnHeader  Tag="Confirmations" Content="Confirmations" />
-					</GridViewColumn>
-					<GridViewColumn  DisplayMemberBinding="{Binding Path=Address}" Width="120" >
-						<GridViewColumnHeader  Tag="Address" Content="Address" />
-					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Path=Comment}" Width="150" >
-						<GridViewColumnHeader  Tag="Comment" Content="Comment" />
-					</GridViewColumn>
-					<GridViewColumn DisplayMemberBinding="{Binding Path=Hash}" Width="110" >
-						<GridViewColumnHeader Tag="Hash" Content="Hash" />
-					</GridViewColumn>
-				</GridView>
-            </ListView.View>
-        </ListView>
-    </DockPanel>
+		<coin:CtlTransactions x:Name="CtlTxes" />
+	</DockPanel>
 </Window>

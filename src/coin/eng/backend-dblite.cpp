@@ -75,13 +75,13 @@ DbTxRef::DbTxRef(DbStorage& env) {
 
 DbliteBlockChainDb::DbliteBlockChainDb(CoinEng& eng)
 	: Eng(eng)
-	//	, m_tableBlocks("blocks", BLOCKID_SIZE, TableType::HashTable, HashType::Identity)
-	, m_tableBlocks("blocks", BLOCKID_SIZE, TableType::HashTable)
-	, m_tableHashToBlock("hash_blocks", 0, TableType::HashTable)
-	, m_tableTxes("txes", TXID_SIZE, TableType::HashTable, HashType::Identity)
-	, m_tablePubkeys("pubkeys", PUBKEYID_SIZE, TableType::HashTable, HashType::Identity)
-	, m_tablePubkeyToTxes("pubkey_txes", PUBKEYTOTXES_ID_SIZE, TableType::HashTable, HashType::Identity)
-	, m_tableProperties("properties", 0, TableType::HashTable) {
+	, m_tableBlocks			("blocks"		, BLOCKID_SIZE			, TableType::HashTable, HashType::Identity)			// Don't make it BTree to avoid be sparse forever after replacing Headers by Offsets
+	, m_tableHashToBlock	("hash_blocks"	, 0						, TableType::HashTable)
+	, m_tableTxes			("txes"			, TXID_SIZE				, TableType::HashTable	, HashType::Identity)
+	, m_tablePubkeys		("pubkeys"		, PUBKEYID_SIZE			, TableType::HashTable	, HashType::Identity)
+	, m_tablePubkeyToTxes	("pubkey_txes"	, PUBKEYTOTXES_ID_SIZE	, TableType::HashTable	, HashType::Identity)
+	, m_tableProperties		("properties"	, 0						, TableType::HashTable)
+{
 	DefaultFileExt = ".udb";
 
 #	ifdef _DEBUG //!!!D
@@ -359,7 +359,7 @@ bool DbliteBlockChainDb::Open(const path& p) {
 		for (DbCursor c(dbt, m_tableBlocks); c.SeekToNext();) {
 			int height = BlockKey(c.get_Key());
 			if (height < BlockOffsets.size())
-				BlockOffsets.at(height) = *(uint64_t*)c.get_Data().data();
+				BlockOffsets.at(height) = GetLeUInt64(c.get_Data().data());
 		}
 	}
 	if (TryToConvert(p))
@@ -536,6 +536,7 @@ Block DbliteBlockChainDb::LoadBlock(DbReadTransaction& dbt, int height, Stream& 
 		//!!!	ASSERT(Hash(r) == hash);
 	}
 	}
+	r->IsInTrunk = true;
 	return r;
 }
 
@@ -563,6 +564,7 @@ BlockHeader DbliteBlockChainDb::LoadHeader(DbReadTransaction& dbt, int height, S
 	r->PrevBlockHash = ReadPrevBlockHash(dbt, height, (height - 1) <= hMaxBlock);
 	ASSERT(Hash(r) == hash);
 	r->m_hash = hash;
+	r->IsInTrunk = true;
 	return r;
 }
 
@@ -591,6 +593,25 @@ BlockHeader DbliteBlockChainDb::FindHeader(const HashValue& hash) {
 	int height = (uint32_t)BlockKey(c.Data);
 	DbCursor c1(dbt, m_tableBlocks);
 	if (!c1.Get(c.Data)) {
+		Throw(CoinErr::InconsistentDatabase);
+	}
+	return LoadHeader(dbt, height, c1.DataStream);
+}
+
+BlockHeader DbliteBlockChainDb::FindHeader(const BlockRef& bref) {
+	BlockHeader r(nullptr);
+	DbReadTxRef dbt(m_db);
+	int height;
+	if (bref.IsInTrunk())
+		height = bref.HeightInTrunk;
+	else {
+		DbCursor c(dbt, m_tableHashToBlock);
+		if (!c.Get(ReducedBlockHash(bref.Hash)))
+			return r;
+		height = (uint32_t)BlockKey(c.Data);
+	}
+	DbCursor c1(dbt, m_tableBlocks);
+	if (!c1.Get(BlockKey(height))) {
 		Throw(CoinErr::InconsistentDatabase);
 	}
 	return LoadHeader(dbt, height, c1.DataStream);
@@ -657,10 +678,10 @@ vector<BlockHeader> DbliteBlockChainDb::GetBlockHeaders(const LocatorHashes& loc
 	DbCursor c(dbt, m_tableBlocks);
 
 	vector<BlockHeader> r;
+	r.reserve(ProtocolParam::MAX_HEADERS_RESULTS);
 	for (int height = locators.FindHeightInMainChain() + 1; c.Get(BlockKey(height)); ++height) {
-		BlockHeader header = LoadHeader(dbt, height, c.DataStream, hMaxBlock);
-		r.push_back(header);
-		if (Hash(header) == hashStop || r.size() >= ProtocolParam::MAX_HEADERS_RESULTS)
+		r.push_back(LoadHeader(dbt, height, c.DataStream, hMaxBlock));
+		if (r.size() >= ProtocolParam::MAX_HEADERS_RESULTS || Hash(r.back()) == hashStop)
 			break;
 	}
 	return r;
@@ -1000,7 +1021,7 @@ bool DbliteBlockChainDb::FindTxByHash(const HashValue& hashTx, Tx* ptx) {
 		ptx->EnsureCreate(Eng);
 
 		const TxData& txData = txDatas.Items[txDatas.Index];
-		ptx->Height = txData.Height;
+		ptx->m_pimpl->Height = txData.Height;
 		switch (Eng.Mode) {
 		case EngMode::Bootstrap:
 			ReadTx(GetBlockOffset(txData.Height) + txData.TxOffset, *ptx);
@@ -1060,7 +1081,8 @@ void DbliteBlockChainDb::ReadTxes(const BlockObj& bo) {
 		const TxHashOutNum& ho = bo.m_txHashesOutNums[i];
 		Tx& tx = bo.m_txes[i];
 		tx.EnsureCreate(Eng);
-		tx.Height = bo.Height;
+		tx->Timestamp = bo.Timestamp;
+		tx->Height = bo.Height;
 		tx->OffsetInBlock = uint32_t(stm.Position);
 		rd >> blob;
 		CMemReadStream stmTx(blob);
@@ -1180,8 +1202,9 @@ void DbliteBlockChainDb::PruneTxo(const OutPoint& op, int32_t heightCur) {
 		for (auto& d : txDatas.Items) {
 			if (!d.Utxo.empty()) {
 #ifdef _DEBUG
-				if (!d.Utxo.back())
+				if (!d.Utxo.back()) {
 					Throw(CoinErr::InconsistentDatabase);
+				}
 #endif
 				return;
 			}
@@ -1343,7 +1366,10 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 		}
 #endif
 		ProtocolWriter wr(msB);
-		block.Write(wr);	
+		if (block.Txes.empty())
+			block.WriteHeader(wr);
+		else
+			block.Write(wr);
 	} break;
 	case EngMode::Bootstrap: {
 		MemoryStream ms(MAX_BLOCK_SIZE + 8);
@@ -1435,7 +1461,7 @@ void DbliteBlockChainDb::InsertBlock(const Block& block, CConnectJob& job) {
 #	if UCFG_COIN_TXES_IN_BLOCKTABLE
 	case EngMode::Normal:
 	case EngMode::BlockExplorer:
-#	endif	
+#	endif
 		for (int nTx = 0; nTx < txes.size(); ++nTx) {			// Don't require topological order for BCH compatibility,
 			const Tx& tx = txes[nTx];							// CoinEng::ConnectBlockTxes() already checked topological order for Bitcoin chain
 			uint32_t txOffset = txOffsets[nTx];

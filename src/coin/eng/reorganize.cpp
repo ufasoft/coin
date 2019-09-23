@@ -153,7 +153,7 @@ void CoinEng::Reorganize(const BlockHeader& header) {
 	bool bNextAreHeaders = false;
 	for (size_t i = vConnect.size(); i--;) {
 		BlockHeader& headerToConnect = vConnect[i];
-		if (bNextAreHeaders || (bNextAreHeaders = headerToConnect.IsHeaderOnly)) {
+		if (bNextAreHeaders || (bNextAreHeaders = headerToConnect->IsHeaderOnly())) {
 			headerToConnect.Connect();
 		} else {
 			Block block(headerToConnect.m_pimpl);

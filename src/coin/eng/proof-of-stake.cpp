@@ -165,7 +165,7 @@ void PosBlockObj::WriteKernelStakeModifierV05(DateTime dtTx, BinaryWriter& wr, c
 		Throw(CoinErr::CoinstakeCheckTargetFailed);
 	}
 	PosEng::StakeModifierItem item ={ blockPrev.Timestamp, PosBlockObj::Of(blockPrev).StakeModifier };
-	for (Block b=blockPrev; dt > dtCompare; b=eng.Tree.GetBlock(b.PrevBlockHash)) {
+	for (Block b = blockPrev; dt > dtCompare; b = eng.Tree.GetBlock(b.PrevBlockHash)) {
 		if (!!(item = eng.GetStakeModifierItem(b.Height-1)).StakeModifier)
 			dt = item.Timestamp;
 	}

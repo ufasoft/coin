@@ -24,15 +24,27 @@ BlockHeader BlockTree::FindHeader(const HashValue& hashBlock) const {
 	return Eng.Db->FindHeader(hashBlock);
 }
 
+BlockHeader BlockTree::FindHeader(const BlockRef& bref) const {
+	if (BlockTreeItem item = FindInMap(bref.Hash))
+		return item;
+	return Eng.Db->FindHeader(bref);
+}
+
 BlockTreeItem BlockTree::GetHeader(const HashValue& hashBlock) const {
 	if (BlockTreeItem item = FindHeader(hashBlock))
 		return item;
 	Throw(E_FAIL);
 }
 
+BlockTreeItem BlockTree::GetHeader(const BlockRef& bref) const {
+	if (BlockTreeItem item = FindHeader(bref))
+		return item;
+	Throw(E_FAIL);
+}
+
 Block BlockTree::FindBlock(const HashValue& hashBlock) const {
 	if (BlockTreeItem item = FindInMap(hashBlock)) {
-		if (!item.IsHeaderOnly)
+		if (!item->IsHeaderOnly())
 			return Block(item.m_pimpl);
 	}
 	return Eng.LookupBlock(hashBlock);
@@ -78,7 +90,7 @@ vector<Block> BlockTree::FindNextBlocks(const HashValue& hashBlock) const {
 	vector<Block> r;
 	EXT_LOCK(Mtx) {
 		EXT_FOR(CMap::value_type pp, Map) {
-			if (pp.second.PrevBlockHash == hashBlock && !pp.second.IsHeaderOnly)
+			if (pp.second.PrevBlockHash == hashBlock && !pp.second->IsHeaderOnly())
 				r.push_back(Block(pp.second.m_pimpl));
 		}
 	}

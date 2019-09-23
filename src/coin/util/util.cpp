@@ -227,7 +227,7 @@ void CoinSerialized::WriteCompactSize(BinaryWriter& wr, uint64_t v) {
 		return;
 	}
 	uint8_t buf[9];
-	*(UNALIGNED uint64_t*)(buf + 1) = htole(v);
+	PutLeUInt64(buf + 1, v);
 	if (v <= 0xFFFF) {
 		buf[0] = 0xFD;
 		wr.Write(buf, 3);

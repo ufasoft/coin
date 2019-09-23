@@ -362,36 +362,28 @@ namespace Coin {
             }
         }
 
-        WalletForms SelectedWallet() {
-            return (WalletForms)LvWallet.SelectedItem;
-        }
+        WalletForms SelectedWallet() => (WalletForms)LvWallet.SelectedItem;
 
-        WalletForms SelectedWalletNotNull() {
-            WalletForms r = (WalletForms)LvWallet.SelectedItem;
-            if (r == null)
-                throw new ApplicationException("No Currency selected in the List");
-            return r;
-        }
+        WalletForms SelectedWalletNotNull() =>
+			(WalletForms)LvWallet.SelectedItem ?? throw new ApplicationException("No Currency selected in the List");
 
-        WalletForms FindWallet(string netName) {
-            var r = ActiveWalletForms.FirstOrDefault(w => w.Wallet.CurrencyName.ToUpper() == netName.ToUpper());
-            if (r == null)
-                throw new ApplicationException($"No active Wallet with name {netName}");
-            return r;
-        }
+        WalletForms FindWallet(string netName) =>
+            ActiveWalletForms.FirstOrDefault(w => w.Wallet.CurrencyName.ToUpper() == netName.ToUpper())
+				?? throw new ApplicationException($"No active Wallet with name {netName}");
 
         public void SendMoney(string netName, string address, decimal amount, string label, string comment) {
             var dlg = new FormSendMoney();
-            dlg.CtlSend.Wallet = FindWallet(netName).Wallet;
+			var ctlSend = dlg.CtlSend;
+			ctlSend.Wallet = FindWallet(netName).Wallet;
             try {
-                dlg.CtlSend.Wallet.AddRecipient(address, label);
+                ctlSend.Wallet.AddRecipient(address, label);
             } catch (Exception) {
             }
             if (comment == "")
                 comment = label;
-            dlg.CtlSend.textAddress.Text = address;
-            dlg.CtlSend.textAmount.Text = amount.ToString();
-            dlg.CtlSend.textComment.Text = comment;
+            ctlSend.textAddress.Text = address;
+            ctlSend.textAmount.Text = amount.ToString();
+            ctlSend.textComment.Text = comment;
             Dialog.ShowDialog(dlg, this);
         }
 
@@ -447,13 +439,14 @@ namespace Coin {
 
         void ShowTransactions() {
             WalletForms wf = SelectedWallet();
-            if (wf.FormTransactions == null) {
-                wf.FormTransactions = new FormTransactions();
-                wf.FormTransactions.CtlTxes.WalletForms = wf;
-                wf.FormTransactions.CtlTxes.InitLoaded();
+			if (!(wf.FormTransactions is FormTransactions form)) {
+                wf.FormTransactions = form = new FormTransactions();
+				form.Title = wf.CurrencySymbol + " " + wf.FormTransactions.Title;
+				form.CtlTxes.WalletForms = wf;
+                form.CtlTxes.InitLoaded();
             }
-            wf.FormTransactions.Show();
-            wf.FormTransactions.Activate();
+            form.Show();
+            form.Activate();
         }
 
         private void OnTransactions(object sender, RoutedEventArgs e) {

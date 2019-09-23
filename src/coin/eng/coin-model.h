@@ -350,6 +350,7 @@ public:
 	mutable Coin::HashValue m_hash;
 
 	vector<TxOut> TxOuts;
+	optional<DateTime> Timestamp;
 	DateTime LockTimestamp;
 
 	mutable vector<TxIn> m_txIns;
@@ -361,7 +362,6 @@ public:
 	mutable volatile uint8_t m_nBytesOfHash;
 	CBool m_bIsCoinBase;
 	mutable volatile bool m_bLoadedIns;
-
 
 	TxObj();
 
@@ -467,8 +467,7 @@ public:
 	int64_t GetMinFee(uint32_t blockSize = 1, bool bAllowFree = true, MinFeeMode mode = MinFeeMode::Block, uint32_t nBytes = uint32_t(-1)) const;
 
 	int32_t get_Height() const { return m_pimpl->Height; }
-	void put_Height(int32_t v) { m_pimpl->Height = v; }
-	DEFPROP(int32_t, Height);
+	DEFPROP_GET(int32_t, Height);
 
     uint32_t GetSerializeSize(bool witnessAware = false) const;
 
@@ -763,21 +762,7 @@ public:
 	}
 	DEFPROP_GET(const HashValue&, PrevBlockHash);
 
-	uint32_t get_Nonce() const {
-		return m_pimpl->Nonce;
-	}
-	DEFPROP_GET(uint32_t, Nonce);
-
-	BigInteger GetWork() const {
-		return m_pimpl->GetWork();
-	}
-
-	bool get_IsHeaderOnly() const {
-		return m_pimpl->IsHeaderOnly();
-	}
-	DEFPROP_GET(bool, IsHeaderOnly);
-
-	bool IsInMainChain() const;
+	bool IsInTrunk() const;
 	DateTime GetMedianTimePast() const;
 	BlockHeader GetPrevHeader() const;
 	bool IsSuperMajority(int minVersion, int nRequired, int nToCheck) const;
@@ -812,11 +797,6 @@ public:
     uint32_t GetSerializeSize(bool bWitnessAware = false) const;
 
     size_t Weight() const { return GetSerializeSize(true); }
-
-	ProofOf get_ProofType() const {
-		return m_pimpl->ProofType();
-	}
-	DEFPROP_GET(ProofOf, ProofType);
 
 	const CTxes& get_Txes() const {
 		return m_pimpl->get_Txes();

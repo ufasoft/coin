@@ -465,6 +465,12 @@ const uint32_t DB_EOF_PGNO = 0;
 class CursorStream : public MemStreamWithPosition {
 	typedef MemStreamWithPosition base;
 
+	CursorObj& m_curObj;
+	uint64_t m_length;
+	mutable Span m_mb;
+	mutable Page m_page;
+	mutable uint32_t m_pgnoNext;
+	CBool m_bInited;
 public:
 	CursorStream(CursorObj& curObj) : m_curObj(curObj) {}
 
@@ -477,16 +483,9 @@ public:
 		m_bInited = false;
 	}
 	void put_Position(uint64_t pos) const override;
+	bool Eof() const override;
 	size_t Read(void* buf, size_t count) const override;
-
 private:
-	CursorObj& m_curObj;
-	uint64_t m_length;
-	mutable Span m_mb;
-	mutable Page m_page;
-	mutable uint32_t m_pgnoNext;
-	CBool m_bInited;
-
 	friend class CursorObj;
 };
 
@@ -721,14 +720,12 @@ public:
 	void Drop(DbTransaction& tx);
 	void Put(DbTransaction& tx, RCSpan k, RCSpan d, bool bInsert = false);
 	bool Delete(DbTransaction& tx, RCSpan k);
-
 private:
 	void CheckKeyArg(RCSpan k);
 };
 
 class CKVStorageKeeper {
 	KVStorage* m_prev;
-
 public:
 	CKVStorageKeeper(KVStorage* cur);
 	~CKVStorageKeeper();

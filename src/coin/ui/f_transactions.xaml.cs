@@ -1,4 +1,4 @@
-﻿/*######   Copyright (c) 2011-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+﻿/*######   Copyright (c) 2011-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 #       See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -100,6 +100,4 @@ namespace Coin {
         }
 
     }
-
-
 }
