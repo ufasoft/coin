@@ -21,7 +21,6 @@ class WalletTx : public Tx {
 public:
 	typedef InterlockedPolicy interlocked_policy;
 
-	DateTime Timestamp;
 	Address To;
 	KeyInfo ChangeKeyInfo;
 	int64_t Amount;				// negative for Debits in COM transactions
@@ -35,12 +34,13 @@ public:
 
 	explicit WalletTx(const Tx& tx);
 
+	DateTime Timestamp() const;
 	void LoadFromDb(DbDataReader& sr, bool bLoadExt = false);
 	bool IsConfirmed(Wallet& wallet) const;
 	String GetComment() const;
 
 	String UniqueKey() const {		//!!!T
-		return Convert::ToString(Timestamp.Ticks)+To.ToString();
+		return Convert::ToString(Timestamp().Ticks) + To.ToString();
 	}
 
 	decimal64 GetDecimalAmount() const { return make_decimal64((long long)Amount, -Eng().ChainParams.Log10CoinValue()); }

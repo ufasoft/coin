@@ -85,7 +85,7 @@ ENUM_CLASS(HashAlgo){Sha256, Sha3, SCrypt, Prime, Momentum, Solid, Metis, NeoSCr
 HashAlgo StringToAlgo(RCString s);
 String AlgoToString(HashAlgo algo);
 
-class HashValue : totally_ordered<HashValue> {
+class HashValue : Ext::totally_ordered<HashValue> {
 	uint64_t m_data[4];
 public:
 	typedef uint8_t* iterator;

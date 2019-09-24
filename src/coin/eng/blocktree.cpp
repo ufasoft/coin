@@ -14,6 +14,13 @@ BlockTreeItem::BlockTreeItem(const BlockHeader& header)
 {
 }
 
+void BlockTree::Clear() {
+	HeightLastCheckpointed = -1;
+	EXT_LOCK(Mtx) {
+		Map.clear();
+	}
+}
+
 BlockTreeItem BlockTree::FindInMap(const HashValue& hashBlock) const {
 	return EXT_LOCKED(Mtx, Lookup(Map, hashBlock).value_or(BlockTreeItem()));
 }

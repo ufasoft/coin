@@ -145,7 +145,7 @@ void CursorObj::Delete() {
 	Deleted = true;
 }
 
-void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail) {
+void CursorObj::InsertImpHeadTail(EntrySize es, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail) {
 	DbTransaction& tx = dynamic_cast<DbTransaction&>(Map->Tx);
 	uint32_t pageSize = tx.Storage.PageSize;
 	PagePos& pp = Top();
@@ -157,16 +157,16 @@ void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan he
 	uint8_t keyOffset = pd.Header.KeyOffset();
 	memcpy(p, k.data() + keyOffset, k.size() - keyOffset);
 	Write7BitEncoded(p += k.size() - keyOffset, fullSize);
-	memcpy(exchange(p, p + ppEntry.first), head.data(), ppEntry.first);
-	if (ppEntry.second) {
-		size_t cbOverflow = head.size() - ppEntry.first;
+	memcpy(exchange(p, p + es.Size), head.data(), es.Size);
+	if (es.IsBigData) {
+		size_t cbOverflow = head.size() - es.Size;
 		if (0 == cbOverflow)
 			PutLeUInt32(exchange(p, p + 4), pgnoTail);
 		else {
 			int n = int((cbOverflow + pageSize - 4 - 1) / (pageSize - 4));
 			vector<uint32_t> pages = tx.AllocatePages(n);
-			const uint8_t* q = head.data() + ppEntry.first;
-			size_t off = ppEntry.first;
+			const uint8_t* q = head.data() + es.Size;
+			size_t off = es.Size;
 			for (size_t cbCopy, i = 0; cbOverflow; q += cbCopy, cbOverflow -= cbCopy, ++i) {
 				cbCopy = std::min(cbOverflow, size_t(pageSize - 4));
 				Page page = tx.OpenPage(pages[i]);
@@ -177,7 +177,7 @@ void CursorObj::InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan he
 		}
 	}
 	tx.m_bError = true;
-	InsertCell(pp, Span(q, p-q), Map->KeySize);
+	InsertCell(pp, Span(q, p - q), Map->KeySize);
 	Deleted = false;
 	if (pp.Page.Overflows)
 		Balance();
@@ -359,4 +359,3 @@ bool DbCursor::Seek(CursorPos cPos, RCSpan k) {
 
 
 }}} // Ext::DB::KV::
-

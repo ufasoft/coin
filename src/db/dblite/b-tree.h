@@ -28,7 +28,7 @@ struct EntryDesc {
 };
 
 LiteEntry GetLiteEntry(const PagePos& pp, uint8_t keySize);
-size_t GetEntrySize(const pair<size_t, bool>& ppEntry, size_t ksize, uint64_t dsize);
+size_t GetEntrySize(const EntrySize& es, size_t ksize, uint64_t dsize);
 void InsertCell(const PagePos& pagePos, RCSpan cell, uint8_t keySize);
 uint32_t DeleteEntry(const PagePos& pp, uint8_t keySize);
 

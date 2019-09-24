@@ -489,6 +489,16 @@ private:
 	friend class CursorObj;
 };
 
+struct EntrySize {
+	size_t Size;
+	bool IsBigData;
+
+	EntrySize(size_t size = 0, bool isBigData = false)
+		: Size(size)
+		, IsBigData(isBigData)
+	{}
+};
+
 class CursorObj : public Object {
 public:
 	typedef NonInterlockedPolicy interlocked_policy;
@@ -545,7 +555,7 @@ protected:
 	bool ReturnFromSeekKey(int pos);
 	void FreeBigdataPages(uint32_t pgno);
 	virtual CursorObj* Clone() = 0;
-	void InsertImpHeadTail(pair<size_t, bool>& ppEntry, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail);
+	void InsertImpHeadTail(EntrySize es, Span k, RCSpan head, uint64_t fullSize, uint32_t pgnoTail);
 	void DoDelete();
 	void DoPut(Span k, RCSpan d, bool bInsert);
 	void DoUpdate(const Span& d);
@@ -617,8 +627,7 @@ public:
 	virtual TableType Type() = 0;
 	virtual void Init(const TableData& td);
 	virtual TableData GetTableData();
-	pair<size_t, bool> GetDataEntrySize(RCSpan k,
-										uint64_t dsize) const; // <size, isBigData>
+	EntrySize GetDataEntrySize(RCSpan k, uint64_t dsize) const;
 	pair<int, bool> EntrySearch(const PageDesc& pd, RCSpan k);
 	EntryDesc GetEntryDesc(const PagePos& pp);
 protected:

@@ -110,7 +110,7 @@ public:
 
 	HRESULT __stdcall get_Timestamp(DATE *r)
 	METHOD_BEGIN {
-		*r = m_wtx.Timestamp.ToOADate();
+		*r = m_wtx.Timestamp().ToOADate();
 	} METHOD_END
 
 	HRESULT __stdcall get_Comment(BSTR *r)

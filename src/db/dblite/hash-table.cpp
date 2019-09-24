@@ -1,4 +1,4 @@
-/*######   Copyright (c) 2014-2015 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
+/*######   Copyright (c) 2014-2019 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com ####
 #                                                                                                                                     #
 # 		See LICENSE for licensing information                                                                                         #
 #####################################################################################################################################*/
@@ -13,36 +13,31 @@
 namespace Ext { namespace DB { namespace KV {
 
 HashTable::HashTable(DbTransactionBase& tx)
-	:	base(tx)
-	,	PageMap(tx)
-	,	HtType(HashType::MurmurHash3)
+	: base(tx)
+	, PageMap(tx)
+	, HtType(HashType::MurmurHash3)
 #ifdef X_DEBUG//!!!D
 	, MaxLevel(16)
 #else
-	,	MaxLevel(32)
+	, MaxLevel(32)
 #endif
 {
 	ASSERT(MaxLevel <= 32);
 }
 
 uint32_t HashTable::Hash(RCSpan key) const {
+	uint32_t r = 0;
    	switch (HtType) {
    	case HashType::MurmurHash3:
    		return MurmurHash3_32(key, Tx.Storage.m_salt);
 	case HashType::Identity:
-	{
-		uint32_t r = 0;
 		for (size_t n = min(key.size(), size_t(4)), i = 0; i < n; ++i)
 			r |= key[i] << 8 * i;
 		return r;
-	}
 	case HashType::RevIdentity:
-		{
-			uint32_t r = 0;
 		for (size_t n = min(key.size(), size_t(4)), i = n; i--;)
 			r |= key[n - i - 1] << 8 * i;
-			return r;
-		}
+		return r;
    	default:
    		Throw(E_NOTIMPL);
    	}
@@ -78,7 +73,7 @@ uint32_t HashTable::GetPgno(uint32_t nPage) const {
 }
 
 BTreeSubCursor::BTreeSubCursor(HtCursor& cHT)
-	:	m_btree(cHT.Ht->Tx)
+	: m_btree(cHT.Ht->Tx)
 {
 	SetMap(&m_btree);
 	m_btree.SetKeySize(cHT.Ht->KeySize);
@@ -209,7 +204,7 @@ void HashTable::Split(uint32_t nPage, int level) {
 	Page page = TouchBucket(nPage);
 	Page pageNew = dynamic_cast<DbTransaction&>(Tx).Allocate(PageAlloc::Leaf);
 	PageMap.PutUInt32(uint64_t(nPageNew)*4, pageNew.N);
-	uint32_t mask = uint32_t(1LL << (level+1))-1;
+	uint32_t mask = uint32_t(1LL << (level + 1)) - 1;
 	uint8_t bitMask = 0;
 	PageDesc pdesc = page.Entries(KeySize);
 	uint8_t keyOffset = pdesc.Header.KeyOffset();
@@ -220,7 +215,7 @@ void HashTable::Split(uint32_t nPage, int level) {
 			bitMask = 0x80;										// Start to Cut Key Head
 	}
 	PageHeader& dh = pageNew.Header();
-	int off = (bitMask == 0x80) && keyOffset<KeySize ? 1 : 0;	//!!!  was: (bitMask == 0x80) && keyOffset<KeySize-1 ? 1 : 0
+	int off = (bitMask == 0x80) && keyOffset < KeySize ? 1 : 0;	//!!!  was: (bitMask == 0x80) && keyOffset<KeySize-1 ? 1 : 0
 	pdesc.Header.SetKeyOffset(uint8_t(keyOffset + off));
 	dh.SetKeyOffset(pdesc.Header.KeyOffset());
 	uint8_t *ps = pdesc.Header.Data,
@@ -244,10 +239,10 @@ void HashTable::Split(uint32_t nPage, int level) {
 }
 
 bool HtCursor::UpdateImpl(RCSpan k, RCSpan d, bool bInsert) {
-	pair<size_t, bool> ppEntry = Map->GetDataEntrySize(k, d.size());
+	EntrySize es = Map->GetDataEntrySize(k, d.size());
 	uint8_t mapKeySize = Map->KeySize;
 	size_t ksize = mapKeySize ? mapKeySize - m_pagePos.Page.Header().KeyOffset() : 1 + k.size();
-	size_t entrySize = GetEntrySize(ppEntry, ksize, d.size());
+	size_t entrySize = GetEntrySize(es, ksize, d.size());
 	if (m_pagePos.Page.SizeLeft(mapKeySize) < entrySize) {
 		for (int level = BitOps::ScanReverse(NPage); level < Ht->MaxLevel; ++level) {
 			if (!Ht->GetPgno((1 << level) | NPage)) {
@@ -259,7 +254,7 @@ bool HtCursor::UpdateImpl(RCSpan k, RCSpan d, bool bInsert) {
 		UpdateFromSubCursor();
 		return true;
 	}
-	InsertImpHeadTail(ppEntry, k, d, d.size(), DB_EOF_PGNO);
+	InsertImpHeadTail(es, k, d, d.size(), DB_EOF_PGNO);
 	return true;
 }
 
@@ -328,4 +323,3 @@ void HtCursor::Drop() {
 
 
 }}} // Ext::DB::KV::
-

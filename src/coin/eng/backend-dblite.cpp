@@ -368,9 +368,6 @@ bool DbliteBlockChainDb::Open(const path& p) {
 }
 
 void DbliteBlockChainDb::Commit() {
-#ifdef _DEBUG//!!!T
-	return;
-#endif
 	if (Eng.Mode == EngMode::Bootstrap)
 		m_fileBootstrap.Flush();
 	//		m_dbt->Commit();

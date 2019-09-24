@@ -47,11 +47,14 @@ WalletTx::WalletTx(const Tx& tx)
 	: base(tx)
 	, To(Eng())
 {
-	Timestamp = tx->Timestamp ? tx->Timestamp.value() : Clock::now();
+}
+
+DateTime WalletTx::Timestamp() const {
+	return m_pimpl->Timestamp ? m_pimpl->Timestamp.value() : Clock::now();
 }
 
 void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
-	Timestamp = DateTime::from_time_t(sr.GetInt32(0));
+	m_pimpl->Timestamp = DateTime::from_time_t(sr.GetInt32(0));
 	CMemReadStream stm(sr.GetBytes(1));
 	Coin::DbReader rd(stm, &Eng());
 	rd.BlockchainDb = false;
@@ -156,7 +159,7 @@ int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 		if (wtx.Height >= 0) {
 			SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=?, timestamp=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
 			cmd.Bind(1, wtx.Height)
-				.Bind(2, to_time_t(wtx.Timestamp));
+				.Bind(2, to_time_t(wtx.Timestamp()));
 			cmd.ExecuteNonQuery();
 		} else {
 			SqliteCommand cmd(EXT_STR("UPDATE mytxes SET blockord=? WHERE id=" << r), m_eng->m_cdb.m_dbWallet);
@@ -164,7 +167,6 @@ int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 			cmd.ExecuteNonQuery();
 		}
 	} else {
-		wtx.Timestamp = wtx.Height >= 0 ? m_eng->GetBlockByHeight(wtx.Height).Timestamp : Clock::now();
 		if (wtx->IsCoinBase() && wtx.Comment.empty())
 			wtx.Comment = "Mined";
 		MemoryStream ms;
@@ -175,7 +177,7 @@ int64_t Wallet::Add(WalletTx& wtx, bool bPending) {
 			.Bind(1, m_dbNetId)
 			.Bind(2, hashTx.ToSpan())
 			.Bind(3, ms)
-			.Bind(4, to_time_t(wtx.Timestamp))
+			.Bind(4, to_time_t(wtx.Timestamp()))
 			.Bind(5, wtx.Height >= 0 ? wtx.Height : (bPending ? -1 : -2))
 			.Bind(6, wtx.Comment)
 			.Bind(7, bool(wtx.m_bFromMe))
@@ -579,20 +581,21 @@ void Wallet::SetNextResendTime(const DateTime& dt) {
 void Wallet::Start() {
 	if (m_bLoaded)
 		return;
+	CoinDb& cdb = m_eng->m_cdb;
 	CCoinEngThreadKeeper engKeeper(m_eng, nullptr, true);
 	m_eng->Load();
 
 	bool bIsInitialBlockDownload = m_eng->IsInitialBlockDownload();
-	EXT_LOCK (m_eng->m_cdb.MtxDb) {
+	EXT_LOCK (cdb.MtxDb) {
 		{
-			SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=? COLLATE NOCASE", m_eng->m_cdb.m_dbWallet);
+			SqliteCommand cmd("SELECT netid, bestblockhash FROM nets WHERE name=? COLLATE NOCASE", cdb.m_dbWallet);
 			DbDataReader dr = cmd.Bind(1, m_eng->ChainParams.Name).ExecuteVector();
 			m_dbNetId = dr.GetInt32(0);
 			Span mb = dr.GetBytes(1);
 			BestBlockHash = mb.size() ? HashValue(mb) : HashValue::Null();
 		}
 		EXT_LOCK(m_mtxMyTxHashes) {
-			SqliteCommand cmd("SELECT hash FROM mytxes", m_eng->m_cdb.m_dbWallet);
+			SqliteCommand cmd("SELECT hash FROM mytxes", cdb.m_dbWallet);
 			for (DbDataReader dr = cmd.ExecuteReader(); dr.Read();)
 				m_myTxHashes.insert(HashValue(dr.GetBytes(0)));
 		}
@@ -600,17 +603,20 @@ void Wallet::Start() {
 	if (Block block = m_eng->Db->FindBlock(BestBlockHash))
 		CurrentHeight = block.Height;
 
-	EXT_LOCK (m_eng->m_cdb.MtxDb) {
+	EXT_LOCK (cdb.MtxDb) {
 		if (!bIsInitialBlockDownload && m_eng->Mode != EngMode::Lite)
 			ReacceptWalletTxes();												//!!!TODO
+	}
 
+	m_eng->Start();
+
+	EXT_LOCK(cdb.MtxDb) {
 		if (!ThreadRescan) {
 			if (CurrentHeight >= 0 && CurrentHeight < m_eng->BestBlockHeight() || BestBlockHash == HashValue::Null())
 				StartRescan(BestBlockHash);
 		}
 	}
 
-	m_eng->Start();
 	SetNextResendTime(Clock::now());
 	m_bLoaded = true;
 }
@@ -904,7 +910,7 @@ pair<WalletTx, decimal64> Wallet::CreateTransaction(const KeyInfo& randomKey, co
 			if (fee >= minFee) {
 				decimal64 dfee = make_decimal64((long long)fee, -m_eng->ChainParams.Log10CoinValue());
 				TRC(3, make_decimal64((long long)nVal, -m_eng->ChainParams.Log10CoinValue()) << " " << Eng.ChainParams.Symbol << ",  Fee: " << dfee << " " << Eng.ChainParams.Symbol);
-				tx.Timestamp = Clock::now();
+				tx->Timestamp = Clock::now();
 				return pair<WalletTx, decimal64>(tx, dfee);
 			}
 			if (initialFee)

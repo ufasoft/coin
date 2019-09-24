@@ -326,13 +326,6 @@ Page DbCursor::FindRightSibling() {
 
 
 void DbCuresor::Put() {
-
-
-
-
-
-
-
 	size_t cbFree = pp.Page.SizeLeft();
 	if (cbFree < cbEntry) {
 		if (Page pageSibling = FindRightSibling()) {

@@ -123,7 +123,7 @@ uint32_t Filet::RemoveRange(int level, Page& page, uint32_t first, uint32_t last
 		if (uint32_t pgno = letoh(p[i])) {
 			if (i>=from && i<=to) {
 				if (0 == level) {
-					tx.FreePage(exchange(pgno, 0));				
+					tx.FreePage(exchange(pgno, 0));
 				} else {
 					Page subPage = tx.OpenPage(pgno);
 					uint32_t offset = (i << bits);
@@ -146,7 +146,7 @@ uint32_t Filet::RemoveRange(int level, Page& page, uint32_t first, uint32_t last
 
 void Filet::SetLength(uint64_t v) {
 	m_length = v;
-	IndirectLevels = !m_length ? 0 : max(0, BitOps::ScanReverse(uint32_t((Length-1) >> PageSizeBits))-1)/(PageSizeBits-2) + 1;
+	IndirectLevels = !m_length ? 0 : max(0, BitOps::ScanReverse(uint32_t((Length - 1) >> PageSizeBits)) - 1) / (PageSizeBits - 2) + 1;
 }
 
 void Filet::put_Length(uint64_t v) {
@@ -156,7 +156,7 @@ void Filet::put_Length(uint64_t v) {
 	uint64_t nPages = GetPagesForLength(v),
 		nHasPages = GetPagesForLength(Length);
 	if (nPages < nHasPages) {
-		RemoveRange(levels, PageRoot, uint32_t(nPages), uint32_t(nHasPages-1));
+		RemoveRange(levels, PageRoot, uint32_t(nPages), uint32_t(nHasPages - 1));
 	}
 	SetLength(v);
 	int levelsNew = IndirectLevels;
@@ -236,7 +236,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 				}
 			}
 		}
-#else //!!!T	
+#else //!!!T
 
 		struct GetPathOffVisitor : PathVisitor {
 			bool OnPathLevel(int level, Page& page) override {
@@ -248,7 +248,7 @@ uint32_t Filet::GetUInt32(uint64_t offset) const {
 		TlbPage.insert(make_pair(vpage, page));
 #endif
 		uint32_t r = page ? letoh(*(uint32_t*)((uint8_t*)page.get_Address() + off)) : 0;
-		return r; 
+		return r;
 #endif
 	}
 }
@@ -263,5 +263,3 @@ void Filet::PutUInt32(uint64_t offset, uint32_t v) {
 
 
 }}} // Ext::DB::KV::
-
-

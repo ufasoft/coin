@@ -372,10 +372,13 @@ bool CoinEng::CreateDb() {
 	bool r = Db->Create(GetDbFilePath());
 	OffsetInBootstrap = 0;
 
+	if (Mode == EngMode::Lite) {
+		CoinEngTransactionScope scopeBlockSavepoint(_self);
+		Db->SetFilter(m_cdb.Filter);
+	}
+
 	TransactionScope dbtx(*Db);
-
 	Events.OnCreateDatabase();
-
 	return r;
 }
 
@@ -682,6 +685,7 @@ void CoinEng::put_Mode(EngMode mode) {
 		Stop();
 	SetBestHeader(nullptr);
 	SetBestBlock(Block(nullptr));
+	Tree.Clear();
 	m_mode = mode;
 	Filter = nullptr;
 	m_dbFilePath = "";
@@ -689,6 +693,7 @@ void CoinEng::put_Mode(EngMode mode) {
 		Load();
 		Start();
 	}
+	TRC(0, "Switched " << ChainParams.Symbol << " to " << (mode == EngMode::Lite ? "Lite" : "Bootstrap") << " mode");
 }
 
 void CoinEng::PurgeDatabase() {

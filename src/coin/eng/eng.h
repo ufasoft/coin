@@ -564,6 +564,7 @@ public:
 		, HeightLastCheckpointed(-1)
 	{}
 
+	void Clear();
 	BlockTreeItem FindInMap(const HashValue& hashBlock) const;
 	BlockHeader FindHeader(const HashValue& hashBlock) const;
 	BlockHeader FindHeader(const BlockRef& bref) const;
