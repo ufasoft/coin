@@ -54,11 +54,11 @@ DateTime WalletTx::Timestamp() const {
 }
 
 void WalletTx::LoadFromDb(DbDataReader& sr, bool bLoadExt) {
-	m_pimpl->Timestamp = DateTime::from_time_t(sr.GetInt32(0));
 	CMemReadStream stm(sr.GetBytes(1));
 	Coin::DbReader rd(stm, &Eng());
 	rd.BlockchainDb = false;
 	rd >> _self;
+	m_pimpl->Timestamp = DateTime::from_time_t(sr.GetInt32(0));
 	m_pimpl->Height = sr.GetInt32(2);
 	Comment = sr.GetString(3);
 	m_bFromMe = sr.GetInt32(4);
