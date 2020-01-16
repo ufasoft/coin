@@ -140,7 +140,7 @@ IF X64
 	add	edx, DWORD PTR [r14+zdi*4]
 ELSE
 	mov	ebx, s_pSha256_k
-	add	edx, DWORD PTR ebx[zdi*4]
+	add	edx, DWORD PTR [ebx+edi*4]
 ENDIF
 	inc	zdi
 	add	edx, [zsp+7*ZWORD_SIZE+ZWORD_SIZE*1]	; +h
