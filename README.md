@@ -52,7 +52,7 @@ Instruction for Visual Studio 2017..2019
 3.	Add direcories with built .lib files to the coineng.vcxproj's linker settings
 4.	Build coineng.vcxproj. It results to coineng.exe and coineng.tlb files.
 5.	coineng.tlb is required to build WPF UI coin.exe.
-
+6. UBUNTU Project (deprecated)
 
 To run the entire application all .exe/.dll files of used libs should be in the same directory.
 
